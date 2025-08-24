@@ -34,7 +34,7 @@ func TestGenerateResponseHandling(t *testing.T) {
 			expected: `		var data interface{}
 		data, err = handler.GetUser(id)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			return handleError(c, err)
 		}
 		return c.JSON(http.StatusOK, data)`,
 		},
@@ -54,12 +54,12 @@ func TestGenerateResponseHandling(t *testing.T) {
 			controllerName: "UserController",
 			expected: `		response, err := handler.CreateUser(body)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			return handleError(c, err)
 		}
 		if response == nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
 		}
-		return c.JSON(response.StatusCode, response.Body)`,
+		return handleAxonResponse(c, response)`,
 		},
 		{
 			name: "error only return type",
@@ -225,7 +225,7 @@ func TestGenerateRouteWrapper(t *testing.T) {
 				"var body User",
 				"if err := c.Bind(&body); err != nil",
 				"response, err := handler.CreateUser(body)",
-				"return c.JSON(response.StatusCode, response.Body)",
+				"return handleAxonResponse(c, response)",
 			},
 		},
 		{
