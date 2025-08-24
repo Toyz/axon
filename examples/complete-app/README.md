@@ -2,11 +2,11 @@
 
 This is a comprehensive example application demonstrating all features of the Axon framework, including:
 
-- **Controllers** with HTTP route handling
+- **Controllers** with HTTP route handling and dependency injection
 - **Middleware** for cross-cutting concerns
 - **Core Services** with lifecycle management and modes (Singleton/Transient)
 - **Interface Generation** for dependency injection
-- **Parameter Binding** and type conversion
+- **Custom Parameter Parsers** for type conversion
 - **Response Handling** with custom status codes
 - **Route Registry** for runtime introspection
 
@@ -17,6 +17,7 @@ examples/complete-app/
 ├── internal/
 │   ├── controllers/          # HTTP controllers with route annotations
 │   │   ├── user_controller.go
+│   │   ├── product_controller.go
 │   │   ├── health_controller.go
 │   │   ├── session_controller.go  # Demonstrates transient services
 │   │   └── autogen_module.go  # Generated FX module
@@ -32,8 +33,11 @@ examples/complete-app/
 │   ├── interfaces/           # Interface generation examples
 │   │   ├── user_interface.go
 │   │   └── autogen_module.go  # Generated FX module
-│   ├── models/               # Data models
-│   │   └── user.go
+│   ├── logging/              # Logger services
+│   │   ├── logger.go
+│   │   └── autogen_module.go  # Generated FX module
+│   ├── parsers/              # Custom parameter parsers
+│   │   └── uuid_parser.go
 │   └── config/               # Configuration
 │       └── config.go
 ├── main.go                   # Application entry point
@@ -50,12 +54,15 @@ Controllers handle HTTP requests and are annotated with `//axon::controller`:
 ```go
 //axon::controller
 type UserController struct {
-    userService *services.UserService `fx:"in"`
+    //axon::inject
+    UserService *services.UserService
+    //axon::inject
+    DatabaseService *services.DatabaseService
 }
 
 //axon::route GET /users/{id:int} -Middleware=LoggingMiddleware
 func (c *UserController) GetUser(id int) (*models.User, error) {
-    return c.userService.GetUser(id)
+    return c.UserService.GetUser(id)
 }
 ```
 
@@ -73,7 +80,8 @@ Middleware components provide cross-cutting functionality:
 ```go
 //axon::middleware LoggingMiddleware
 type LoggingMiddleware struct {
-    enabled bool `fx:"in"`
+    //axon::inject
+    Config *config.Config
 }
 
 func (m *LoggingMiddleware) Handle(next echo.HandlerFunc) echo.HandlerFunc {
@@ -96,7 +104,10 @@ Services handle business logic and can have lifecycle management:
 ```go
 //axon::core -Init
 type UserService struct {
-    config *config.Config `fx:"in"`
+    //axon::inject
+    Config *config.Config
+    //axon::inject
+    DatabaseService *DatabaseService
 }
 
 func (s *UserService) Start(ctx context.Context) error {
@@ -125,6 +136,7 @@ Axon supports different lifecycle modes for services, similar to C# dependency i
 //axon::core                    // Default to Singleton
 //axon::core -Mode=Singleton    // Explicit Singleton
 type DatabaseService struct {
+    //axon::inject
     Config *config.Config
 }
 ```
@@ -135,6 +147,7 @@ type DatabaseService struct {
 ```go
 //axon::core -Mode=Transient
 type SessionService struct {
+    //axon::inject
     DatabaseService *DatabaseService
 }
 ```
@@ -146,8 +159,10 @@ type SessionService struct {
 ```go
 //axon::controller
 type SessionController struct {
-    SessionFactory func() *SessionService  // Transient service factory
-    UserService    *UserService           // Singleton service
+    //axon::inject
+    SessionFactory func() *services.SessionService  // Transient service factory
+    //axon::inject
+    UserService    *services.UserService           // Singleton service
 }
 
 func (c *SessionController) HandleRequest() {
@@ -155,7 +170,7 @@ func (c *SessionController) HandleRequest() {
     session := c.SessionFactory()
     
     // Use the shared user service
-    user := c.UserService.GetUser(123)
+    user, _ := c.UserService.GetUser(123)
 }
 ```
 
@@ -167,7 +182,8 @@ Generate interfaces from structs for better testability:
 //axon::core
 //axon::interface
 type UserRepository struct {
-    data map[int]*models.User `fx:"in"`
+    //axon::init
+    data map[int]*models.User
 }
 ```
 
@@ -190,21 +206,11 @@ go build -o axon ./cmd/axon
 
 This will create `autogen_module.go` files in each package.
 
-### 2. Run Tests
-
-Run the comprehensive test suite:
+### 2. Run the Application
 
 ```bash
 cd examples/complete-app
-go test -v ./example_test.go
-```
-
-### 3. Build and Run
-
-```bash
-cd examples/complete-app
-go build -o app .
-./app
+go run main.go
 ```
 
 The application will start an HTTP server on port 8080 (configurable via `PORT` environment variable).
@@ -223,6 +229,16 @@ The example application exposes the following endpoints:
 - `POST /users` - Create new user (with logging + auth middleware)
 - `PUT /users/{id}` - Update user (with logging + auth middleware)
 - `DELETE /users/{id}` - Delete user (with logging + auth middleware)
+
+### Product Management
+- `GET /products` - List all products
+- `GET /products/{id}` - Get product by ID
+- `POST /products` - Create new product
+
+### Session Management
+- `POST /sessions/{userID:int}` - Start a new session (demonstrates transient services)
+- `GET /sessions/info/{userID:int}` - Get session information
+- `GET /sessions/compare` - Compare multiple session instances
 
 ### Authentication
 
@@ -257,23 +273,23 @@ The Axon framework generates the following for each package:
 - Providers for both concrete and interface types
 - FX module configuration
 
-## Testing
+## Custom Parameter Parsers
 
-The example includes comprehensive tests demonstrating:
+The example includes custom parameter parsers for advanced type conversion:
 
-1. **Code Generation** - Verifies all modules are generated correctly
-2. **Compilation** - Ensures generated code compiles without errors
-3. **Route Generation** - Tests route wrapper and middleware integration
-4. **Middleware Generation** - Verifies middleware provider generation
-5. **Service Generation** - Tests lifecycle service generation
-6. **Runtime Behavior** - Integration tests for HTTP endpoints
-7. **Parameter Binding** - Tests path parameter parsing
-8. **Response Handling** - Tests different response types
-9. **Middleware Chaining** - Tests middleware execution order
+```go
+//axon::parser uuid.UUID
+func ParseUUID(c echo.Context, value string) (uuid.UUID, error) {
+    return uuid.Parse(value)
+}
+```
 
-Run tests with:
-```bash
-go test -v ./example_test.go
+This allows routes to use UUID parameters directly:
+```go
+//axon::route GET /users/{id:uuid.UUID}
+func (c *UserController) GetUserByUUID(id uuid.UUID) (*User, error) {
+    // id is already parsed as uuid.UUID
+}
 ```
 
 ## Key Concepts
@@ -285,12 +301,19 @@ All framework features are configured through code comments using the `axon::` p
 - `//axon::middleware Name` - Defines middleware components
 - `//axon::core` - Marks core services
 - `//axon::interface` - Generates interfaces from structs
+- `//axon::inject` - Marks dependencies for injection
+- `//axon::init` - Marks fields for initialization (not injection)
+- `//axon::logger` - Marks logger services
+- `//axon::parser Type` - Defines custom parameter parsers
 
 ### Dependency Injection
-The framework uses Uber FX for dependency injection. Dependencies are declared using struct tags:
+The framework uses Uber FX for dependency injection. Dependencies are declared using `//axon::inject` annotations:
 ```go
 type UserController struct {
-    userService *UserService `fx:"in"`
+    //axon::inject
+    UserService *services.UserService
+    //axon::inject
+    DatabaseService *services.DatabaseService
 }
 ```
 
