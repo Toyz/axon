@@ -4,7 +4,7 @@ This is a comprehensive example application demonstrating all features of the Ax
 
 - **Controllers** with HTTP route handling
 - **Middleware** for cross-cutting concerns
-- **Core Services** with lifecycle management
+- **Core Services** with lifecycle management and modes (Singleton/Transient)
 - **Interface Generation** for dependency injection
 - **Parameter Binding** and type conversion
 - **Response Handling** with custom status codes
@@ -18,10 +18,12 @@ examples/complete-app/
 │   ├── controllers/          # HTTP controllers with route annotations
 │   │   ├── user_controller.go
 │   │   ├── health_controller.go
+│   │   ├── session_controller.go  # Demonstrates transient services
 │   │   └── autogen_module.go  # Generated FX module
 │   ├── services/             # Business logic services
 │   │   ├── user_service.go
 │   │   ├── database_service.go
+│   │   ├── session_service.go  # Transient service example
 │   │   └── autogen_module.go  # Generated FX module
 │   ├── middleware/           # HTTP middleware components
 │   │   ├── logging_middleware.go
@@ -113,6 +115,49 @@ func (s *UserService) Stop(ctx context.Context) error {
 - Lifecycle management with `-Init` flag
 - Dependency injection
 - Graceful startup and shutdown
+
+#### Service Lifecycle Modes
+
+Axon supports different lifecycle modes for services, similar to C# dependency injection:
+
+**Singleton Mode (Default):**
+```go
+//axon::core                    // Default to Singleton
+//axon::core -Mode=Singleton    // Explicit Singleton
+type DatabaseService struct {
+    Config *config.Config
+}
+```
+- Creates a single shared instance across the application
+- Perfect for stateless services, database connections, configuration
+
+**Transient Mode:**
+```go
+//axon::core -Mode=Transient
+type SessionService struct {
+    DatabaseService *DatabaseService
+}
+```
+- Creates a new instance every time it's requested
+- Perfect for stateful services, per-request sessions, temporary objects
+- Injected as a factory function: `func() *SessionService`
+
+**Usage Example:**
+```go
+//axon::controller
+type SessionController struct {
+    SessionFactory func() *SessionService  // Transient service factory
+    UserService    *UserService           // Singleton service
+}
+
+func (c *SessionController) HandleRequest() {
+    // Get a fresh session instance for this request
+    session := c.SessionFactory()
+    
+    // Use the shared user service
+    user := c.UserService.GetUser(123)
+}
+```
 
 ### 4. Interface Generation (`internal/interfaces/`)
 

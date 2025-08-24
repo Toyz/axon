@@ -493,16 +493,40 @@ func GenerateCoreServiceProvider(service models.CoreServiceMetadata) (string, er
 		HasStop:      service.HasStop,
 	}
 
-	if service.HasLifecycle {
-		// Use FX lifecycle template for services with lifecycle
-		return executeTemplate("fx-lifecycle-provider", FXLifecycleProviderTemplate, data)
-	} else if len(service.Dependencies) > 0 {
-		// Use regular provider template for services with dependencies
-		return executeTemplate("provider", ProviderTemplate, data)
+	// Handle different lifecycle modes
+	if service.Mode == "Transient" {
+		// For transient services, generate a factory function
+		return generateTransientServiceProvider(data)
 	} else {
-		// Use FX provider template for services with no dependencies
-		return executeTemplate("fx-provider", FXProviderTemplate, data)
+		// Default Singleton mode
+		if service.HasLifecycle {
+			// Use FX lifecycle template for services with lifecycle
+			return executeTemplate("fx-lifecycle-provider", FXLifecycleProviderTemplate, data)
+		} else if len(service.Dependencies) > 0 {
+			// Use regular provider template for services with dependencies
+			return executeTemplate("provider", ProviderTemplate, data)
+		} else {
+			// Use FX provider template for services with no dependencies
+			return executeTemplate("fx-provider", FXProviderTemplate, data)
+		}
 	}
+}
+
+// generateTransientServiceProvider generates a factory function for transient services
+func generateTransientServiceProvider(data CoreServiceProviderData) (string, error) {
+	// For transient services, we generate a factory function that returns a new instance each time
+	template := `// New{{.StructName}}Factory creates a factory function for {{.StructName}} (Transient mode)
+func New{{.StructName}}Factory({{range $i, $dep := .InjectedDeps}}{{if $i}}, {{end}}{{$dep.Name}} {{$dep.Type}}{{end}}) func() *{{.StructName}} {
+	return func() *{{.StructName}} {
+		return &{{.StructName}}{
+{{range .Dependencies}}{{if .IsInit}}			{{.FieldName}}: {{generateInitCode .Type}},
+{{else}}			{{.FieldName}}: {{.Name}},
+{{end}}{{end}}{{if not .Dependencies}}
+{{end}}		}
+	}
+}`
+
+	return executeTemplate("transient-provider", template, data)
 }
 
 // GenerateCoreServiceModule generates the complete FX module for core services in a package
@@ -762,8 +786,11 @@ func GenerateCoreServiceModuleWithModule(metadata *models.PackageMetadata, modul
 			if service.ModuleName != "" {
 				moduleBuilder.WriteString(fmt.Sprintf("\t%s,\n", service.ModuleName))
 			}
+		} else if service.Mode == "Transient" {
+			// Transient services provide a factory function
+			moduleBuilder.WriteString(fmt.Sprintf("\tfx.Provide(New%sFactory),\n", service.StructName))
 		} else {
-			// All services use fx.Provide to make them available for dependency injection
+			// Singleton services (default) use fx.Provide to make them available for dependency injection
 			moduleBuilder.WriteString(fmt.Sprintf("\tfx.Provide(New%s),\n", service.StructName))
 		}
 	}

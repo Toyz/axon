@@ -16,6 +16,7 @@ type CoreServiceMetadata struct {
 	HasStop      bool         // whether service has Stop(context.Context) error method
 	IsManual     bool         // whether service uses manual module
 	ModuleName   string       // name of manual module (if applicable)
+	Mode         string       // lifecycle mode: "Singleton" (default) or "Transient"
 	Dependencies []Dependency // dependencies injected via fx.In
 }
 

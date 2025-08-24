@@ -20,6 +20,7 @@ const (
 	FlagManual      = "-Manual"
 	FlagPassContext = "-PassContext"
 	FlagMiddleware  = "-Middleware"
+	FlagMode        = "-Mode"
 	
 	// Parameter constants
 	ParamMethod = "method"
@@ -28,4 +29,8 @@ const (
 	
 	// Default module name for manual services
 	DefaultModuleName = "Module"
+	
+	// Lifecycle mode constants
+	LifecycleModeTransient = "Transient"
+	LifecycleModeSingleton = "Singleton"
 )

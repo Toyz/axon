@@ -26,6 +26,15 @@ func NewDatabaseService(lc fx.Lifecycle, Config *config.Config) *DatabaseService
 	return service
 }
 
+// NewSessionServiceFactory creates a factory function for SessionService (Transient mode)
+func NewSessionServiceFactory(DatabaseService *DatabaseService) func() *SessionService {
+	return func() *SessionService {
+		return &SessionService{
+			DatabaseService: DatabaseService,
+		}
+	}
+}
+
 func NewUserService(lc fx.Lifecycle, Config *config.Config) *UserService {
 	service := &UserService{
 		Config: Config,
@@ -46,5 +55,6 @@ func NewUserService(lc fx.Lifecycle, Config *config.Config) *UserService {
 // AutogenModule provides all core services in this package
 var AutogenModule = fx.Module("services",
 	fx.Provide(NewDatabaseService),
+	fx.Provide(NewSessionServiceFactory),
 	fx.Provide(NewUserService),
 )

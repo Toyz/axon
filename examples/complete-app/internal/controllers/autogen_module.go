@@ -33,6 +33,13 @@ func NewProductController(databaseService *services.DatabaseService) *ProductCon
 	}
 }
 
+func NewSessionController(sessionFactory func() *services.SessionService, userService *services.UserService) *SessionController {
+	return &SessionController{
+		SessionFactory: sessionFactory,
+		UserService: userService,
+	}
+}
+
 func NewUserController(userService *services.UserService) *UserController {
 	return &UserController{
 		UserService: userService,
@@ -183,6 +190,64 @@ func wrapProductControllerDeleteProduct(handler *ProductController) echo.Handler
 	}
 }
 
+func wrapSessionControllerStartSession(handler *SessionController, loggingmiddleware *LoggingMiddleware) echo.HandlerFunc {
+	baseHandler := func(c echo.Context) error {
+		userID, err := strconv.Atoi(c.Param("userID"))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid userID: must be an integer")
+		}
+
+		var response *axon.Response
+		response, err = handler.StartSession(userID)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		if response == nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
+		}
+		return c.JSON(response.StatusCode, response.Body)
+	}
+
+	// Apply middlewares in order
+	finalHandler := baseHandler
+	finalHandler = loggingmiddleware.Handle(finalHandler)
+
+	return finalHandler
+}
+
+func wrapSessionControllerGetSessionInfo(handler *SessionController, loggingmiddleware *LoggingMiddleware) echo.HandlerFunc {
+	baseHandler := func(c echo.Context) error {
+		userID, err := strconv.Atoi(c.Param("userID"))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid userID: must be an integer")
+		}
+
+		var data interface{}
+		data, err = handler.GetSessionInfo(userID)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		return c.JSON(http.StatusOK, data)
+	}
+
+	// Apply middlewares in order
+	finalHandler := baseHandler
+	finalHandler = loggingmiddleware.Handle(finalHandler)
+
+	return finalHandler
+}
+
+func wrapSessionControllerCompareSessionInstances(handler *SessionController) echo.HandlerFunc {
+	return func(c echo.Context) error {
+
+		err := handler.CompareSessionInstances(c)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+}
+
 func wrapUserControllerGetAllUsers(handler *UserController) echo.HandlerFunc {
 	return func(c echo.Context) error {
 
@@ -267,7 +332,7 @@ func wrapUserControllerDeleteUser(handler *UserController) echo.HandlerFunc {
 }
 
 // RegisterRoutes registers all HTTP routes with the Echo instance
-func RegisterRoutes(e *echo.Echo, healthcontroller *HealthController, productcontroller *ProductController, usercontroller *UserController, loggingmiddleware *LoggingMiddleware, authmiddleware *AuthMiddleware) {
+func RegisterRoutes(e *echo.Echo, healthcontroller *HealthController, productcontroller *ProductController, sessioncontroller *SessionController, usercontroller *UserController, authmiddleware *AuthMiddleware, loggingmiddleware *LoggingMiddleware) {
 	handler_healthcontrollergethealth := wrapHealthControllerGetHealth(healthcontroller)
 	e.GET("/health", handler_healthcontrollergethealth)
 	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
@@ -396,6 +461,56 @@ func RegisterRoutes(e *echo.Echo, healthcontroller *HealthController, productcon
 		ParameterTypes:      map[string]string{"id": "uuid.UUID"},
 		Handler:             handler_productcontrollerdeleteproduct,
 	})
+	handler_sessioncontrollerstartsession := wrapSessionControllerStartSession(sessioncontroller, loggingmiddleware)
+	e.POST("/sessions/:userID", handler_sessioncontrollerstartsession)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "POST",
+		Path:                "/sessions/{userID:int}",
+		EchoPath:            "/sessions/:userID",
+		HandlerName:         "StartSession",
+		ControllerName:      "SessionController",
+		PackageName:         "controllers",
+		Middlewares:         []string{"LoggingMiddleware"},
+		MiddlewareInstances: []axon.MiddlewareInstance{{
+			Name:     "LoggingMiddleware",
+			Handler:  loggingmiddleware.Handle,
+			Instance: loggingmiddleware,
+		}},
+		ParameterTypes:      map[string]string{"userID": "int"},
+		Handler:             handler_sessioncontrollerstartsession,
+	})
+	handler_sessioncontrollergetsessioninfo := wrapSessionControllerGetSessionInfo(sessioncontroller, loggingmiddleware)
+	e.GET("/sessions/info/:userID", handler_sessioncontrollergetsessioninfo)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "GET",
+		Path:                "/sessions/info/{userID:int}",
+		EchoPath:            "/sessions/info/:userID",
+		HandlerName:         "GetSessionInfo",
+		ControllerName:      "SessionController",
+		PackageName:         "controllers",
+		Middlewares:         []string{"LoggingMiddleware"},
+		MiddlewareInstances: []axon.MiddlewareInstance{{
+			Name:     "LoggingMiddleware",
+			Handler:  loggingmiddleware.Handle,
+			Instance: loggingmiddleware,
+		}},
+		ParameterTypes:      map[string]string{"userID": "int"},
+		Handler:             handler_sessioncontrollergetsessioninfo,
+	})
+	handler_sessioncontrollercomparesessioninstances := wrapSessionControllerCompareSessionInstances(sessioncontroller)
+	e.GET("/sessions/compare", handler_sessioncontrollercomparesessioninstances)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "GET",
+		Path:                "/sessions/compare",
+		EchoPath:            "/sessions/compare",
+		HandlerName:         "CompareSessionInstances",
+		ControllerName:      "SessionController",
+		PackageName:         "controllers",
+		Middlewares:         []string{},
+		MiddlewareInstances: []axon.MiddlewareInstance{},
+		ParameterTypes:      map[string]string{},
+		Handler:             handler_sessioncontrollercomparesessioninstances,
+	})
 	handler_usercontrollergetallusers := wrapUserControllerGetAllUsers(usercontroller)
 	e.GET("/users", handler_usercontrollergetallusers)
 	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
@@ -472,6 +587,7 @@ func RegisterRoutes(e *echo.Echo, healthcontroller *HealthController, productcon
 var AutogenModule = fx.Module("controllers",
 	fx.Provide(NewHealthController),
 	fx.Provide(NewProductController),
+	fx.Provide(NewSessionController),
 	fx.Provide(NewUserController),
 	fx.Invoke(RegisterRoutes),
 )

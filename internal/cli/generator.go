@@ -26,14 +26,15 @@ type Generator struct {
 // NewGenerator creates a new CLI generator
 func NewGenerator(verbose bool) *Generator {
 	moduleResolver := NewModuleResolver()
+	reporter := NewDiagnosticReporter(verbose)
 	return &Generator{
 		scanner:        NewDirectoryScanner(),
 		moduleResolver: moduleResolver,
-		parser:         parser.NewParser(),
+		parser:         parser.NewParserWithReporter(reporter),
 		codeGenerator:  generator.NewGeneratorWithResolver(moduleResolver),
 		globalParsers:    make(map[string]models.RouteParserMetadata),
 		globalMiddleware: make(map[string]models.MiddlewareMetadata),
-		reporter:         NewDiagnosticReporter(verbose),
+		reporter:         reporter,
 		summary:          GenerationSummary{GeneratedFiles: make([]string, 0)},
 	}
 }

@@ -302,6 +302,20 @@ func (r *DiagnosticReporter) printVerboseDebuggingInfo(genErr *models.GeneratorE
 	fmt.Fprintf(os.Stderr, "\n")
 }
 
+// Debug prints debug information when verbose mode is enabled
+func (r *DiagnosticReporter) Debug(format string, args ...interface{}) {
+	if r.verbose {
+		fmt.Fprintf(os.Stderr, "[DEBUG] "+format+"\n", args...)
+	}
+}
+
+// DebugSection prints a debug section header when verbose mode is enabled
+func (r *DiagnosticReporter) DebugSection(section string) {
+	if r.verbose {
+		fmt.Fprintf(os.Stderr, "[DEBUG] === %s ===\n", section)
+	}
+}
+
 // ReportSuccess reports successful generation with summary information
 func (r *DiagnosticReporter) ReportSuccess(summary GenerationSummary) {
 	fmt.Printf("\nCode Generation Completed Successfully!\n")

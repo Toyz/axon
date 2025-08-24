@@ -421,6 +421,19 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 
 // extractPackageFromType extracts the package name from a type string like "*services.DatabaseService"
 func (g *Generator) extractPackageFromType(typeStr string) string {
+	// Handle function types by extracting packages from return types
+	if strings.HasPrefix(typeStr, "func(") {
+		// Find the return type part after the closing parenthesis
+		if parenIndex := strings.Index(typeStr, ")"); parenIndex != -1 {
+			returnPart := strings.TrimSpace(typeStr[parenIndex+1:])
+			if returnPart != "" {
+				// Recursively extract package from return type
+				return g.extractPackageFromType(returnPart)
+			}
+		}
+		return ""
+	}
+	
 	// Remove pointer prefix
 	typeStr = strings.TrimPrefix(typeStr, "*")
 	

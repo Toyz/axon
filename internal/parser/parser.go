@@ -18,6 +18,13 @@ type Parser struct {
 	middlewareRegistry registry.MiddlewareRegistry
 	skipParserValidation     bool // Skip custom parser validation during discovery phase
 	skipMiddlewareValidation bool // Skip middleware validation during discovery phase
+	reporter           DiagnosticReporter // For debug logging and error reporting
+}
+
+// DiagnosticReporter interface for debug logging
+type DiagnosticReporter interface {
+	Debug(format string, args ...interface{})
+	DebugSection(section string)
 }
 
 // NewParser creates a new annotation parser
@@ -25,8 +32,24 @@ func NewParser() *Parser {
 	return &Parser{
 		fileSet:            token.NewFileSet(),
 		middlewareRegistry: registry.NewMiddlewareRegistry(),
+		reporter:           &noOpReporter{}, // Default no-op reporter for backward compatibility
 	}
 }
+
+// NewParserWithReporter creates a new annotation parser with a diagnostic reporter
+func NewParserWithReporter(reporter DiagnosticReporter) *Parser {
+	return &Parser{
+		fileSet:            token.NewFileSet(),
+		middlewareRegistry: registry.NewMiddlewareRegistry(),
+		reporter:           reporter,
+	}
+}
+
+// noOpReporter is a no-op implementation of DiagnosticReporter for backward compatibility
+type noOpReporter struct{}
+
+func (n *noOpReporter) Debug(format string, args ...interface{}) {}
+func (n *noOpReporter) DebugSection(section string) {}
 
 // ParseSource parses source code from a string for testing purposes
 func (p *Parser) ParseSource(filename, source string) (*models.PackageMetadata, error) {
@@ -505,6 +528,16 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				}
 			}
 			
+			// Check for mode flag (default to Singleton)
+			service.Mode = LifecycleModeSingleton // Default mode
+			if modeFlag, exists := annotation.Parameters[FlagMode]; exists {
+				if modeFlag == LifecycleModeTransient || modeFlag == LifecycleModeSingleton {
+					service.Mode = modeFlag
+				} else {
+					return fmt.Errorf("service %s has invalid mode '%s': must be 'Singleton' or 'Transient'", annotation.Target, modeFlag)
+				}
+			}
+			
 			metadata.CoreServices = append(metadata.CoreServices, service)
 			
 			// If this core service also has an interface annotation, generate interface
@@ -693,15 +726,19 @@ func (p *Parser) isLifecycleMethodSignature(funcDecl *ast.FuncDecl, methodName s
 
 // extractDependencies analyzes struct fields to find fx.In dependencies or //axon::inject annotations
 func (p *Parser) extractDependencies(structType *ast.StructType) []models.Dependency {
+	p.reporter.DebugSection("Dependency Extraction")
+	p.reporter.Debug("Starting dependency extraction")
 	var dependencies []models.Dependency
 	var hasFxIn bool
 	
 	// First, check if struct has embedded fx.In
+	p.reporter.Debug("Checking for embedded fx.In")
 	for _, field := range structType.Fields.List {
 		if len(field.Names) == 0 { // embedded field
 			if selectorExpr, ok := field.Type.(*ast.SelectorExpr); ok {
 				if ident, ok := selectorExpr.X.(*ast.Ident); ok {
 					if ident.Name == "fx" && selectorExpr.Sel.Name == "In" {
+						p.reporter.Debug("Found embedded fx.In")
 						hasFxIn = true
 						break
 					}
@@ -712,6 +749,7 @@ func (p *Parser) extractDependencies(structType *ast.StructType) []models.Depend
 	
 	// If struct has fx.In, extract all other named fields as dependencies
 	if hasFxIn {
+		p.reporter.Debug("Processing fx.In struct fields")
 		for _, field := range structType.Fields.List {
 			// Skip embedded fx.In field
 			if len(field.Names) == 0 {
@@ -720,57 +758,137 @@ func (p *Parser) extractDependencies(structType *ast.StructType) []models.Depend
 			
 			// Extract dependency names from named fields
 			for _, name := range field.Names {
+				p.reporter.Debug("Processing fx.In field '%s' (exported: %v)", name.Name, name.IsExported())
 				if name.IsExported() {
-					dependencies = append(dependencies, models.Dependency{
+					dep := models.Dependency{
 						Name: name.Name,
 						Type: p.getFieldTypeName(field.Type),
-					})
+					}
+					p.reporter.Debug("Added fx.In dependency: Name=%s, Type=%s, IsInit=%v", dep.Name, dep.Type, dep.IsInit)
+					dependencies = append(dependencies, dep)
 				}
 			}
 		}
 	} else {
 		// If no fx.In, check for //axon::inject annotations on individual fields
-		for _, field := range structType.Fields.List {
+		p.reporter.Debug("Processing individual field annotations (total fields: %d)", len(structType.Fields.List))
+		for fieldIndex, field := range structType.Fields.List {
+			p.reporter.Debug("Processing field %d", fieldIndex)
+			
 			// Skip embedded fields
 			if len(field.Names) == 0 {
+				p.reporter.Debug("Skipping embedded field %d", fieldIndex)
 				continue
 			}
 			
-			// Check if field has //axon::inject or //axon::init annotation (in Doc comments)
+			// Log field names
+			var fieldNames []string
+			for _, name := range field.Names {
+				fieldNames = append(fieldNames, name.Name)
+			}
+			p.reporter.Debug("Field %d names: %v", fieldIndex, fieldNames)
+			
+			// Check if field has //axon::inject or //axon::init annotation (in Doc or Comment)
+			var foundAnnotation bool
+			
+			// First check Doc comments (above the field)
 			if field.Doc != nil {
-				for _, comment := range field.Doc.List {
+				p.reporter.Debug("Field %d has %d doc comments", fieldIndex, len(field.Doc.List))
+				for commentIndex, comment := range field.Doc.List {
+					p.reporter.Debug("Field %d, doc comment %d: %s", fieldIndex, commentIndex, comment.Text)
+					
 					// Check for //axon::inject annotation
 					if hasInject, hasInitFlag, _ := p.parseInjectAnnotation(comment.Text); hasInject {
+						p.reporter.Debug("Found //axon::inject annotation on field %d (hasInit: %v)", fieldIndex, hasInitFlag)
 						// Extract dependency from this field
 						// When //axon::inject is present, always include the field regardless of export status
 						for _, name := range field.Names {
-							dependencies = append(dependencies, models.Dependency{
+							dep := models.Dependency{
 								Name:   name.Name,
 								Type:   p.getFieldTypeName(field.Type),
 								IsInit: hasInitFlag, // -Init flag on inject annotation
-							})
+							}
+							p.reporter.Debug("Added inject dependency: Name=%s, Type=%s, IsInit=%v", dep.Name, dep.Type, dep.IsInit)
+							dependencies = append(dependencies, dep)
 						}
+						foundAnnotation = true
 						break
 					}
 					
 					// Check for //axon::init annotation
 					if hasInit, _ := p.parseInitAnnotation(comment.Text); hasInit {
+						p.reporter.Debug("Found //axon::init annotation on field %d", fieldIndex)
 						// Extract init dependency from this field
 						// When //axon::init is present, always include the field regardless of export status
 						for _, name := range field.Names {
-							dependencies = append(dependencies, models.Dependency{
+							dep := models.Dependency{
 								Name:   name.Name,
 								Type:   p.getFieldTypeName(field.Type),
 								IsInit: true, // Always init for //axon::init annotation
-							})
+							}
+							p.reporter.Debug("Added init dependency: Name=%s, Type=%s, IsInit=%v", dep.Name, dep.Type, dep.IsInit)
+							dependencies = append(dependencies, dep)
 						}
+						foundAnnotation = true
 						break
 					}
 				}
+			} else {
+				p.reporter.Debug("Field %d has no doc comments", fieldIndex)
+			}
+			
+			// If no annotation found in Doc comments, check Comment (line comments)
+			if !foundAnnotation && field.Comment != nil {
+				p.reporter.Debug("Field %d has %d line comments", fieldIndex, len(field.Comment.List))
+				for commentIndex, comment := range field.Comment.List {
+					p.reporter.Debug("Field %d, line comment %d: %s", fieldIndex, commentIndex, comment.Text)
+					
+					// Check for //axon::inject annotation
+					if hasInject, hasInitFlag, _ := p.parseInjectAnnotation(comment.Text); hasInject {
+						p.reporter.Debug("Found //axon::inject annotation on field %d (hasInit: %v)", fieldIndex, hasInitFlag)
+						// Extract dependency from this field
+						// When //axon::inject is present, always include the field regardless of export status
+						for _, name := range field.Names {
+							dep := models.Dependency{
+								Name:   name.Name,
+								Type:   p.getFieldTypeName(field.Type),
+								IsInit: hasInitFlag, // -Init flag on inject annotation
+							}
+							p.reporter.Debug("Added inject dependency: Name=%s, Type=%s, IsInit=%v", dep.Name, dep.Type, dep.IsInit)
+							dependencies = append(dependencies, dep)
+						}
+						foundAnnotation = true
+						break
+					}
+					
+					// Check for //axon::init annotation
+					if hasInit, _ := p.parseInitAnnotation(comment.Text); hasInit {
+						p.reporter.Debug("Found //axon::init annotation on field %d", fieldIndex)
+						// Extract init dependency from this field
+						// When //axon::init is present, always include the field regardless of export status
+						for _, name := range field.Names {
+							dep := models.Dependency{
+								Name:   name.Name,
+								Type:   p.getFieldTypeName(field.Type),
+								IsInit: true, // Always init for //axon::init annotation
+							}
+							p.reporter.Debug("Added init dependency: Name=%s, Type=%s, IsInit=%v", dep.Name, dep.Type, dep.IsInit)
+							dependencies = append(dependencies, dep)
+						}
+						foundAnnotation = true
+						break
+					}
+				}
+			} else if !foundAnnotation {
+				p.reporter.Debug("Field %d has no line comments", fieldIndex)
 			}
 		}
 	}
 	
+	p.reporter.Debug("Final dependencies list (count: %d):", len(dependencies))
+	for i, dep := range dependencies {
+		p.reporter.Debug("  [%d] Name=%s, Type=%s, IsInit=%v", i, dep.Name, dep.Type, dep.IsInit)
+	}
 	return dependencies
 }
 
@@ -823,6 +941,39 @@ func (p *Parser) getFieldTypeName(expr ast.Expr) string {
 		return "[]" + p.getFieldTypeName(t.Elt)
 	case *ast.MapType:
 		return "map[" + p.getFieldTypeName(t.Key) + "]" + p.getFieldTypeName(t.Value)
+	case *ast.FuncType:
+		// Handle function types like func() *SomeType
+		var params []string
+		if t.Params != nil {
+			for _, param := range t.Params.List {
+				paramType := p.getFieldTypeName(param.Type)
+				params = append(params, paramType)
+			}
+		}
+		
+		var results []string
+		if t.Results != nil {
+			for _, result := range t.Results.List {
+				resultType := p.getFieldTypeName(result.Type)
+				results = append(results, resultType)
+			}
+		}
+		
+		funcStr := "func("
+		if len(params) > 0 {
+			funcStr += strings.Join(params, ", ")
+		}
+		funcStr += ")"
+		
+		if len(results) > 0 {
+			if len(results) == 1 {
+				funcStr += " " + results[0]
+			} else {
+				funcStr += " (" + strings.Join(results, ", ") + ")"
+			}
+		}
+		
+		return funcStr
 	default:
 		return "unknown"
 	}
