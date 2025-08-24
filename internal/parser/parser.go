@@ -1,10 +1,13 @@
 package parser
 
 import (
+	"bufio"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/toyz/axon/internal/models"
@@ -61,9 +64,14 @@ func (p *Parser) ParseSource(filename, source string) (*models.PackageMetadata, 
 
 	// Create package metadata
 	metadata := &models.PackageMetadata{
-		PackageName: file.Name.Name,
-		PackagePath: "./",
+		PackageName:   file.Name.Name,
+		PackagePath:   "./",
+		SourceImports: make(map[string][]models.Import),
 	}
+	
+	// Extract imports from the file
+	imports := p.ExtractImports(file)
+	metadata.SourceImports[filename] = imports
 
 	// Extract annotations
 	annotations, err := p.ExtractAnnotations(file, filename)
@@ -112,16 +120,29 @@ func (p *Parser) ParseDirectory(path string) (*models.PackageMetadata, error) {
 
 	// Create package metadata
 	metadata := &models.PackageMetadata{
-		PackageName: packageName,
-		PackagePath: path,
+		PackageName:   packageName,
+		PackagePath:   path,
+		SourceImports: make(map[string][]models.Import),
+	}
+	
+	// Detect module information
+	if err := p.detectModuleInfo(metadata); err != nil {
+		// Log warning but don't fail - module info is optional for some use cases
+		p.reporter.Debug("Warning: failed to detect module info: %v", err)
 	}
 
-	// First pass: Extract all annotations from all files
+	// First pass: Extract all annotations and imports from all files
 	allAnnotations := []models.Annotation{}
 	fileMap := make(map[string]*ast.File)
 	
 	for fileName, file := range pkg.Files {
 		fileMap[fileName] = file
+		
+		// Extract imports from this file
+		imports := p.ExtractImports(file)
+		metadata.SourceImports[fileName] = imports
+		
+		// Extract annotations from this file
 		annotations, err := p.ExtractAnnotations(file, fileName)
 		if err != nil {
 			return nil, fmt.Errorf("failed to extract annotations from file %s: %w", fileName, err)
@@ -155,6 +176,131 @@ func (p *Parser) ParseDirectory(path string) (*models.PackageMetadata, error) {
 	}
 
 	return metadata, nil
+}
+
+// detectModuleInfo detects module path and root from go.mod file
+func (p *Parser) detectModuleInfo(metadata *models.PackageMetadata) error {
+	// Find go.mod file starting from package path
+	moduleRoot, modulePath, err := p.findModuleInfo(metadata.PackagePath)
+	if err != nil {
+		return err
+	}
+	
+	metadata.ModuleRoot = moduleRoot
+	metadata.ModulePath = modulePath
+	
+	// Calculate package import path
+	packageImportPath, err := p.calculatePackageImportPath(moduleRoot, modulePath, metadata.PackagePath)
+	if err != nil {
+		return err
+	}
+	
+	metadata.PackageImportPath = packageImportPath
+	return nil
+}
+
+// findModuleInfo searches for go.mod file and extracts module information
+func (p *Parser) findModuleInfo(startPath string) (moduleRoot, modulePath string, err error) {
+	currentDir := startPath
+	if !filepath.IsAbs(currentDir) {
+		currentDir, err = filepath.Abs(currentDir)
+		if err != nil {
+			return "", "", fmt.Errorf("failed to get absolute path: %w", err)
+		}
+	}
+	
+	for {
+		goModPath := filepath.Join(currentDir, "go.mod")
+		if _, err := os.Stat(goModPath); err == nil {
+			// Found go.mod file
+			modulePath, err := p.parseGoModFile(goModPath)
+			if err != nil {
+				return "", "", fmt.Errorf("failed to parse go.mod: %w", err)
+			}
+			return currentDir, modulePath, nil
+		}
+		
+		// Move to parent directory
+		parentDir := filepath.Dir(currentDir)
+		if parentDir == currentDir {
+			// Reached root directory
+			break
+		}
+		currentDir = parentDir
+	}
+	
+	return "", "", fmt.Errorf("go.mod file not found")
+}
+
+// parseGoModFile parses the module name from a go.mod file
+func (p *Parser) parseGoModFile(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to open go.mod file: %w", err)
+	}
+	defer file.Close()
+	
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(line, "module ") {
+			parts := strings.Fields(line)
+			if len(parts) >= 2 {
+				return parts[1], nil
+			}
+		}
+	}
+	
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("failed to read go.mod file: %w", err)
+	}
+	
+	return "", fmt.Errorf("module declaration not found in go.mod")
+}
+
+// calculatePackageImportPath calculates the full import path for a package
+func (p *Parser) calculatePackageImportPath(moduleRoot, modulePath, packagePath string) (string, error) {
+	// Convert package path to absolute path
+	absPackagePath, err := filepath.Abs(packagePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve package path: %w", err)
+	}
+	
+	// Calculate relative path from module root
+	relPath, err := filepath.Rel(moduleRoot, absPackagePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to calculate relative path: %w", err)
+	}
+	
+	// Convert file path separators to forward slashes for import paths
+	importPath := filepath.ToSlash(relPath)
+	
+	// Build full import path
+	if importPath == "." {
+		return modulePath, nil
+	}
+	
+	return fmt.Sprintf("%s/%s", modulePath, importPath), nil
+}
+
+// ExtractImports extracts import statements from a Go file
+func (p *Parser) ExtractImports(file *ast.File) []models.Import {
+	var imports []models.Import
+	
+	for _, importSpec := range file.Imports {
+		imp := models.Import{
+			Path: strings.Trim(importSpec.Path.Value, `"`), // Remove quotes
+		}
+		
+		// Check for import alias
+		if importSpec.Name != nil {
+			imp.Alias = importSpec.Name.Name
+		}
+		
+		imports = append(imports, imp)
+	}
+	
+	return imports
 }
 
 // ExtractAnnotations traverses the AST and extracts axon:: annotations from comments

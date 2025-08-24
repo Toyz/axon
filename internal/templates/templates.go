@@ -24,123 +24,7 @@ type ParserRegistryInterface interface {
 // This package contains Go templates for code generation
 // Route wrapper generation is handled in response.go
 
-const (
-	// ProviderTemplate is the template for generating FX provider functions
-	ProviderTemplate = `func New{{.StructName}}({{range $i, $dep := .InjectedDeps}}{{if $i}}, {{end}}{{$dep.Name}} {{$dep.Type}}{{end}}) *{{.StructName}} {
-	return &{{.StructName}}{
-{{range .Dependencies}}{{if .IsInit}}		{{.FieldName}}: {{generateInitCode .Type}},
-{{else}}		{{.FieldName}}: {{.Name}},
-{{end}}{{end}}{{if not .Dependencies}}
-{{end}}	}
-}`
-
-	// FXProviderTemplate is the template for generating FX provider functions with fx.In
-	FXProviderTemplate = `func New{{.StructName}}() *{{.StructName}} {
-	return &{{.StructName}}{
-		
-	}
-}`
-
-	// FXLifecycleProviderTemplate is the template for generating FX provider functions with fx.In and lifecycle
-	FXLifecycleProviderTemplate = `func New{{.StructName}}(lc fx.Lifecycle{{range .Dependencies}}{{if not .IsInit}}, {{.Name}} {{.Type}}{{end}}{{end}}) *{{.StructName}} {
-	service := &{{.StructName}}{
-{{range .Dependencies}}{{if .IsInit}}		{{.FieldName}}: {{generateInitCode .Type}},
-{{else}}		{{.FieldName}}: {{.Name}},
-{{end}}{{end}}	}
-	
-	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			return service.Start(ctx)
-		},{{if .HasStop}}
-		OnStop: func(ctx context.Context) error {
-			return service.Stop(ctx)
-		},{{end}}
-	})
-	
-	return service
-}`
-
-	// LoggerProviderTemplate is the template for generating FX provider functions for loggers with immediate initialization
-	LoggerProviderTemplate = `func New{{.StructName}}(lc fx.Lifecycle{{range .Dependencies}}{{if not .IsInit}}, {{.Name}} {{.Type}}{{end}}{{end}}) *{{.StructName}} {
-	// Initialize logger immediately for fx.WithLogger to work
-	var handler slog.Handler
-	if {{.ConfigParam}}.LogLevel == "debug" {
-		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-			Level: slog.LevelDebug,
-		})
-	} else {
-		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-			Level: slog.LevelInfo,
-		})
-	}
-	
-	service := &{{.StructName}}{
-{{range .Dependencies}}{{if .IsInit}}		{{.FieldName}}: slog.New(handler),
-{{else}}		{{.FieldName}}: {{.Name}},
-{{end}}{{end}}	}
-	
-	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			return service.Start(ctx)
-		},{{if .HasStop}}
-		OnStop: func(ctx context.Context) error {
-			return service.Stop(ctx)
-		},{{end}}
-	})
-	
-	return service
-}`
-
-	// SimpleLoggerProviderTemplate is for loggers without lifecycle hooks
-	SimpleLoggerProviderTemplate = `func New{{.StructName}}({{range $i, $dep := .InjectedDeps}}{{if $i}}, {{end}}{{$dep.Name}} {{$dep.Type}}{{end}}) *{{.StructName}} {
-	// Initialize logger immediately
-	var handler slog.Handler
-	if {{.ConfigParam}}.LogLevel == "debug" {
-		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-			Level: slog.LevelDebug,
-		})
-	} else {
-		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-			Level: slog.LevelInfo,
-		})
-	}
-	
-	return &{{.StructName}}{
-{{range .Dependencies}}{{if .IsInit}}		{{.FieldName}}: slog.New(handler),
-{{else}}		{{.FieldName}}: {{.Name}},
-{{end}}{{end}}	}
-}`
-
-	// LifecycleProviderTemplate is the template for generating FX provider functions with lifecycle management
-	LifecycleProviderTemplate = `func New{{.StructName}}(lc fx.Lifecycle{{range .Dependencies}}{{if not .IsInit}}, {{.Name}} {{.Type}}{{end}}{{end}}) *{{.StructName}} {
-	service := &{{.StructName}}{
-{{range .Dependencies}}{{if .IsInit}}		{{.FieldName}}: {{generateInitCode .Type}},
-{{else}}		{{.FieldName}}: {{.Name}},
-{{end}}{{end}}	}
-	
-	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			return service.Start(ctx)
-		},{{if .HasStop}}
-		OnStop: func(ctx context.Context) error {
-			return service.Stop(ctx)
-		},{{end}}
-	})
-	
-	return service
-}`
-
-	// InterfaceTemplate is the template for generating interfaces from structs
-	InterfaceTemplate = `// {{.Name}} is the interface for {{.StructName}}
-type {{.Name}} interface {
-{{range .Methods}}	{{.Name}}({{range $i, $param := .Parameters}}{{if $i}}, {{end}}{{if $param.Name}}{{$param.Name}} {{end}}{{$param.Type}}{{end}}){{if .Returns}} ({{range $i, $ret := .Returns}}{{if $i}}, {{end}}{{$ret}}{{end}}){{end}}
-{{end}}}`
-
-	// InterfaceProviderTemplate is the template for generating FX provider that casts struct to interface
-	InterfaceProviderTemplate = `func New{{.Name}}(impl *{{.StructName}}) {{.Name}} {
-	return impl
-}`
-)
+// Template constants are now defined in template_defs.go for better organization
 
 
 
@@ -551,8 +435,9 @@ func GenerateCoreServiceProvider(service models.CoreServiceMetadata) (string, er
 	} else {
 		// Default Singleton mode
 		if service.HasLifecycle {
-			// Use FX lifecycle template for services with lifecycle
-			return executeTemplate("fx-lifecycle-provider", FXLifecycleProviderTemplate, data)
+			// For services with -Init flag, generate simple provider only
+			// The invoke function will be generated separately
+			return executeTemplate("init-provider", InitProviderTemplate, data)
 		} else if len(service.Dependencies) > 0 {
 			// Use regular provider template for services with dependencies
 			return executeTemplate("provider", ProviderTemplate, data)
@@ -565,19 +450,22 @@ func GenerateCoreServiceProvider(service models.CoreServiceMetadata) (string, er
 
 // generateTransientServiceProvider generates a factory function for transient services
 func generateTransientServiceProvider(data CoreServiceProviderData) (string, error) {
-	// For transient services, we generate a factory function that returns a new instance each time
-	template := `// New{{.StructName}}Factory creates a factory function for {{.StructName}} (Transient mode)
-func New{{.StructName}}Factory({{range $i, $dep := .InjectedDeps}}{{if $i}}, {{end}}{{$dep.Name}} {{$dep.Type}}{{end}}) func() *{{.StructName}} {
-	return func() *{{.StructName}} {
-		return &{{.StructName}}{
-{{range .Dependencies}}{{if .IsInit}}			{{.FieldName}}: {{generateInitCode .Type}},
-{{else}}			{{.FieldName}}: {{.Name}},
-{{end}}{{end}}{{if not .Dependencies}}
-{{end}}		}
-	}
-}`
+	return executeTemplate("transient-provider", TransientProviderTemplate, data)
+}
 
-	return executeTemplate("transient-provider", template, data)
+// GenerateInitInvokeFunction generates an invoke function for lifecycle management
+func GenerateInitInvokeFunction(service models.CoreServiceMetadata) (string, error) {
+	if !service.HasLifecycle {
+		return "", nil
+	}
+
+	data := CoreServiceProviderData{
+		StructName: service.StructName,
+		HasStart:   service.HasStart,
+		HasStop:    service.HasStop,
+	}
+
+	return executeTemplate("init-invoke", InitInvokeTemplate, data)
 }
 
 // GenerateCoreServiceModule generates the complete FX module for core services in a package
@@ -605,114 +493,87 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 	moduleBuilder.WriteString("// This file was automatically generated and should not be modified manually.\n\n")
 	moduleBuilder.WriteString(fmt.Sprintf("package %s\n\n", metadata.PackageName))
 	
-	// Analyze what imports are needed
-	requiredImports := analyzeRequiredImports(metadata)
-	dependencyImports := requiredImports.Dependencies
+	// Create ImportManager for proper import detection
+	importManager := NewImportManager()
 	
-	// Generate imports
-	moduleBuilder.WriteString("import (\n")
-	
-	// Add standard library imports
-	if requiredImports.NeedsContext {
-		moduleBuilder.WriteString("\t\"context\"\n")
-	}
-	
-	// Always need fx for module generation
-	moduleBuilder.WriteString("\t\"go.uber.org/fx\"\n")
-	
-	// Add logger-specific imports
-	if requiredImports.NeedsLogger {
-		moduleBuilder.WriteString("\t\"go.uber.org/fx/fxevent\"\n")
-		moduleBuilder.WriteString("\t\"log/slog\"\n")
-		moduleBuilder.WriteString("\t\"os\"\n")
-	}
-	
-	// Add dependency imports using actual package paths
-	for packageName := range dependencyImports {
-		// Handle standard library packages
-		if isStandardLibraryPackage(packageName) {
-			// Skip standard library packages - they don't need explicit imports in this context
-			// since they should be imported in the original source files
-			continue
+	// Set up package resolver if module name is provided
+	if moduleName != "" {
+		resolver := &PackageResolver{
+			ModulePath: moduleName,
+			PackageMap: make(map[string]string),
 		}
-		
-		// Use actual package path if available, otherwise construct with module name
-		if actualPath, exists := packagePaths[packageName]; exists {
-			moduleBuilder.WriteString(fmt.Sprintf("\t\"%s\"\n", actualPath))
-		} else if moduleName != "" {
-			// Fallback: construct path with module name (this should be rare)
-			moduleBuilder.WriteString(fmt.Sprintf("\t\"%s/%s\"\n", moduleName, packageName))
-		}
+		importManager.packageResolver = resolver
 	}
-	moduleBuilder.WriteString(")\n\n")
+	// Generate all code content first, then analyze imports
+	var contentBuilder strings.Builder
 	
 	// Generate fxLogger adapter if there are loggers
 	if len(metadata.Loggers) > 0 {
 		firstLogger := metadata.Loggers[0]
-		moduleBuilder.WriteString(fmt.Sprintf("// fxLogger adapts %s to fxevent.Logger\n", firstLogger.StructName))
-		moduleBuilder.WriteString(fmt.Sprintf("type fxLogger struct {\n\tlogger *%s\n}\n\n", firstLogger.StructName))
+		contentBuilder.WriteString(fmt.Sprintf("// fxLogger adapts %s to fxevent.Logger\n", firstLogger.StructName))
+		contentBuilder.WriteString(fmt.Sprintf("type fxLogger struct {\n\tlogger *%s\n}\n\n", firstLogger.StructName))
 		
 		// Implement fxevent.Logger interface
-		moduleBuilder.WriteString("func (l *fxLogger) LogEvent(event fxevent.Event) {\n")
-		moduleBuilder.WriteString("\tswitch e := event.(type) {\n")
-		moduleBuilder.WriteString("\tcase *fxevent.OnStartExecuting:\n")
-		moduleBuilder.WriteString("\t\tl.logger.Info(\"OnStart hook executing\", \"callee\", e.FunctionName, \"caller\", e.CallerName)\n")
-		moduleBuilder.WriteString("\tcase *fxevent.OnStartExecuted:\n")
-		moduleBuilder.WriteString("\t\tif e.Err != nil {\n")
-		moduleBuilder.WriteString("\t\t\tl.logger.Error(\"OnStart hook failed\", \"callee\", e.FunctionName, \"caller\", e.CallerName, \"error\", e.Err)\n")
-		moduleBuilder.WriteString("\t\t} else {\n")
-		moduleBuilder.WriteString("\t\t\tl.logger.Info(\"OnStart hook executed\", \"callee\", e.FunctionName, \"caller\", e.CallerName, \"runtime\", e.Runtime)\n")
-		moduleBuilder.WriteString("\t\t}\n")
-		moduleBuilder.WriteString("\tcase *fxevent.OnStopExecuting:\n")
-		moduleBuilder.WriteString("\t\tl.logger.Info(\"OnStop hook executing\", \"callee\", e.FunctionName, \"caller\", e.CallerName)\n")
-		moduleBuilder.WriteString("\tcase *fxevent.OnStopExecuted:\n")
-		moduleBuilder.WriteString("\t\tif e.Err != nil {\n")
-		moduleBuilder.WriteString("\t\t\tl.logger.Error(\"OnStop hook failed\", \"callee\", e.FunctionName, \"caller\", e.CallerName, \"error\", e.Err)\n")
-		moduleBuilder.WriteString("\t\t} else {\n")
-		moduleBuilder.WriteString("\t\t\tl.logger.Info(\"OnStop hook executed\", \"callee\", e.FunctionName, \"caller\", e.CallerName, \"runtime\", e.Runtime)\n")
-		moduleBuilder.WriteString("\t\t}\n")
-		moduleBuilder.WriteString("\tcase *fxevent.Supplied:\n")
-		moduleBuilder.WriteString("\t\tl.logger.Debug(\"supplied\", \"type\", e.TypeName, \"module\", e.ModuleName)\n")
-		moduleBuilder.WriteString("\tcase *fxevent.Provided:\n")
-		moduleBuilder.WriteString("\t\tl.logger.Debug(\"provided\", \"constructor\", e.ConstructorName, \"module\", e.ModuleName)\n")
-		moduleBuilder.WriteString("\tcase *fxevent.Invoking:\n")
-		moduleBuilder.WriteString("\t\tl.logger.Debug(\"invoking\", \"function\", e.FunctionName, \"module\", e.ModuleName)\n")
-		moduleBuilder.WriteString("\tcase *fxevent.Invoked:\n")
-		moduleBuilder.WriteString("\t\tif e.Err != nil {\n")
-		moduleBuilder.WriteString("\t\t\tl.logger.Error(\"invoke failed\", \"error\", e.Err, \"stack\", e.Trace, \"function\", e.FunctionName, \"module\", e.ModuleName)\n")
-		moduleBuilder.WriteString("\t\t} else {\n")
-		moduleBuilder.WriteString("\t\t\tl.logger.Debug(\"invoked\", \"function\", e.FunctionName, \"module\", e.ModuleName)\n")
-		moduleBuilder.WriteString("\t\t}\n")
-		moduleBuilder.WriteString("\tcase *fxevent.Stopping:\n")
-		moduleBuilder.WriteString("\t\tl.logger.Info(\"received signal\", \"signal\", e.Signal)\n")
-		moduleBuilder.WriteString("\tcase *fxevent.Stopped:\n")
-		moduleBuilder.WriteString("\t\tif e.Err != nil {\n")
-		moduleBuilder.WriteString("\t\t\tl.logger.Error(\"stop failed\", \"error\", e.Err)\n")
-		moduleBuilder.WriteString("\t\t} else {\n")
-		moduleBuilder.WriteString("\t\t\tl.logger.Info(\"stopped\")\n")
-		moduleBuilder.WriteString("\t\t}\n")
-		moduleBuilder.WriteString("\tcase *fxevent.RollingBack:\n")
-		moduleBuilder.WriteString("\t\tl.logger.Error(\"start failed, rolling back\", \"error\", e.StartErr)\n")
-		moduleBuilder.WriteString("\tcase *fxevent.RolledBack:\n")
-		moduleBuilder.WriteString("\t\tif e.Err != nil {\n")
-		moduleBuilder.WriteString("\t\t\tl.logger.Error(\"rollback failed\", \"error\", e.Err)\n")
-		moduleBuilder.WriteString("\t\t} else {\n")
-		moduleBuilder.WriteString("\t\t\tl.logger.Info(\"rolled back\")\n")
-		moduleBuilder.WriteString("\t\t}\n")
-		moduleBuilder.WriteString("\tcase *fxevent.Started:\n")
-		moduleBuilder.WriteString("\t\tif e.Err != nil {\n")
-		moduleBuilder.WriteString("\t\t\tl.logger.Error(\"start failed\", \"error\", e.Err)\n")
-		moduleBuilder.WriteString("\t\t} else {\n")
-		moduleBuilder.WriteString("\t\t\tl.logger.Info(\"started\")\n")
-		moduleBuilder.WriteString("\t\t}\n")
-		moduleBuilder.WriteString("\tcase *fxevent.LoggerInitialized:\n")
-		moduleBuilder.WriteString("\t\tif e.Err != nil {\n")
-		moduleBuilder.WriteString("\t\t\tl.logger.Error(\"custom logger initialization failed\", \"error\", e.Err)\n")
-		moduleBuilder.WriteString("\t\t} else {\n")
-		moduleBuilder.WriteString("\t\t\tl.logger.Debug(\"initialized custom fxevent.Logger\", \"function\", e.ConstructorName)\n")
-		moduleBuilder.WriteString("\t\t}\n")
-		moduleBuilder.WriteString("\t}\n")
-		moduleBuilder.WriteString("}\n\n")
+		contentBuilder.WriteString("func (l *fxLogger) LogEvent(event fxevent.Event) {\n")
+		contentBuilder.WriteString("\tswitch e := event.(type) {\n")
+		contentBuilder.WriteString("\tcase *fxevent.OnStartExecuting:\n")
+		contentBuilder.WriteString("\t\tl.logger.Info(\"OnStart hook executing\", \"callee\", e.FunctionName, \"caller\", e.CallerName)\n")
+		contentBuilder.WriteString("\tcase *fxevent.OnStartExecuted:\n")
+		contentBuilder.WriteString("\t\tif e.Err != nil {\n")
+		contentBuilder.WriteString("\t\t\tl.logger.Error(\"OnStart hook failed\", \"callee\", e.FunctionName, \"caller\", e.CallerName, \"error\", e.Err)\n")
+		contentBuilder.WriteString("\t\t} else {\n")
+		contentBuilder.WriteString("\t\t\tl.logger.Info(\"OnStart hook executed\", \"callee\", e.FunctionName, \"caller\", e.CallerName, \"runtime\", e.Runtime)\n")
+		contentBuilder.WriteString("\t\t}\n")
+		contentBuilder.WriteString("\tcase *fxevent.OnStopExecuting:\n")
+		contentBuilder.WriteString("\t\tl.logger.Info(\"OnStop hook executing\", \"callee\", e.FunctionName, \"caller\", e.CallerName)\n")
+		contentBuilder.WriteString("\tcase *fxevent.OnStopExecuted:\n")
+		contentBuilder.WriteString("\t\tif e.Err != nil {\n")
+		contentBuilder.WriteString("\t\t\tl.logger.Error(\"OnStop hook failed\", \"callee\", e.FunctionName, \"caller\", e.CallerName, \"error\", e.Err)\n")
+		contentBuilder.WriteString("\t\t} else {\n")
+		contentBuilder.WriteString("\t\t\tl.logger.Info(\"OnStop hook executed\", \"callee\", e.FunctionName, \"caller\", e.CallerName, \"runtime\", e.Runtime)\n")
+		contentBuilder.WriteString("\t\t}\n")
+		contentBuilder.WriteString("\tcase *fxevent.Supplied:\n")
+		contentBuilder.WriteString("\t\tl.logger.Debug(\"supplied\", \"type\", e.TypeName, \"module\", e.ModuleName)\n")
+		contentBuilder.WriteString("\tcase *fxevent.Provided:\n")
+		contentBuilder.WriteString("\t\tl.logger.Debug(\"provided\", \"constructor\", e.ConstructorName, \"module\", e.ModuleName)\n")
+		contentBuilder.WriteString("\tcase *fxevent.Invoking:\n")
+		contentBuilder.WriteString("\t\tl.logger.Debug(\"invoking\", \"function\", e.FunctionName, \"module\", e.ModuleName)\n")
+		contentBuilder.WriteString("\tcase *fxevent.Invoked:\n")
+		contentBuilder.WriteString("\t\tif e.Err != nil {\n")
+		contentBuilder.WriteString("\t\t\tl.logger.Error(\"invoke failed\", \"error\", e.Err, \"stack\", e.Trace, \"function\", e.FunctionName, \"module\", e.ModuleName)\n")
+		contentBuilder.WriteString("\t\t} else {\n")
+		contentBuilder.WriteString("\t\t\tl.logger.Debug(\"invoked\", \"function\", e.FunctionName, \"module\", e.ModuleName)\n")
+		contentBuilder.WriteString("\t\t}\n")
+		contentBuilder.WriteString("\tcase *fxevent.Stopping:\n")
+		contentBuilder.WriteString("\t\tl.logger.Info(\"received signal\", \"signal\", e.Signal)\n")
+		contentBuilder.WriteString("\tcase *fxevent.Stopped:\n")
+		contentBuilder.WriteString("\t\tif e.Err != nil {\n")
+		contentBuilder.WriteString("\t\t\tl.logger.Error(\"stop failed\", \"error\", e.Err)\n")
+		contentBuilder.WriteString("\t\t} else {\n")
+		contentBuilder.WriteString("\t\t\tl.logger.Info(\"stopped\")\n")
+		contentBuilder.WriteString("\t\t}\n")
+		contentBuilder.WriteString("\tcase *fxevent.RollingBack:\n")
+		contentBuilder.WriteString("\t\tl.logger.Error(\"start failed, rolling back\", \"error\", e.StartErr)\n")
+		contentBuilder.WriteString("\tcase *fxevent.RolledBack:\n")
+		contentBuilder.WriteString("\t\tif e.Err != nil {\n")
+		contentBuilder.WriteString("\t\t\tl.logger.Error(\"rollback failed\", \"error\", e.Err)\n")
+		contentBuilder.WriteString("\t\t} else {\n")
+		contentBuilder.WriteString("\t\t\tl.logger.Info(\"rolled back\")\n")
+		contentBuilder.WriteString("\t\t}\n")
+		contentBuilder.WriteString("\tcase *fxevent.Started:\n")
+		contentBuilder.WriteString("\t\tif e.Err != nil {\n")
+		contentBuilder.WriteString("\t\t\tl.logger.Error(\"start failed\", \"error\", e.Err)\n")
+		contentBuilder.WriteString("\t\t} else {\n")
+		contentBuilder.WriteString("\t\t\tl.logger.Info(\"started\")\n")
+		contentBuilder.WriteString("\t\t}\n")
+		contentBuilder.WriteString("\tcase *fxevent.LoggerInitialized:\n")
+		contentBuilder.WriteString("\t\tif e.Err != nil {\n")
+		contentBuilder.WriteString("\t\t\tl.logger.Error(\"custom logger initialization failed\", \"error\", e.Err)\n")
+		contentBuilder.WriteString("\t\t} else {\n")
+		contentBuilder.WriteString("\t\t\tl.logger.Debug(\"initialized custom fxevent.Logger\", \"function\", e.ConstructorName)\n")
+		contentBuilder.WriteString("\t\t}\n")
+		contentBuilder.WriteString("\t}\n")
+		contentBuilder.WriteString("}\n\n")
 	}
 	
 	// Generate interfaces
@@ -722,8 +583,8 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 			return "", fmt.Errorf("failed to generate interface %s: %w", iface.Name, err)
 		}
 		
-		moduleBuilder.WriteString(interfaceCode)
-		moduleBuilder.WriteString("\n\n")
+		contentBuilder.WriteString(interfaceCode)
+		contentBuilder.WriteString("\n\n")
 	}
 	
 	// Generate provider functions for each core service
@@ -738,8 +599,21 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 		}
 		
 		if provider != "" {
-			moduleBuilder.WriteString(provider)
-			moduleBuilder.WriteString("\n\n")
+			contentBuilder.WriteString(provider)
+			contentBuilder.WriteString("\n\n")
+		}
+		
+		// Generate invoke function for services with -Init flag
+		if service.HasLifecycle {
+			invokeFunc, err := GenerateInitInvokeFunction(service)
+			if err != nil {
+				return "", fmt.Errorf("failed to generate invoke function for service %s: %w", service.Name, err)
+			}
+			
+			if invokeFunc != "" {
+				contentBuilder.WriteString(invokeFunc)
+				contentBuilder.WriteString("\n\n")
+			}
 		}
 	}
 	
@@ -755,8 +629,8 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 		}
 		
 		if provider != "" {
-			moduleBuilder.WriteString(provider)
-			moduleBuilder.WriteString("\n\n")
+			contentBuilder.WriteString(provider)
+			contentBuilder.WriteString("\n\n")
 		}
 	}
 	
@@ -767,35 +641,40 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 			return "", fmt.Errorf("failed to generate interface provider %s: %w", iface.Name, err)
 		}
 		
-		moduleBuilder.WriteString(providerCode)
-		moduleBuilder.WriteString("\n\n")
+		contentBuilder.WriteString(providerCode)
+		contentBuilder.WriteString("\n\n")
 	}
 	
 	// Generate module variable
-	moduleBuilder.WriteString("// AutogenModule provides all core services in this package\n")
-	moduleBuilder.WriteString(fmt.Sprintf("var AutogenModule = fx.Module(\"%s\",\n", metadata.PackageName))
+	contentBuilder.WriteString("// AutogenModule provides all core services in this package\n")
+	contentBuilder.WriteString(fmt.Sprintf("var AutogenModule = fx.Module(\"%s\",\n", metadata.PackageName))
 	
 	// Add fx.WithLogger if there are loggers
 	if len(metadata.Loggers) > 0 {
 		// Use the first logger as the FX logger
 		firstLogger := metadata.Loggers[0]
-		moduleBuilder.WriteString(fmt.Sprintf("\tfx.WithLogger(func(logger *%s) fxevent.Logger {\n", firstLogger.StructName))
-		moduleBuilder.WriteString("\t\treturn &fxLogger{logger: logger}\n")
-		moduleBuilder.WriteString("\t}),\n")
+		contentBuilder.WriteString(fmt.Sprintf("\tfx.WithLogger(func(logger *%s) fxevent.Logger {\n", firstLogger.StructName))
+		contentBuilder.WriteString("\t\treturn &fxLogger{logger: logger}\n")
+		contentBuilder.WriteString("\t}),\n")
 	}
 	
 	for _, service := range metadata.CoreServices {
 		if service.IsManual {
 			// Reference manual module
 			if service.ModuleName != "" {
-				moduleBuilder.WriteString(fmt.Sprintf("\t%s,\n", service.ModuleName))
+				contentBuilder.WriteString(fmt.Sprintf("\t%s,\n", service.ModuleName))
 			}
 		} else if service.Mode == "Transient" {
 			// Transient services provide a factory function
-			moduleBuilder.WriteString(fmt.Sprintf("\tfx.Provide(New%sFactory),\n", service.StructName))
+			contentBuilder.WriteString(fmt.Sprintf("\tfx.Provide(New%sFactory),\n", service.StructName))
 		} else {
 			// Singleton services (default) use fx.Provide to make them available for dependency injection
-			moduleBuilder.WriteString(fmt.Sprintf("\tfx.Provide(New%s),\n", service.StructName))
+			contentBuilder.WriteString(fmt.Sprintf("\tfx.Provide(New%s),\n", service.StructName))
+			
+			// Add fx.Invoke for services with -Init flag
+			if service.HasLifecycle {
+				contentBuilder.WriteString(fmt.Sprintf("\tfx.Invoke(init%sLifecycle),\n", service.StructName))
+			}
 		}
 	}
 	
@@ -804,20 +683,47 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 		if logger.IsManual {
 			// Reference manual module
 			if logger.ModuleName != "" {
-				moduleBuilder.WriteString(fmt.Sprintf("\t%s,\n", logger.ModuleName))
+				contentBuilder.WriteString(fmt.Sprintf("\t%s,\n", logger.ModuleName))
 			}
 		} else {
 			// All loggers use fx.Provide to make them available for dependency injection
-			moduleBuilder.WriteString(fmt.Sprintf("\tfx.Provide(New%s),\n", logger.StructName))
+			contentBuilder.WriteString(fmt.Sprintf("\tfx.Provide(New%s),\n", logger.StructName))
 		}
 	}
 	
 	// Add interface providers to the module
 	for _, iface := range metadata.Interfaces {
-		moduleBuilder.WriteString(fmt.Sprintf("\tfx.Provide(New%s),\n", iface.Name))
+		contentBuilder.WriteString(fmt.Sprintf("\tfx.Provide(New%s),\n", iface.Name))
 	}
 	
-	moduleBuilder.WriteString(")\n")
+	contentBuilder.WriteString(")\n")
+	
+	// Get the generated content
+	generatedContent := contentBuilder.String()
+	
+	// Use ImportManager to detect required imports
+	requiredImports := importManager.GetRequiredImports(generatedContent)
+	
+	// Add local package imports from packagePaths
+	for packageName, packagePath := range packagePaths {
+		// Only add if the package is actually used in the generated content
+		if strings.Contains(generatedContent, packageName+".") {
+			requiredImports = append(requiredImports, Import{Path: packagePath})
+		}
+	}
+	
+	// Filter out unused imports
+	usedImports := importManager.FilterUnusedImports(requiredImports, generatedContent)
+	
+	// Generate import block
+	importBlock := importManager.GenerateImportBlock(usedImports)
+	
+	// Combine everything
+	if importBlock != "" {
+		moduleBuilder.WriteString(importBlock)
+		moduleBuilder.WriteString("\n\n")
+	}
+	moduleBuilder.WriteString(generatedContent)
 	
 	return moduleBuilder.String(), nil
 }
@@ -858,6 +764,11 @@ type ParameterData struct {
 
 // GenerateInterface generates interface code from metadata
 func GenerateInterface(iface models.InterfaceMetadata) (string, error) {
+	return GenerateInterfaceWithImportManager(iface, nil)
+}
+
+// GenerateInterfaceWithImportManager generates interface code with proper import detection
+func GenerateInterfaceWithImportManager(iface models.InterfaceMetadata, importManager *ImportManager) (string, error) {
 	// Convert methods to template data
 	var methods []MethodData
 	for _, method := range iface.Methods {
@@ -882,7 +793,16 @@ func GenerateInterface(iface models.InterfaceMetadata) (string, error) {
 		Methods:    methods,
 	}
 	
-	return executeTemplate("interface", InterfaceTemplate, data)
+	interfaceCode, err := executeTemplate("interface", InterfaceTemplate, data)
+	if err != nil {
+		return "", err
+	}
+	
+	// If ImportManager is provided, we can add import detection logic here
+	// For now, just return the interface code as the imports will be handled
+	// at the module level by the calling function
+	
+	return interfaceCode, nil
 }
 
 // LoggerProviderData represents data needed for logger provider generation

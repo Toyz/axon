@@ -17,8 +17,8 @@ import (
 	middleware "github.com/toyz/axon/examples/complete-app/internal/middleware"
 )
 
-type AuthMiddleware = middleware.AuthMiddleware
 type LoggingMiddleware = middleware.LoggingMiddleware
+type AuthMiddleware = middleware.AuthMiddleware
 
 // handleAxonResponse processes an axon.Response and applies headers, cookies, and content type
 func handleAxonResponse(c echo.Context, response *axon.Response) error {

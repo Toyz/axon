@@ -3691,3 +3691,285 @@ func ParseSlice(c echo.Context, paramValue string) ([]string, error) {
 		t.Errorf("expected return types [[]string, error], got %v", parser3.ReturnTypes)
 	}
 }
+
+func TestParser_ExtractImports(t *testing.T) {
+	p := NewParser()
+
+	tests := []struct {
+		name     string
+		source   string
+		expected []models.Import
+	}{
+		{
+			name: "single import",
+			source: `package main
+
+import "context"
+
+type Service struct{}`,
+			expected: []models.Import{
+				{Path: "context", Alias: ""},
+			},
+		},
+		{
+			name: "multiple imports",
+			source: `package main
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+)
+
+type Service struct{}`,
+			expected: []models.Import{
+				{Path: "context", Alias: ""},
+				{Path: "fmt", Alias: ""},
+				{Path: "net/http", Alias: ""},
+			},
+		},
+		{
+			name: "imports with aliases",
+			source: `package main
+
+import (
+	"context"
+	fx "go.uber.org/fx"
+	. "github.com/onsi/ginkgo"
+	_ "github.com/lib/pq"
+)
+
+type Service struct{}`,
+			expected: []models.Import{
+				{Path: "context", Alias: ""},
+				{Path: "go.uber.org/fx", Alias: "fx"},
+				{Path: "github.com/onsi/ginkgo", Alias: "."},
+				{Path: "github.com/lib/pq", Alias: "_"},
+			},
+		},
+		{
+			name: "no imports",
+			source: `package main
+
+type Service struct{}`,
+			expected: []models.Import{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Parse the source
+			file, err := parser.ParseFile(token.NewFileSet(), "test.go", tt.source, parser.ParseComments)
+			if err != nil {
+				t.Fatalf("Failed to parse source: %v", err)
+			}
+
+			// Extract imports
+			imports := p.ExtractImports(file)
+
+			// Verify results
+			if len(imports) != len(tt.expected) {
+				t.Errorf("Expected %d imports, got %d", len(tt.expected), len(imports))
+				return
+			}
+
+			for i, expected := range tt.expected {
+				if i >= len(imports) {
+					t.Errorf("Missing import at index %d", i)
+					continue
+				}
+				
+				actual := imports[i]
+				if actual.Path != expected.Path {
+					t.Errorf("Import %d: expected path %q, got %q", i, expected.Path, actual.Path)
+				}
+				if actual.Alias != expected.Alias {
+					t.Errorf("Import %d: expected alias %q, got %q", i, expected.Alias, actual.Alias)
+				}
+			}
+		})
+	}
+}
+
+func TestParser_ParseSourceWithImports(t *testing.T) {
+	p := NewParser()
+
+	source := `package controllers
+
+import (
+	"context"
+	"net/http"
+	"github.com/toyz/axon/pkg/axon"
+)
+
+//axon::controller
+type UserController struct {
+	fx.In
+	UserService UserServiceInterface
+}
+
+//axon::route GET /users/{id:int}
+func (c *UserController) GetUser(ctx context.Context, id int) (*User, error) {
+	return c.UserService.GetUser(ctx, id)
+}`
+
+	metadata, err := p.ParseSource("user_controller.go", source)
+	if err != nil {
+		t.Fatalf("Failed to parse source: %v", err)
+	}
+
+	// Verify imports were captured
+	imports, exists := metadata.SourceImports["user_controller.go"]
+	if !exists {
+		t.Fatal("Expected imports to be captured for user_controller.go")
+	}
+
+	expectedImports := []models.Import{
+		{Path: "context", Alias: ""},
+		{Path: "net/http", Alias: ""},
+		{Path: "github.com/toyz/axon/pkg/axon", Alias: ""},
+	}
+
+	if len(imports) != len(expectedImports) {
+		t.Errorf("Expected %d imports, got %d", len(expectedImports), len(imports))
+		return
+	}
+
+	for i, expected := range expectedImports {
+		actual := imports[i]
+		if actual.Path != expected.Path {
+			t.Errorf("Import %d: expected path %q, got %q", i, expected.Path, actual.Path)
+		}
+		if actual.Alias != expected.Alias {
+			t.Errorf("Import %d: expected alias %q, got %q", i, expected.Alias, actual.Alias)
+		}
+	}
+
+	// Verify other metadata is still working
+	if len(metadata.Controllers) != 1 {
+		t.Errorf("Expected 1 controller, got %d", len(metadata.Controllers))
+	}
+}
+
+func TestParser_detectModuleInfo(t *testing.T) {
+	p := NewParser()
+
+	// Create a temporary directory structure for testing
+	tempDir := t.TempDir()
+	
+	// Create a go.mod file
+	goModContent := `module github.com/test/project
+
+go 1.21
+`
+	goModPath := filepath.Join(tempDir, "go.mod")
+	if err := os.WriteFile(goModPath, []byte(goModContent), 0644); err != nil {
+		t.Fatalf("Failed to create go.mod: %v", err)
+	}
+	
+	// Create a subdirectory for the package
+	packageDir := filepath.Join(tempDir, "internal", "services")
+	if err := os.MkdirAll(packageDir, 0755); err != nil {
+		t.Fatalf("Failed to create package directory: %v", err)
+	}
+
+	// Test module detection
+	metadata := &models.PackageMetadata{
+		PackageName:   "services",
+		PackagePath:   packageDir,
+		SourceImports: make(map[string][]models.Import),
+	}
+
+	err := p.detectModuleInfo(metadata)
+	if err != nil {
+		t.Fatalf("Failed to detect module info: %v", err)
+	}
+
+	// Verify results
+	expectedModulePath := "github.com/test/project"
+	if metadata.ModulePath != expectedModulePath {
+		t.Errorf("Expected module path %q, got %q", expectedModulePath, metadata.ModulePath)
+	}
+
+	if metadata.ModuleRoot != tempDir {
+		t.Errorf("Expected module root %q, got %q", tempDir, metadata.ModuleRoot)
+	}
+
+	expectedPackageImportPath := "github.com/test/project/internal/services"
+	if metadata.PackageImportPath != expectedPackageImportPath {
+		t.Errorf("Expected package import path %q, got %q", expectedPackageImportPath, metadata.PackageImportPath)
+	}
+}
+
+func TestParser_parseGoModFile(t *testing.T) {
+	p := NewParser()
+
+	tests := []struct {
+		name        string
+		content     string
+		expected    string
+		expectError bool
+	}{
+		{
+			name: "simple module",
+			content: `module github.com/user/project
+
+go 1.21
+`,
+			expected:    "github.com/user/project",
+			expectError: false,
+		},
+		{
+			name: "module with comments",
+			content: `// This is a comment
+module github.com/example/app
+
+go 1.20
+require (
+	github.com/some/dep v1.0.0
+)
+`,
+			expected:    "github.com/example/app",
+			expectError: false,
+		},
+		{
+			name: "no module declaration",
+			content: `go 1.21
+
+require (
+	github.com/some/dep v1.0.0
+)
+`,
+			expected:    "",
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temporary file
+			tempFile := filepath.Join(t.TempDir(), "go.mod")
+			if err := os.WriteFile(tempFile, []byte(tt.content), 0644); err != nil {
+				t.Fatalf("Failed to create temp file: %v", err)
+			}
+
+			// Test parsing
+			result, err := p.parseGoModFile(tempFile)
+
+			if tt.expectError {
+				if err == nil {
+					t.Error("Expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			if result != tt.expected {
+				t.Errorf("Expected %q, got %q", tt.expected, result)
+			}
+		})
+	}
+}
