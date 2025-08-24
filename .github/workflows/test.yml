@@ -216,10 +216,10 @@ jobs:
       - name: Test session endpoints (transient services)
         run: |
           echo "Testing start session..."
-          curl -f -X POST http://localhost:8080/sessions/123
+          curl -f -X POST http://localhost:8080/sessions/1
 
           echo "Testing get session info..."
-          curl -f http://localhost:8080/sessions/info/123
+          curl -f http://localhost:8080/sessions/info/1
 
           echo "Testing compare session instances..."
           curl -f http://localhost:8080/sessions/compare
