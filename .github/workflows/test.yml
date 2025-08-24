@@ -172,10 +172,14 @@ jobs:
           curl -f http://localhost:8080/users/1
 
           echo "Testing create user (should fail without auth)..."
-          curl -X POST http://localhost:8080/users \
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8080/users \
             -H "Content-Type: application/json" \
-            -d '{"name":"Test User","email":"test@example.com"}' \
-            -w "%{http_code}" | grep -q "401"
+            -d '{"name":"Test User","email":"test@example.com"}')
+          if [ "$HTTP_CODE" != "401" ]; then
+            echo "Expected 401, got $HTTP_CODE"
+            exit 1
+          fi
+          echo "Got expected 401 status code"
 
           echo "Testing create user with auth..."
           curl -f -X POST http://localhost:8080/users \
