@@ -8,7 +8,7 @@ import (
 	"go.uber.org/fx/fxevent"
 	"log/slog"
 	"os"
-	"github.com/toyz/axon/internal/config"
+	"github.com/toyz/axon/examples/complete-app/internal/config"
 )
 
 // fxLogger adapts AppLogger to fxevent.Logger
