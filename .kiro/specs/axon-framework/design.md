@@ -125,12 +125,14 @@ type MiddlewareMetadata struct {
 - Error handling
 - Context injection
 
-**Interface**:
+**Implementation**:
+Route generation is handled by functions in the `templates` package:
 ```go
-type RouteGenerator interface {
-    GenerateHandler(route *RouteMetadata) (string, error)
-    GenerateParameterBinding(params []Parameter) (string, error)
-}
+// GenerateRouteWrapper generates a complete route wrapper function
+func GenerateRouteWrapper(route RouteMetadata, controllerName string, parserRegistry ParserRegistryInterface) (string, error)
+
+// GenerateParameterBindingCode generates parameter binding code for multiple parameters  
+func GenerateParameterBindingCode(parameters []Parameter, parserRegistry ParserRegistryInterface) (string, error)
 
 type RouteMetadata struct {
     Method      string

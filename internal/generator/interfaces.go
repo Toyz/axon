@@ -9,11 +9,8 @@ type CodeGenerator interface {
 	GetParserRegistry() ParserRegistryInterface
 }
 
-// RouteGenerator defines the interface for generating wrapper functions for HTTP route handlers
-type RouteGenerator interface {
-	GenerateHandler(route *models.RouteMetadata) (string, error)
-	GenerateParameterBinding(params []models.Parameter) (string, error)
-}
+// Note: RouteGenerator interface was removed as it was unused.
+// Route generation is now handled directly by functions in the templates package.
 
 // LifecycleManager defines the interface for handling component lifecycle for services with -Init flag
 type LifecycleManager interface {

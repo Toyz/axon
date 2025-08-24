@@ -213,34 +213,8 @@ func extractParameterTypes(axonPath string) map[string]string {
 
 
 
-// ParameterBindingData represents data needed for parameter binding template
-type ParameterBindingData struct {
-	Name           string
-	Type           string
-	Source         string
-	ConversionFunc string
-}
-
-// GenerateParameterBinding generates parameter binding code for a route parameter
-func GenerateParameterBinding(param models.Parameter) (ParameterBindingData, error) {
-	data := ParameterBindingData{
-		Name:   param.Name,
-		Type:   param.Type,
-		Source: getParameterSourceString(param.Source),
-	}
-
-	// Generate appropriate conversion function based on parameter type
-	switch param.Type {
-	case "int":
-		data.ConversionFunc = "strconv.Atoi"
-	case "string":
-		data.ConversionFunc = "func(s string) (string, error) { return s, nil }"
-	default:
-		return ParameterBindingData{}, fmt.Errorf("unsupported parameter type: %s", param.Type)
-	}
-
-	return data, nil
-}
+// Note: ParameterBindingData and GenerateParameterBinding were removed as they were unused.
+// Parameter binding is now handled directly by GenerateParameterBindingCode.
 
 // GenerateParameterBindingCode generates the complete parameter binding code for a list of parameters
 func GenerateParameterBindingCode(parameters []models.Parameter, parserRegistry ParserRegistryInterface) (string, error) {
@@ -255,64 +229,25 @@ func GenerateParameterBindingCode(parameters []models.Parameter, parserRegistry 
 				return "", fmt.Errorf("unsupported parameter type: %s", param.Type)
 			}
 			
-			// Resolve type alias if needed
-			resolvedType := parser.TypeName
-			
-			// Generate parser call based on whether it's built-in or custom
+			// Generate parser function call
+			var functionCall string
 			if parser.PackagePath == "builtin" {
-				// Built-in parsers use direct function calls
-				switch resolvedType {
-				case "int":
-					bindingCode.WriteString(fmt.Sprintf(`		%s, err := strconv.Atoi(c.Param("%s"))
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid %s: must be an integer")
-		}
-`, param.Name, param.Name, param.Name))
-				case "string":
-					bindingCode.WriteString(fmt.Sprintf(`		%s := c.Param("%s")
-`, param.Name, param.Name))
-				case "float64":
-					bindingCode.WriteString(fmt.Sprintf(`		%s, err := strconv.ParseFloat(c.Param("%s"), 64)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid %s: must be a valid number")
-		}
-`, param.Name, param.Name, param.Name))
-				case "float32":
-					bindingCode.WriteString(fmt.Sprintf(`		%sFloat64, err := strconv.ParseFloat(c.Param("%s"), 32)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid %s: must be a valid number")
-		}
-		%s := float32(%sFloat64)
-`, param.Name, param.Name, param.Name, param.Name, param.Name))
-				case "uuid.UUID":
-					bindingCode.WriteString(fmt.Sprintf(`		%s, err := axon.ParseUUID(c, c.Param("%s"))
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid %s: must be a valid UUID")
-		}
-`, param.Name, param.Name, param.Name))
-				default:
-					return "", fmt.Errorf("unsupported built-in parameter type: %s", resolvedType)
-				}
+				// Built-in parsers use axon package prefix
+				functionCall = fmt.Sprintf("axon.%s", parser.FunctionName)
+			} else if parser.PackagePath != "" {
+				// Custom parsers use package.FunctionName format
+				packageName := filepath.Base(parser.PackagePath)
+				functionCall = fmt.Sprintf("%s.%s", packageName, parser.FunctionName)
 			} else {
-				// Custom parsers use the registered parser function
-				// Generate the full function call with package prefix if needed
-				var functionCall string
-				if parser.PackagePath != "" && parser.PackagePath != "builtin" {
-					// Extract package name from package path (e.g., "/path/to/parsers" -> "parsers")
-					packageName := filepath.Base(parser.PackagePath)
-					// For custom parsers, use package.FunctionName format
-					functionCall = fmt.Sprintf("%s.%s", packageName, parser.FunctionName)
-				} else {
-					// For parsers in the same package, use direct function name
-					functionCall = parser.FunctionName
-				}
-				
-				bindingCode.WriteString(fmt.Sprintf(`		%s, err := %s(c, c.Param("%s"))
+				// For parsers in the same package, use direct function name
+				functionCall = parser.FunctionName
+			}
+			
+			bindingCode.WriteString(fmt.Sprintf(`		%s, err := %s(c, c.Param("%s"))
 		if err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid %s: %%v", err))
 		}
 `, param.Name, functionCall, param.Name, param.Name))
-			}
 		case models.ParameterSourceContext:
 			// Context parameters don't need binding code - they're passed directly
 			// The context is already available as 'c' in the wrapper function

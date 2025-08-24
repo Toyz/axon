@@ -198,7 +198,7 @@ func TestGenerateRouteWrapper(t *testing.T) {
 			controllerName: "UserController",
 			shouldContain: []string{
 				"func wrapUserControllerGetUser(handler *UserController) echo.HandlerFunc",
-				"id, err := strconv.Atoi(c.Param(\"id\"))",
+				"id, err := axon.ParseInt(c, c.Param(\"id\"))",
 				"var data interface{}",
 				"data, err = handler.GetUser(id)",
 				"return c.JSON(http.StatusOK, data)",

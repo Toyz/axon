@@ -99,9 +99,9 @@ func NewProductController(databaseService *services.DatabaseService) *ProductCon
 
 func wrapSessionControllerStartSession(handler *SessionController, loggingmiddleware *LoggingMiddleware) echo.HandlerFunc {
 	baseHandler := func(c echo.Context) error {
-		userID, err := strconv.Atoi(c.Param("userID"))
+		userID, err := axon.ParseInt(c, c.Param("userID"))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid userID: must be an integer")
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid userID: %v", err))
 		}
 
 		var response *axon.Response
@@ -124,9 +124,9 @@ func wrapSessionControllerStartSession(handler *SessionController, loggingmiddle
 
 func wrapSessionControllerGetSessionInfo(handler *SessionController, loggingmiddleware *LoggingMiddleware) echo.HandlerFunc {
 	baseHandler := func(c echo.Context) error {
-		userID, err := strconv.Atoi(c.Param("userID"))
+		userID, err := axon.ParseInt(c, c.Param("userID"))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid userID: must be an integer")
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid userID: %v", err))
 		}
 
 		var data interface{}
@@ -168,9 +168,9 @@ func wrapUserControllerGetAllUsers(handler *UserController) echo.HandlerFunc {
 
 func wrapUserControllerGetUser(handler *UserController) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		id, err := strconv.Atoi(c.Param("id"))
+		id, err := axon.ParseInt(c, c.Param("id"))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id: must be an integer")
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid id: %v", err))
 		}
 
 		var data interface{}
@@ -208,9 +208,9 @@ func wrapUserControllerCreateUser(handler *UserController, authmiddleware *AuthM
 
 func wrapUserControllerUpdateUser(handler *UserController, authmiddleware *AuthMiddleware) echo.HandlerFunc {
 	baseHandler := func(c echo.Context) error {
-		id, err := strconv.Atoi(c.Param("id"))
+		id, err := axon.ParseInt(c, c.Param("id"))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id: must be an integer")
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid id: %v", err))
 		}
 		var body models.UpdateUserRequest
 		if err := c.Bind(&body); err != nil {
@@ -237,9 +237,9 @@ func wrapUserControllerUpdateUser(handler *UserController, authmiddleware *AuthM
 
 func wrapUserControllerDeleteUser(handler *UserController, authmiddleware *AuthMiddleware) echo.HandlerFunc {
 	baseHandler := func(c echo.Context) error {
-		id, err := strconv.Atoi(c.Param("id"))
+		id, err := axon.ParseInt(c, c.Param("id"))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id: must be an integer")
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid id: %v", err))
 		}
 
 		err = handler.DeleteUser(c, id)
@@ -282,7 +282,7 @@ func wrapProductControllerGetProduct(handler *ProductController) echo.HandlerFun
 	return func(c echo.Context) error {
 		id, err := axon.ParseUUID(c, c.Param("id"))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id: must be a valid UUID")
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid id: %v", err))
 		}
 
 		var data interface{}
@@ -343,7 +343,7 @@ func wrapProductControllerCreateProductInCategory(handler *ProductController, au
 	baseHandler := func(c echo.Context) error {
 		categoryId, err := axon.ParseUUID(c, c.Param("categoryId"))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid categoryId: must be a valid UUID")
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid categoryId: %v", err))
 		}
 		var body models.CreateProductRequest
 		if err := c.Bind(&body); err != nil {
@@ -369,7 +369,7 @@ func wrapProductControllerUpdateProduct(handler *ProductController) echo.Handler
 	return func(c echo.Context) error {
 		id, err := axon.ParseUUID(c, c.Param("id"))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id: must be a valid UUID")
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid id: %v", err))
 		}
 		var body models.UpdateProductRequest
 		if err := c.Bind(&body); err != nil {
@@ -389,7 +389,7 @@ func wrapProductControllerDeleteProduct(handler *ProductController) echo.Handler
 	return func(c echo.Context) error {
 		id, err := axon.ParseUUID(c, c.Param("id"))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id: must be a valid UUID")
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid id: %v", err))
 		}
 
 		err = handler.DeleteProduct(id)

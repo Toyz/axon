@@ -5,7 +5,7 @@ package interfaces
 
 import (
 	"go.uber.org/fx"
-	"github.com/toyz/axon/examples/complete-app/internal/models"
+	"github.com/toyz/axon/internal/models"
 )
 
 func NewUserRepository() *UserRepository {

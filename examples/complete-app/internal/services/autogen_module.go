@@ -6,7 +6,7 @@ package services
 import (
 	"context"
 	"go.uber.org/fx"
-	"github.com/toyz/axon/examples/complete-app/internal/config"
+	"github.com/toyz/axon/internal/config"
 )
 
 func NewDatabaseService(lc fx.Lifecycle, Config *config.Config) *DatabaseService {

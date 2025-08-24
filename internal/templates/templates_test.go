@@ -13,91 +13,7 @@ func createTestParserRegistry() ParserRegistryInterface {
 	return registry.NewParserRegistry()
 }
 
-func TestGenerateParameterBinding(t *testing.T) {
-	tests := []struct {
-		name        string
-		param       models.Parameter
-		expected    ParameterBindingData
-		expectError bool
-	}{
-		{
-			name: "int parameter",
-			param: models.Parameter{
-				Name:     "id",
-				Type:     "int",
-				Source:   models.ParameterSourcePath,
-				Required: true,
-			},
-			expected: ParameterBindingData{
-				Name:           "id",
-				Type:           "int",
-				Source:         "path",
-				ConversionFunc: "strconv.Atoi",
-			},
-			expectError: false,
-		},
-		{
-			name: "string parameter",
-			param: models.Parameter{
-				Name:     "name",
-				Type:     "string",
-				Source:   models.ParameterSourcePath,
-				Required: true,
-			},
-			expected: ParameterBindingData{
-				Name:           "name",
-				Type:           "string",
-				Source:         "path",
-				ConversionFunc: "func(s string) (string, error) { return s, nil }",
-			},
-			expectError: false,
-		},
-		{
-			name: "unsupported parameter type",
-			param: models.Parameter{
-				Name:     "value",
-				Type:     "float64",
-				Source:   models.ParameterSourcePath,
-				Required: true,
-			},
-			expectError: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := GenerateParameterBinding(tt.param)
-
-			if tt.expectError {
-				if err == nil {
-					t.Errorf("expected error but got none")
-				}
-				return
-			}
-
-			if err != nil {
-				t.Errorf("unexpected error: %v", err)
-				return
-			}
-
-			if result.Name != tt.expected.Name {
-				t.Errorf("expected name %s, got %s", tt.expected.Name, result.Name)
-			}
-
-			if result.Type != tt.expected.Type {
-				t.Errorf("expected type %s, got %s", tt.expected.Type, result.Type)
-			}
-
-			if result.Source != tt.expected.Source {
-				t.Errorf("expected source %s, got %s", tt.expected.Source, result.Source)
-			}
-
-			if result.ConversionFunc != tt.expected.ConversionFunc {
-				t.Errorf("expected conversion func %s, got %s", tt.expected.ConversionFunc, result.ConversionFunc)
-			}
-		})
-	}
-}
+// Note: TestGenerateParameterBinding was removed as the function was unused dead code.
 
 func TestGenerateParameterBindingCode(t *testing.T) {
 	tests := []struct {
@@ -115,9 +31,9 @@ func TestGenerateParameterBindingCode(t *testing.T) {
 					Required: true,
 				},
 			},
-			expected: `		id, err := strconv.Atoi(c.Param("id"))
+			expected: `		id, err := axon.ParseInt(c, c.Param("id"))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id: must be an integer")
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid id: %v", err))
 		}
 `,
 		},
@@ -131,7 +47,10 @@ func TestGenerateParameterBindingCode(t *testing.T) {
 					Required: true,
 				},
 			},
-			expected: `		name := c.Param("name")
+			expected: `		name, err := axon.ParseString(c, c.Param("name"))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid name: %v", err))
+		}
 `,
 		},
 		{
@@ -150,11 +69,14 @@ func TestGenerateParameterBindingCode(t *testing.T) {
 					Required: true,
 				},
 			},
-			expected: `		id, err := strconv.Atoi(c.Param("id"))
+			expected: `		id, err := axon.ParseInt(c, c.Param("id"))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id: must be an integer")
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid id: %v", err))
 		}
-		slug := c.Param("slug")
+		slug, err := axon.ParseString(c, c.Param("slug"))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid slug: %v", err))
+		}
 `,
 		},
 		{
@@ -178,9 +100,9 @@ func TestGenerateParameterBindingCode(t *testing.T) {
 					Required: true,
 				},
 			},
-			expected: `		id, err := strconv.Atoi(c.Param("id"))
+			expected: `		id, err := axon.ParseInt(c, c.Param("id"))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id: must be an integer")
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid id: %v", err))
 		}
 `,
 		},
@@ -868,11 +790,14 @@ func TestGenerateParameterBindingCode_WithContextParameters(t *testing.T) {
 					Required: true,
 				},
 			},
-			expected: `		id, err := strconv.Atoi(c.Param("id"))
+			expected: `		id, err := axon.ParseInt(c, c.Param("id"))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id: must be an integer")
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid id: %v", err))
 		}
-		slug := c.Param("slug")
+		slug, err := axon.ParseString(c, c.Param("slug"))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid slug: %v", err))
+		}
 `,
 			expectError: false,
 		},
@@ -907,9 +832,9 @@ func TestGenerateParameterBindingCode_WithContextParameters(t *testing.T) {
 					Required: true,
 				},
 			},
-			expected: `		id, err := strconv.Atoi(c.Param("id"))
+			expected: `		id, err := axon.ParseInt(c, c.Param("id"))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id: must be an integer")
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid id: %v", err))
 		}
 `,
 			expectError: false,
