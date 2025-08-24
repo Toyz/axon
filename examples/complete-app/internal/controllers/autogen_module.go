@@ -15,7 +15,11 @@ import (
 
 	"github.com/toyz/axon/examples/complete-app/internal/services"
 	"github.com/toyz/axon/examples/complete-app/internal/models"
+	middleware "github.com/toyz/axon/examples/complete-app/internal/middleware"
 )
+
+type LoggingMiddleware = middleware.LoggingMiddleware
+type AuthMiddleware = middleware.AuthMiddleware
 
 func NewHealthController(databaseService *services.DatabaseService) *HealthController {
 	return &HealthController{
@@ -73,8 +77,8 @@ func wrapProductControllerGetProduct(handler *ProductController) echo.HandlerFun
 	}
 }
 
-func wrapProductControllerGetProductByCode(handler *ProductController) echo.HandlerFunc {
-	return func(c echo.Context) error {
+func wrapProductControllerGetProductByCode(handler *ProductController, loggingmiddleware *LoggingMiddleware) echo.HandlerFunc {
+	baseHandler := func(c echo.Context) error {
 		code, err := parsers.ParseProductCode(c, c.Param("code"))
 		if err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid code: %v", err))
@@ -87,10 +91,16 @@ func wrapProductControllerGetProductByCode(handler *ProductController) echo.Hand
 		}
 		return c.JSON(http.StatusOK, data)
 	}
+
+	// Apply middlewares in order
+	finalHandler := baseHandler
+	finalHandler = loggingmiddleware.Handle(finalHandler)
+
+	return finalHandler
 }
 
-func wrapProductControllerGetProductSales(handler *ProductController) echo.HandlerFunc {
-	return func(c echo.Context) error {
+func wrapProductControllerGetProductSales(handler *ProductController, authmiddleware *AuthMiddleware, loggingmiddleware *LoggingMiddleware) echo.HandlerFunc {
+	baseHandler := func(c echo.Context) error {
 		dateRange, err := parsers.ParseDateRange(c, c.Param("dateRange"))
 		if err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid dateRange: %v", err))
@@ -103,10 +113,17 @@ func wrapProductControllerGetProductSales(handler *ProductController) echo.Handl
 		}
 		return c.JSON(http.StatusOK, data)
 	}
+
+	// Apply middlewares in order
+	finalHandler := baseHandler
+	finalHandler = loggingmiddleware.Handle(finalHandler)
+	finalHandler = authmiddleware.Handle(finalHandler)
+
+	return finalHandler
 }
 
-func wrapProductControllerCreateProductInCategory(handler *ProductController) echo.HandlerFunc {
-	return func(c echo.Context) error {
+func wrapProductControllerCreateProductInCategory(handler *ProductController, authmiddleware *AuthMiddleware) echo.HandlerFunc {
+	baseHandler := func(c echo.Context) error {
 		categoryId, err := axon.ParseUUID(c, c.Param("categoryId"))
 		if err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "Invalid categoryId: must be a valid UUID")
@@ -117,12 +134,18 @@ func wrapProductControllerCreateProductInCategory(handler *ProductController) ec
 		}
 
 		var data interface{}
-		data, err = handler.CreateProductInCategory(categoryId, body)
+		data, err = handler.CreateProductInCategory(c, categoryId, body)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 		}
 		return c.JSON(http.StatusOK, data)
 	}
+
+	// Apply middlewares in order
+	finalHandler := baseHandler
+	finalHandler = authmiddleware.Handle(finalHandler)
+
+	return finalHandler
 }
 
 func wrapProductControllerUpdateProduct(handler *ProductController) echo.HandlerFunc {
@@ -244,7 +267,7 @@ func wrapUserControllerDeleteUser(handler *UserController) echo.HandlerFunc {
 }
 
 // RegisterRoutes registers all HTTP routes with the Echo instance
-func RegisterRoutes(e *echo.Echo, healthcontroller *HealthController, productcontroller *ProductController, usercontroller *UserController) {
+func RegisterRoutes(e *echo.Echo, healthcontroller *HealthController, productcontroller *ProductController, usercontroller *UserController, loggingmiddleware *LoggingMiddleware, authmiddleware *AuthMiddleware) {
 	handler_healthcontrollergethealth := wrapHealthControllerGetHealth(healthcontroller)
 	e.GET("/health", handler_healthcontrollergethealth)
 	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
@@ -287,7 +310,7 @@ func RegisterRoutes(e *echo.Echo, healthcontroller *HealthController, productcon
 		ParameterTypes:      map[string]string{"id": "uuid.UUID"},
 		Handler:             handler_productcontrollergetproduct,
 	})
-	handler_productcontrollergetproductbycode := wrapProductControllerGetProductByCode(productcontroller)
+	handler_productcontrollergetproductbycode := wrapProductControllerGetProductByCode(productcontroller, loggingmiddleware)
 	e.GET("/products/by-code/:code", handler_productcontrollergetproductbycode)
 	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
 		Method:              "GET",
@@ -296,12 +319,16 @@ func RegisterRoutes(e *echo.Echo, healthcontroller *HealthController, productcon
 		HandlerName:         "GetProductByCode",
 		ControllerName:      "ProductController",
 		PackageName:         "controllers",
-		Middlewares:         []string{},
-		MiddlewareInstances: []axon.MiddlewareInstance{},
+		Middlewares:         []string{"LoggingMiddleware"},
+		MiddlewareInstances: []axon.MiddlewareInstance{{
+			Name:     "LoggingMiddleware",
+			Handler:  loggingmiddleware.Handle,
+			Instance: loggingmiddleware,
+		}},
 		ParameterTypes:      map[string]string{"code": "ProductCode"},
 		Handler:             handler_productcontrollergetproductbycode,
 	})
-	handler_productcontrollergetproductsales := wrapProductControllerGetProductSales(productcontroller)
+	handler_productcontrollergetproductsales := wrapProductControllerGetProductSales(productcontroller, authmiddleware, loggingmiddleware)
 	e.GET("/products/sales/:dateRange", handler_productcontrollergetproductsales)
 	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
 		Method:              "GET",
@@ -310,12 +337,20 @@ func RegisterRoutes(e *echo.Echo, healthcontroller *HealthController, productcon
 		HandlerName:         "GetProductSales",
 		ControllerName:      "ProductController",
 		PackageName:         "controllers",
-		Middlewares:         []string{},
-		MiddlewareInstances: []axon.MiddlewareInstance{},
+		Middlewares:         []string{"AuthMiddleware", "LoggingMiddleware"},
+		MiddlewareInstances: []axon.MiddlewareInstance{{
+			Name:     "AuthMiddleware",
+			Handler:  authmiddleware.Handle,
+			Instance: authmiddleware,
+		}, {
+			Name:     "LoggingMiddleware",
+			Handler:  loggingmiddleware.Handle,
+			Instance: loggingmiddleware,
+		}},
 		ParameterTypes:      map[string]string{"dateRange": "DateRange"},
 		Handler:             handler_productcontrollergetproductsales,
 	})
-	handler_productcontrollercreateproductincategory := wrapProductControllerCreateProductInCategory(productcontroller)
+	handler_productcontrollercreateproductincategory := wrapProductControllerCreateProductInCategory(productcontroller, authmiddleware)
 	e.POST("/products/:categoryId/items", handler_productcontrollercreateproductincategory)
 	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
 		Method:              "POST",
@@ -324,8 +359,12 @@ func RegisterRoutes(e *echo.Echo, healthcontroller *HealthController, productcon
 		HandlerName:         "CreateProductInCategory",
 		ControllerName:      "ProductController",
 		PackageName:         "controllers",
-		Middlewares:         []string{},
-		MiddlewareInstances: []axon.MiddlewareInstance{},
+		Middlewares:         []string{"AuthMiddleware"},
+		MiddlewareInstances: []axon.MiddlewareInstance{{
+			Name:     "AuthMiddleware",
+			Handler:  authmiddleware.Handle,
+			Instance: authmiddleware,
+		}},
 		ParameterTypes:      map[string]string{"categoryId": "uuid.UUID"},
 		Handler:             handler_productcontrollercreateproductincategory,
 	})

@@ -17,9 +17,10 @@ type Generator struct {
 	moduleResolver *ModuleResolver
 	parser         parser.AnnotationParser
 	codeGenerator  generator.CodeGenerator
-	globalParsers  map[string]models.RouteParserMetadata // Global parser registry for cross-package discovery
-	reporter       *DiagnosticReporter
-	summary        GenerationSummary
+	globalParsers     map[string]models.RouteParserMetadata // Global parser registry for cross-package discovery
+	globalMiddleware  map[string]models.MiddlewareMetadata  // Global middleware registry for cross-package discovery
+	reporter          *DiagnosticReporter
+	summary           GenerationSummary
 }
 
 // NewGenerator creates a new CLI generator
@@ -30,9 +31,10 @@ func NewGenerator(verbose bool) *Generator {
 		moduleResolver: moduleResolver,
 		parser:         parser.NewParser(),
 		codeGenerator:  generator.NewGeneratorWithResolver(moduleResolver),
-		globalParsers:  make(map[string]models.RouteParserMetadata),
-		reporter:       NewDiagnosticReporter(verbose),
-		summary:        GenerationSummary{GeneratedFiles: make([]string, 0)},
+		globalParsers:    make(map[string]models.RouteParserMetadata),
+		globalMiddleware: make(map[string]models.MiddlewareMetadata),
+		reporter:         NewDiagnosticReporter(verbose),
+		summary:          GenerationSummary{GeneratedFiles: make([]string, 0)},
 	}
 }
 
@@ -131,8 +133,9 @@ func (g *Generator) Run(config Config) error {
 		fmt.Printf("Phase 1: Parser discovery (validation disabled)\n")
 	}
 	
-	// Skip parser validation during discovery phase
+	// Skip parser and middleware validation during discovery phase
 	g.parser.SetSkipParserValidation(true)
+	g.parser.SetSkipMiddlewareValidation(true)
 	
 	var allPackageMetadata []*models.PackageMetadata
 	for i, packageDir := range packageDirs {
@@ -185,10 +188,17 @@ func (g *Generator) Run(config Config) error {
 		if err != nil {
 			return err // This already returns a GeneratorError
 		}
+		
+		// Collect middleware from this package
+		err = g.collectMiddlewareFromPackage(metadata, moduleName, packageDir)
+		if err != nil {
+			return err // This already returns a GeneratorError
+		}
 	}
 	
-	// Re-enable parser validation for second pass
+	// Re-enable parser and middleware validation for second pass
 	g.parser.SetSkipParserValidation(false)
+	g.parser.SetSkipMiddlewareValidation(false)
 
 	// Build global parser registry and register with code generator
 	err = g.buildGlobalParserRegistry()
@@ -198,6 +208,9 @@ func (g *Generator) Run(config Config) error {
 
 	fmt.Printf("Discovered %d parsers across all packages\n", len(g.globalParsers))
 	g.summary.ParsersDiscovered = len(g.globalParsers)
+	
+	fmt.Printf("Discovered %d middleware across all packages\n", len(g.globalMiddleware))
+	g.summary.MiddlewaresFound = len(g.globalMiddleware)
 
 	// Validate custom parsers across all packages using global registry
 	fmt.Printf("Validating custom parsers across all packages...\n")
@@ -225,6 +238,19 @@ func (g *Generator) Run(config Config) error {
 					"package_path": metadata.PackagePath,
 				},
 			}
+		}
+	}
+
+	// Validate middleware references across all packages using global registry
+	fmt.Printf("Validating middleware references across all packages...\n")
+	
+	if config.Verbose {
+		fmt.Printf("Phase 2.5: Middleware validation\n")
+	}
+	for _, metadata := range allPackageMetadata {
+		err = g.validateMiddlewareReferences(metadata)
+		if err != nil {
+			return err // This already returns a GeneratorError
 		}
 	}
 
@@ -413,6 +439,74 @@ func (g *Generator) collectParsersFromPackage(metadata *models.PackageMetadata, 
 	}
 
 	return nil
+}
+
+// collectMiddlewareFromPackage collects all middleware from a package and adds them to the global registry
+func (g *Generator) collectMiddlewareFromPackage(metadata *models.PackageMetadata, moduleName, packageDir string) error {
+	for _, middleware := range metadata.Middlewares {
+		// Check for conflicts
+		if existing, exists := g.globalMiddleware[middleware.Name]; exists {
+			return &models.GeneratorError{
+				Type:    models.ErrorTypeValidation,
+				Message: fmt.Sprintf("Middleware name conflict: '%s' is defined in multiple packages", middleware.Name),
+				Suggestions: []string{
+					"Rename one of the conflicting middleware classes",
+					"Ensure middleware names are unique across packages",
+				},
+				Context: map[string]interface{}{
+					"middleware_name":     middleware.Name,
+					"existing_package":    existing.PackagePath,
+					"conflicting_package": packageDir,
+				},
+			}
+		}
+
+		// Create enhanced middleware metadata with package path
+		enhancedMiddleware := middleware
+		enhancedMiddleware.PackagePath = packageDir
+
+		// Add to global registry
+		g.globalMiddleware[middleware.Name] = enhancedMiddleware
+		fmt.Printf("  Discovered middleware: %s (%s)\n", middleware.Name, packageDir)
+	}
+
+	return nil
+}
+
+// validateMiddlewareReferences validates that all middleware references in routes exist in the global registry
+func (g *Generator) validateMiddlewareReferences(metadata *models.PackageMetadata) error {
+	for _, controller := range metadata.Controllers {
+		for _, route := range controller.Routes {
+			for _, middlewareName := range route.Middlewares {
+				if _, exists := g.globalMiddleware[middlewareName]; !exists {
+					return &models.GeneratorError{
+						Type:    models.ErrorTypeValidation,
+						Message: fmt.Sprintf("Route %s.%s references unknown middleware: %s", controller.Name, route.HandlerName, middlewareName),
+						Suggestions: []string{
+							fmt.Sprintf("Check that middleware '%s' is defined with //axon::middleware annotation", middlewareName),
+							"Ensure the middleware package is included in the scan directories",
+							"Verify the middleware name matches exactly (case-sensitive)",
+						},
+						Context: map[string]interface{}{
+							"route":           fmt.Sprintf("%s.%s", controller.Name, route.HandlerName),
+							"middleware_name": middlewareName,
+							"available_middleware": g.getAvailableMiddlewareNames(),
+						},
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// getAvailableMiddlewareNames returns a list of available middleware names for error reporting
+func (g *Generator) getAvailableMiddlewareNames() []string {
+	var names []string
+	for name := range g.globalMiddleware {
+		names = append(names, name)
+	}
+	return names
 }
 
 // buildGlobalParserRegistry builds the global parser registry and registers it with the code generator

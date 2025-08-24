@@ -16,7 +16,8 @@ import (
 type Parser struct {
 	fileSet            *token.FileSet
 	middlewareRegistry registry.MiddlewareRegistry
-	skipParserValidation bool // Skip custom parser validation during discovery phase
+	skipParserValidation     bool // Skip custom parser validation during discovery phase
+	skipMiddlewareValidation bool // Skip middleware validation during discovery phase
 }
 
 // NewParser creates a new annotation parser
@@ -432,10 +433,12 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 					middlewareNames[i] = strings.TrimSpace(name)
 				}
 				
-				// Validate that all middleware names exist in the registry
-				err := p.middlewareRegistry.Validate(middlewareNames)
-				if err != nil {
-					return fmt.Errorf("route %s has invalid middleware reference: %w", annotation.Target, err)
+				// Validate that all middleware names exist in the registry (skip during discovery phase)
+				if !p.skipMiddlewareValidation {
+					err := p.middlewareRegistry.Validate(middlewareNames)
+					if err != nil {
+						return fmt.Errorf("route %s has invalid middleware reference: %w", annotation.Target, err)
+					}
 				}
 				
 				route.Middlewares = middlewareNames
@@ -1072,6 +1075,11 @@ func (p *Parser) validateAndLinkCustomParsers(metadata *models.PackageMetadata) 
 // SetSkipParserValidation controls whether custom parser validation is skipped
 func (p *Parser) SetSkipParserValidation(skip bool) {
 	p.skipParserValidation = skip
+}
+
+// SetSkipMiddlewareValidation controls whether middleware validation is skipped
+func (p *Parser) SetSkipMiddlewareValidation(skip bool) {
+	p.skipMiddlewareValidation = skip
 }
 
 // ValidateCustomParsersWithRegistry validates custom parsers using an external parser registry

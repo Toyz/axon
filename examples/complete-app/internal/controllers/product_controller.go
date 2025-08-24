@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/labstack/echo/v4"
 	"github.com/toyz/axon/examples/complete-app/internal/models"
 	"github.com/toyz/axon/examples/complete-app/internal/parsers"
 	"github.com/toyz/axon/examples/complete-app/internal/services"
@@ -28,8 +29,8 @@ func (c *ProductController) GetProduct(id uuid.UUID) (*models.Product, error) {
 	return product, nil
 }
 
-// Using custom ProductCode parser (this will use our custom parser)
-//axon::route GET /products/by-code/{code:ProductCode}
+// Using custom ProductCode parser with middleware
+//axon::route GET /products/by-code/{code:ProductCode} -Middleware=LoggingMiddleware
 func (c *ProductController) GetProductByCode(code parsers.ProductCode) (*models.Product, error) {
 	// Mock implementation showing custom parser usage
 	product := &models.Product{
@@ -41,8 +42,8 @@ func (c *ProductController) GetProductByCode(code parsers.ProductCode) (*models.
 	return product, nil
 }
 
-// Using custom DateRange parser (this will use our custom parser)
-//axon::route GET /products/sales/{dateRange:DateRange}
+// Using custom DateRange parser with multiple middleware
+//axon::route GET /products/sales/{dateRange:DateRange} -Middleware=AuthMiddleware,LoggingMiddleware
 func (c *ProductController) GetProductSales(dateRange parsers.DateRange) ([]models.Product, error) {
 	// Mock implementation showing custom date range parser
 	products := []models.Product{
@@ -56,8 +57,9 @@ func (c *ProductController) GetProductSales(dateRange parsers.DateRange) ([]mode
 	return products, nil
 }
 
-//axon::route POST /products/{categoryId:UUID}/items
-func (c *ProductController) CreateProductInCategory(categoryId uuid.UUID, req models.CreateProductRequest) (*models.Product, error) {
+// Mixed parameter types with auth middleware and PassContext
+//axon::route POST /products/{categoryId:UUID}/items -Middleware=AuthMiddleware -PassContext
+func (c *ProductController) CreateProductInCategory(ctx echo.Context, categoryId uuid.UUID, req models.CreateProductRequest) (*models.Product, error) {
 	// Mock implementation showing built-in UUID parser
 	product := &models.Product{
 		ID:          uuid.New(),
