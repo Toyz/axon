@@ -14,6 +14,7 @@ type CoreServiceMetadata struct {
 	HasLifecycle bool         // whether service has lifecycle methods
 	HasStart     bool         // whether service has Start(context.Context) error method
 	HasStop      bool         // whether service has Stop(context.Context) error method
+	StartMode    string       // lifecycle start mode: "Same" (default) or "Background"
 	IsManual     bool         // whether service uses manual module
 	ModuleName   string       // name of manual module (if applicable)
 	Mode         string       // lifecycle mode: "Singleton" (default) or "Transient"

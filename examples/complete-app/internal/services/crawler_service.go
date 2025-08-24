@@ -1,17 +1,27 @@
 package services
 
-import "context"
+import (
+	"fmt"
+	"time"
+	"context"
+)
 
-// axon::core
+// axon::core -Init=Background
 // axon::interface
 type CrawlerService struct {
 	// Add any dependencies or configurations needed for the service
 }
 
 func (s *CrawlerService) Start(ctx context.Context) error {
-	go func() {
-		select {}
-	}()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+			fmt.Println("Crawling...")
+			time.Sleep(1 * time.Second)
+		}
+	}
 	return nil
 }
 

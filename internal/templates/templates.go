@@ -163,6 +163,7 @@ type CoreServiceProviderData struct {
 	InjectedDeps  []DependencyData // Only injected dependencies (for function parameters)
 	HasStart      bool
 	HasStop       bool
+	StartMode     string           // lifecycle start mode: "Same" (default) or "Background"
 }
 
 // DependencyData represents a dependency for template generation
@@ -463,6 +464,7 @@ func GenerateInitInvokeFunction(service models.CoreServiceMetadata) (string, err
 		StructName: service.StructName,
 		HasStart:   service.HasStart,
 		HasStop:    service.HasStop,
+		StartMode:  service.StartMode,
 	}
 
 	return executeTemplate("init-invoke", InitInvokeTemplate, data)

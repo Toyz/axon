@@ -84,8 +84,15 @@ func New{{.StructName}}Factory({{range $i, $dep := .InjectedDeps}}{{if $i}}, {{e
 	InitInvokeTemplate = `func init{{.StructName}}Lifecycle(lc fx.Lifecycle, service *{{.StructName}}) {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			return service.Start(ctx)
-		},{{if .HasStop}}
+{{if eq .StartMode "Background"}}			go func() {
+				if err := service.Start(ctx); err != nil {
+					// Log error or handle as needed
+					// Note: Background start errors cannot be returned to FX
+				}
+			}()
+			return nil
+{{else}}			return service.Start(ctx)
+{{end}}		},{{if .HasStop}}
 		OnStop: func(ctx context.Context) error {
 			return service.Stop(ctx)
 		},{{end}}

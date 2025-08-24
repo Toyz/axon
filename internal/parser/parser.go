@@ -378,6 +378,7 @@ func (p *Parser) parseAnnotationComment(comment, target string, pos token.Pos) (
 	// Remove axon:: prefix
 	text = strings.TrimPrefix(text, AnnotationPrefix)
 	parts := strings.Fields(text)
+	fmt.Printf("[DEBUG] Parsing annotation for %s: text='%s', parts=%v\n", target, text, parts)
 	if len(parts) == 0 {
 		return models.Annotation{}, fmt.Errorf("empty annotation")
 	}
@@ -399,12 +400,15 @@ func (p *Parser) parseAnnotationComment(comment, target string, pos token.Pos) (
 	// Parse remaining parts as parameters and flags
 	for i := 1; i < len(parts); i++ {
 		part := parts[i]
+		fmt.Printf("[DEBUG] Processing annotation part for %s: '%s'\n", target, part)
 		if strings.HasPrefix(part, "-") {
 			// It's a flag
 			if strings.Contains(part, "=") {
 				// Flag with value like -Manual=ModuleName
 				flagParts := strings.SplitN(part, "=", 2)
-				annotation.Parameters[flagParts[0]] = flagParts[1]
+				// Remove the leading dash from the parameter key
+				paramKey := strings.TrimPrefix(flagParts[0], "-")
+				annotation.Parameters[paramKey] = flagParts[1]
 			} else {
 				// Simple flag like -Init
 				annotation.Flags = append(annotation.Flags, part)
@@ -635,10 +639,13 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				Dependencies: annotation.Dependencies,
 			}
 			
-			// Check for lifecycle flag
+			// Check for lifecycle flag or parameter
 			for _, flag := range annotation.Flags {
 				if flag == FlagInit {
 					service.HasLifecycle = true
+					// Default start mode is "Same" (synchronous)
+					service.StartMode = "Same"
+					
 					// Detect Start and Stop methods when lifecycle is enabled
 					file := fileMap[annotation.FileName]
 					if file != nil {
@@ -660,6 +667,43 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				}
 			}
 			
+			// Check for Init parameter (e.g., -Init=Background)
+			if initMode, exists := annotation.Parameters["Init"]; exists {
+				service.HasLifecycle = true
+				
+				// Debug output
+				fmt.Printf("[DEBUG] Service %s has -Init=%s, setting HasLifecycle=true\n", annotation.Target, initMode)
+				
+				// Validate init mode
+				if initMode == "Background" || initMode == "Same" || initMode == "" {
+					if initMode == "" {
+						service.StartMode = "Same" // Default when just -Init is used
+					} else {
+						service.StartMode = initMode
+					}
+					fmt.Printf("[DEBUG] Service %s StartMode set to: %s\n", annotation.Target, service.StartMode)
+				} else {
+					return fmt.Errorf("service %s has invalid -Init value '%s': must be 'Background' or 'Same'", annotation.Target, initMode)
+				}
+				
+				// Detect Start and Stop methods when lifecycle is enabled
+				file := fileMap[annotation.FileName]
+				if file != nil {
+					hasStart, hasStop := p.extractLifecycleMethods(file, annotation.Target)
+					service.HasStart = hasStart
+					service.HasStop = hasStop
+					
+					// Validate that Start method exists when -Init parameter is used
+					if !hasStart {
+						return fmt.Errorf("service %s has -Init parameter but missing Start(context.Context) error method", annotation.Target)
+					}
+				} else {
+					// If file is not available (e.g., in unit tests), skip method detection
+					service.HasStart = true  // Assume valid for unit tests
+					service.HasStop = false  // Default to no Stop method
+				}
+			}
+			
 			// Check for manual flags
 			if manualModule, exists := annotation.Parameters[FlagManual]; exists {
 				service.IsManual = true
@@ -676,7 +720,7 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 			
 			// Check for mode flag (default to Singleton)
 			service.Mode = LifecycleModeSingleton // Default mode
-			if modeFlag, exists := annotation.Parameters[FlagMode]; exists {
+			if modeFlag, exists := annotation.Parameters["Mode"]; exists {
 				if modeFlag == LifecycleModeTransient || modeFlag == LifecycleModeSingleton {
 					service.Mode = modeFlag
 				} else {

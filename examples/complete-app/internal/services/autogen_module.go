@@ -17,10 +17,44 @@ type CrawlerServiceInterface interface {
 	Stop(ctx context.Context) (error)
 }
 
+func NewUserService(Config *config.Config) *UserService {
+	return &UserService{
+		Config: Config,
+	}
+}
+
+func initUserServiceLifecycle(lc fx.Lifecycle, service *UserService) {
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			return service.Start(ctx)
+		},
+		OnStop: func(ctx context.Context) error {
+			return service.Stop(ctx)
+		},
+	})
+}
+
 func NewCrawlerService() *CrawlerService {
 	return &CrawlerService{
-		
+
 	}
+}
+
+func initCrawlerServiceLifecycle(lc fx.Lifecycle, service *CrawlerService) {
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			go func() {
+				if err := service.Start(ctx); err != nil {
+					// Log error or handle as needed
+					// Note: Background start errors cannot be returned to FX
+				}
+			}()
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			return service.Stop(ctx)
+		},
+	})
 }
 
 func NewDatabaseService(Config *config.Config) *DatabaseService {
@@ -49,34 +83,18 @@ func NewSessionServiceFactory(DatabaseService *DatabaseService) func() *SessionS
 	}
 }
 
-func NewUserService(Config *config.Config) *UserService {
-	return &UserService{
-		Config: Config,
-	}
-}
-
-func initUserServiceLifecycle(lc fx.Lifecycle, service *UserService) {
-	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			return service.Start(ctx)
-		},
-		OnStop: func(ctx context.Context) error {
-			return service.Stop(ctx)
-		},
-	})
-}
-
 func NewCrawlerServiceInterface(impl *CrawlerService) CrawlerServiceInterface {
 	return impl
 }
 
 // AutogenModule provides all core services in this package
 var AutogenModule = fx.Module("services",
+	fx.Provide(NewUserService),
+	fx.Invoke(initUserServiceLifecycle),
 	fx.Provide(NewCrawlerService),
+	fx.Invoke(initCrawlerServiceLifecycle),
 	fx.Provide(NewDatabaseService),
 	fx.Invoke(initDatabaseServiceLifecycle),
 	fx.Provide(NewSessionServiceFactory),
-	fx.Provide(NewUserService),
-	fx.Invoke(initUserServiceLifecycle),
 	fx.Provide(NewCrawlerServiceInterface),
 )
