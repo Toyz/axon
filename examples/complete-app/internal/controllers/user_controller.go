@@ -22,23 +22,26 @@ func (c *UserController) GetAllUsers() ([]*models.User, error) {
 
 //axon::route GET /users/{id:int}
 func (c *UserController) GetUser(id int) (*models.User, error) {
-	return c.UserService.GetUser(id)
+	user, err := c.UserService.GetUser(id)
+	if err != nil {
+		// Example of using axon.HttpError for better error responses
+		return nil, axon.ErrNotFound("User not found")
+	}
+	return user, nil
 }
 
 //axon::route POST /users -Middleware=AuthMiddleware
 func (c *UserController) CreateUser(req models.CreateUserRequest) (*axon.Response, error) {
 	user, err := c.UserService.CreateUser(req)
 	if err != nil {
-		return &axon.Response{
-			StatusCode: http.StatusBadRequest,
-			Body:       map[string]string{"error": err.Error()},
-		}, nil
+		return axon.BadRequest(err.Error()), nil
 	}
 	
-	return &axon.Response{
-		StatusCode: http.StatusCreated,
-		Body:       user,
-	}, nil
+	// Example of using enhanced Response with headers and cookies
+	return axon.Created(user).
+		WithHeader("Location", "/users/"+string(rune(user.ID))).
+		WithHeader("X-Created-At", user.CreatedAt.Format("2006-01-02T15:04:05Z")).
+		WithSimpleCookie("last-created-user", string(rune(user.ID))), nil
 }
 
 //axon::route PUT /users/{id:int} -Middleware=AuthMiddleware

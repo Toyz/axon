@@ -21,6 +21,64 @@ import (
 type AuthMiddleware = middleware.AuthMiddleware
 type LoggingMiddleware = middleware.LoggingMiddleware
 
+// handleAxonResponse processes an axon.Response and applies headers, cookies, and content type
+func handleAxonResponse(c echo.Context, response *axon.Response) error {
+	// Set headers
+	for key, value := range response.Headers {
+		c.Response().Header().Set(key, value)
+	}
+	
+	// Set cookies
+	for _, cookie := range response.Cookies {
+		httpCookie := &http.Cookie{
+			Name:     cookie.Name,
+			Value:    cookie.Value,
+			Path:     cookie.Path,
+			Domain:   cookie.Domain,
+			MaxAge:   cookie.MaxAge,
+			Secure:   cookie.Secure,
+			HttpOnly: cookie.HttpOnly,
+		}
+		if cookie.SameSite != "" {
+			switch cookie.SameSite {
+			case "Strict":
+				httpCookie.SameSite = http.SameSiteStrictMode
+			case "Lax":
+				httpCookie.SameSite = http.SameSiteLaxMode
+			case "None":
+				httpCookie.SameSite = http.SameSiteNoneMode
+			}
+		}
+		c.SetCookie(httpCookie)
+	}
+	
+	// Set content type and return response
+	if response.ContentType != "" {
+		return c.Blob(response.StatusCode, response.ContentType, []byte(fmt.Sprintf("%v", response.Body)))
+	}
+	return c.JSON(response.StatusCode, response.Body)
+}
+
+// handleHttpError processes an axon.HttpError and returns appropriate JSON response
+func handleHttpError(c echo.Context, httpErr *axon.HttpError) error {
+	return c.JSON(httpErr.StatusCode, httpErr)
+}
+
+// handleError processes any error and returns appropriate response (HttpError or generic error)
+func handleError(c echo.Context, err error) error {
+	if httpErr, ok := err.(*axon.HttpError); ok {
+		return handleHttpError(c, httpErr)
+	}
+	return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+}
+
+func NewSessionController(sessionFactory func() *services.SessionService, userService *services.UserService) *SessionController {
+	return &SessionController{
+		SessionFactory: sessionFactory,
+		UserService: userService,
+	}
+}
+
 func NewUserController(userService *services.UserService) *UserController {
 	return &UserController{
 		UserService: userService,
@@ -39,10 +97,61 @@ func NewProductController(databaseService *services.DatabaseService) *ProductCon
 	}
 }
 
-func NewSessionController(sessionFactory func() *services.SessionService, userService *services.UserService) *SessionController {
-	return &SessionController{
-		SessionFactory: sessionFactory,
-		UserService: userService,
+func wrapSessionControllerStartSession(handler *SessionController, loggingmiddleware *LoggingMiddleware) echo.HandlerFunc {
+	baseHandler := func(c echo.Context) error {
+		userID, err := strconv.Atoi(c.Param("userID"))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid userID: must be an integer")
+		}
+
+		var response *axon.Response
+		response, err = handler.StartSession(userID)
+		if err != nil {
+			return handleError(c, err)
+		}
+		if response == nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
+		}
+		return handleAxonResponse(c, response)
+	}
+
+	// Apply middlewares in order
+	finalHandler := baseHandler
+	finalHandler = loggingmiddleware.Handle(finalHandler)
+
+	return finalHandler
+}
+
+func wrapSessionControllerGetSessionInfo(handler *SessionController, loggingmiddleware *LoggingMiddleware) echo.HandlerFunc {
+	baseHandler := func(c echo.Context) error {
+		userID, err := strconv.Atoi(c.Param("userID"))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid userID: must be an integer")
+		}
+
+		var data interface{}
+		data, err = handler.GetSessionInfo(userID)
+		if err != nil {
+			return handleError(c, err)
+		}
+		return c.JSON(http.StatusOK, data)
+	}
+
+	// Apply middlewares in order
+	finalHandler := baseHandler
+	finalHandler = loggingmiddleware.Handle(finalHandler)
+
+	return finalHandler
+}
+
+func wrapSessionControllerCompareSessionInstances(handler *SessionController) echo.HandlerFunc {
+	return func(c echo.Context) error {
+
+		err := handler.CompareSessionInstances(c)
+		if err != nil {
+			return err
+		}
+		return nil
 	}
 }
 
@@ -51,7 +160,7 @@ func wrapUserControllerGetAllUsers(handler *UserController) echo.HandlerFunc {
 
 		data, err := handler.GetAllUsers()
 		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			return handleError(c, err)
 		}
 		return c.JSON(http.StatusOK, data)
 	}
@@ -67,7 +176,7 @@ func wrapUserControllerGetUser(handler *UserController) echo.HandlerFunc {
 		var data interface{}
 		data, err = handler.GetUser(id)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			return handleError(c, err)
 		}
 		return c.JSON(http.StatusOK, data)
 	}
@@ -82,12 +191,12 @@ func wrapUserControllerCreateUser(handler *UserController, authmiddleware *AuthM
 
 		response, err := handler.CreateUser(body)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			return handleError(c, err)
 		}
 		if response == nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
 		}
-		return c.JSON(response.StatusCode, response.Body)
+		return handleAxonResponse(c, response)
 	}
 
 	// Apply middlewares in order
@@ -111,12 +220,12 @@ func wrapUserControllerUpdateUser(handler *UserController, authmiddleware *AuthM
 		var response *axon.Response
 		response, err = handler.UpdateUser(id, body)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			return handleError(c, err)
 		}
 		if response == nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
 		}
-		return c.JSON(response.StatusCode, response.Body)
+		return handleAxonResponse(c, response)
 	}
 
 	// Apply middlewares in order
@@ -152,7 +261,7 @@ func wrapHealthControllerGetHealth(handler *HealthController) echo.HandlerFunc {
 
 		data, err := handler.GetHealth()
 		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			return handleError(c, err)
 		}
 		return c.JSON(http.StatusOK, data)
 	}
@@ -163,7 +272,7 @@ func wrapHealthControllerGetReadiness(handler *HealthController) echo.HandlerFun
 
 		data, err := handler.GetReadiness()
 		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			return handleError(c, err)
 		}
 		return c.JSON(http.StatusOK, data)
 	}
@@ -179,7 +288,7 @@ func wrapProductControllerGetProduct(handler *ProductController) echo.HandlerFun
 		var data interface{}
 		data, err = handler.GetProduct(id)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			return handleError(c, err)
 		}
 		return c.JSON(http.StatusOK, data)
 	}
@@ -195,7 +304,7 @@ func wrapProductControllerGetProductByCode(handler *ProductController, loggingmi
 		var data interface{}
 		data, err = handler.GetProductByCode(code)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			return handleError(c, err)
 		}
 		return c.JSON(http.StatusOK, data)
 	}
@@ -217,7 +326,7 @@ func wrapProductControllerGetProductSales(handler *ProductController, authmiddle
 		var data interface{}
 		data, err = handler.GetProductSales(dateRange)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			return handleError(c, err)
 		}
 		return c.JSON(http.StatusOK, data)
 	}
@@ -244,7 +353,7 @@ func wrapProductControllerCreateProductInCategory(handler *ProductController, au
 		var data interface{}
 		data, err = handler.CreateProductInCategory(c, categoryId, body)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			return handleError(c, err)
 		}
 		return c.JSON(http.StatusOK, data)
 	}
@@ -270,7 +379,7 @@ func wrapProductControllerUpdateProduct(handler *ProductController) echo.Handler
 		var data interface{}
 		data, err = handler.UpdateProduct(id, body)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			return handleError(c, err)
 		}
 		return c.JSON(http.StatusOK, data)
 	}
@@ -291,66 +400,58 @@ func wrapProductControllerDeleteProduct(handler *ProductController) echo.Handler
 	}
 }
 
-func wrapSessionControllerStartSession(handler *SessionController, loggingmiddleware *LoggingMiddleware) echo.HandlerFunc {
-	baseHandler := func(c echo.Context) error {
-		userID, err := strconv.Atoi(c.Param("userID"))
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid userID: must be an integer")
-		}
-
-		var response *axon.Response
-		response, err = handler.StartSession(userID)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-		}
-		if response == nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
-		}
-		return c.JSON(response.StatusCode, response.Body)
-	}
-
-	// Apply middlewares in order
-	finalHandler := baseHandler
-	finalHandler = loggingmiddleware.Handle(finalHandler)
-
-	return finalHandler
-}
-
-func wrapSessionControllerGetSessionInfo(handler *SessionController, loggingmiddleware *LoggingMiddleware) echo.HandlerFunc {
-	baseHandler := func(c echo.Context) error {
-		userID, err := strconv.Atoi(c.Param("userID"))
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid userID: must be an integer")
-		}
-
-		var data interface{}
-		data, err = handler.GetSessionInfo(userID)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-		}
-		return c.JSON(http.StatusOK, data)
-	}
-
-	// Apply middlewares in order
-	finalHandler := baseHandler
-	finalHandler = loggingmiddleware.Handle(finalHandler)
-
-	return finalHandler
-}
-
-func wrapSessionControllerCompareSessionInstances(handler *SessionController) echo.HandlerFunc {
-	return func(c echo.Context) error {
-
-		err := handler.CompareSessionInstances(c)
-		if err != nil {
-			return err
-		}
-		return nil
-	}
-}
-
 // RegisterRoutes registers all HTTP routes with the Echo instance
-func RegisterRoutes(e *echo.Echo, usercontroller *UserController, healthcontroller *HealthController, productcontroller *ProductController, sessioncontroller *SessionController, authmiddleware *AuthMiddleware, loggingmiddleware *LoggingMiddleware) {
+func RegisterRoutes(e *echo.Echo, sessioncontroller *SessionController, usercontroller *UserController, healthcontroller *HealthController, productcontroller *ProductController, authmiddleware *AuthMiddleware, loggingmiddleware *LoggingMiddleware) {
+	handler_sessioncontrollerstartsession := wrapSessionControllerStartSession(sessioncontroller, loggingmiddleware)
+	e.POST("/sessions/:userID", handler_sessioncontrollerstartsession)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "POST",
+		Path:                "/sessions/{userID:int}",
+		EchoPath:            "/sessions/:userID",
+		HandlerName:         "StartSession",
+		ControllerName:      "SessionController",
+		PackageName:         "controllers",
+		Middlewares:         []string{"LoggingMiddleware"},
+		MiddlewareInstances: []axon.MiddlewareInstance{{
+			Name:     "LoggingMiddleware",
+			Handler:  loggingmiddleware.Handle,
+			Instance: loggingmiddleware,
+		}},
+		ParameterTypes:      map[string]string{"userID": "int"},
+		Handler:             handler_sessioncontrollerstartsession,
+	})
+	handler_sessioncontrollergetsessioninfo := wrapSessionControllerGetSessionInfo(sessioncontroller, loggingmiddleware)
+	e.GET("/sessions/info/:userID", handler_sessioncontrollergetsessioninfo)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "GET",
+		Path:                "/sessions/info/{userID:int}",
+		EchoPath:            "/sessions/info/:userID",
+		HandlerName:         "GetSessionInfo",
+		ControllerName:      "SessionController",
+		PackageName:         "controllers",
+		Middlewares:         []string{"LoggingMiddleware"},
+		MiddlewareInstances: []axon.MiddlewareInstance{{
+			Name:     "LoggingMiddleware",
+			Handler:  loggingmiddleware.Handle,
+			Instance: loggingmiddleware,
+		}},
+		ParameterTypes:      map[string]string{"userID": "int"},
+		Handler:             handler_sessioncontrollergetsessioninfo,
+	})
+	handler_sessioncontrollercomparesessioninstances := wrapSessionControllerCompareSessionInstances(sessioncontroller)
+	e.GET("/sessions/compare", handler_sessioncontrollercomparesessioninstances)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "GET",
+		Path:                "/sessions/compare",
+		EchoPath:            "/sessions/compare",
+		HandlerName:         "CompareSessionInstances",
+		ControllerName:      "SessionController",
+		PackageName:         "controllers",
+		Middlewares:         []string{},
+		MiddlewareInstances: []axon.MiddlewareInstance{},
+		ParameterTypes:      map[string]string{},
+		Handler:             handler_sessioncontrollercomparesessioninstances,
+	})
 	handler_usercontrollergetallusers := wrapUserControllerGetAllUsers(usercontroller)
 	e.GET("/users", handler_usercontrollergetallusers)
 	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
@@ -561,63 +662,13 @@ func RegisterRoutes(e *echo.Echo, usercontroller *UserController, healthcontroll
 		ParameterTypes:      map[string]string{"id": "uuid.UUID"},
 		Handler:             handler_productcontrollerdeleteproduct,
 	})
-	handler_sessioncontrollerstartsession := wrapSessionControllerStartSession(sessioncontroller, loggingmiddleware)
-	e.POST("/sessions/:userID", handler_sessioncontrollerstartsession)
-	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
-		Method:              "POST",
-		Path:                "/sessions/{userID:int}",
-		EchoPath:            "/sessions/:userID",
-		HandlerName:         "StartSession",
-		ControllerName:      "SessionController",
-		PackageName:         "controllers",
-		Middlewares:         []string{"LoggingMiddleware"},
-		MiddlewareInstances: []axon.MiddlewareInstance{{
-			Name:     "LoggingMiddleware",
-			Handler:  loggingmiddleware.Handle,
-			Instance: loggingmiddleware,
-		}},
-		ParameterTypes:      map[string]string{"userID": "int"},
-		Handler:             handler_sessioncontrollerstartsession,
-	})
-	handler_sessioncontrollergetsessioninfo := wrapSessionControllerGetSessionInfo(sessioncontroller, loggingmiddleware)
-	e.GET("/sessions/info/:userID", handler_sessioncontrollergetsessioninfo)
-	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
-		Method:              "GET",
-		Path:                "/sessions/info/{userID:int}",
-		EchoPath:            "/sessions/info/:userID",
-		HandlerName:         "GetSessionInfo",
-		ControllerName:      "SessionController",
-		PackageName:         "controllers",
-		Middlewares:         []string{"LoggingMiddleware"},
-		MiddlewareInstances: []axon.MiddlewareInstance{{
-			Name:     "LoggingMiddleware",
-			Handler:  loggingmiddleware.Handle,
-			Instance: loggingmiddleware,
-		}},
-		ParameterTypes:      map[string]string{"userID": "int"},
-		Handler:             handler_sessioncontrollergetsessioninfo,
-	})
-	handler_sessioncontrollercomparesessioninstances := wrapSessionControllerCompareSessionInstances(sessioncontroller)
-	e.GET("/sessions/compare", handler_sessioncontrollercomparesessioninstances)
-	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
-		Method:              "GET",
-		Path:                "/sessions/compare",
-		EchoPath:            "/sessions/compare",
-		HandlerName:         "CompareSessionInstances",
-		ControllerName:      "SessionController",
-		PackageName:         "controllers",
-		Middlewares:         []string{},
-		MiddlewareInstances: []axon.MiddlewareInstance{},
-		ParameterTypes:      map[string]string{},
-		Handler:             handler_sessioncontrollercomparesessioninstances,
-	})
 }
 
 // AutogenModule provides all controllers and route registration in this package
 var AutogenModule = fx.Module("controllers",
+	fx.Provide(NewSessionController),
 	fx.Provide(NewUserController),
 	fx.Provide(NewHealthController),
 	fx.Provide(NewProductController),
-	fx.Provide(NewSessionController),
 	fx.Invoke(RegisterRoutes),
 )

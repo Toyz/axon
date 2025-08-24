@@ -152,13 +152,13 @@ func generateDataErrorResponse(handlerCall string, errAlreadyDeclared bool) stri
 		return fmt.Sprintf(`		var data interface{}
 		data, err = %s
 		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			return handleError(c, err)
 		}
 		return c.JSON(http.StatusOK, data)`, handlerCall)
 	} else {
 		return fmt.Sprintf(`		data, err := %s
 		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			return handleError(c, err)
 		}
 		return c.JSON(http.StatusOK, data)`, handlerCall)
 	}
@@ -166,25 +166,26 @@ func generateDataErrorResponse(handlerCall string, errAlreadyDeclared bool) stri
 
 // generateResponseErrorResponse generates response handling for (*Response, error) return type
 func generateResponseErrorResponse(handlerCall string, errAlreadyDeclared bool) string {
+	responseHandling := `
+		return handleAxonResponse(c, response)`
+
 	if errAlreadyDeclared {
 		return fmt.Sprintf(`		var response *axon.Response
 		response, err = %s
 		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			return handleError(c, err)
 		}
 		if response == nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
-		}
-		return c.JSON(response.StatusCode, response.Body)`, handlerCall)
+		}%s`, handlerCall, responseHandling)
 	} else {
 		return fmt.Sprintf(`		response, err := %s
 		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			return handleError(c, err)
 		}
 		if response == nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
-		}
-		return c.JSON(response.StatusCode, response.Body)`, handlerCall)
+		}%s`, handlerCall, responseHandling)
 	}
 }
 

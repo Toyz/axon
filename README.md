@@ -102,8 +102,14 @@ func (c *Controller) GetUserPost(id int, slug string) (*Post, error) {}
 
 1. **Data + Error**: `(T, error)`
    ```go
-   func (c *Controller) GetUser(id int) (*User, error) {}
-   // Returns: 200 OK with JSON body, or 500/400 on error
+   func (c *Controller) GetUser(id int) (*User, error) {
+       user, err := c.UserService.GetUser(id)
+       if err != nil {
+           return nil, axon.ErrNotFound("User not found")
+       }
+       return user, nil
+   }
+   // Returns: 200 OK with JSON body, or custom HTTP status on axon.HttpError
    ```
 
 2. **Custom Response**: `(*axon.Response, error)`
@@ -112,16 +118,95 @@ func (c *Controller) GetUserPost(id int, slug string) (*Post, error) {}
        return &axon.Response{
            StatusCode: 201,
            Body:       user,
-           Headers:    map[string]string{"Location": "/users/123"},
+           Headers: map[string]string{
+               "Location": "/users/123",
+               "X-Custom-Header": "value",
+           },
+           ContentType: "application/json", // optional, defaults to JSON
+           Cookies: []*axon.Cookie{
+               {Name: "session", Value: "abc123", HttpOnly: true},
+           },
        }, nil
    }
+   
+   // Or use fluent API
+   return axon.Created(user).
+       WithHeader("Location", "/users/123").
+       WithSecureCookie("session", "abc123", "/", 3600), nil
    ```
 
 3. **Error Only**: `error`
    ```go
-   func (c *Controller) DeleteUser(id int) error {}
-   // Returns: 204 No Content on success, error status on failure
+   func (c *Controller) DeleteUser(id int) error {
+       if !c.UserService.Exists(id) {
+           return axon.ErrNotFound("User not found")
+       }
+       return c.UserService.Delete(id)
+   }
+   // Returns: 204 No Content on success, custom HTTP status on axon.HttpError
    ```
+
+**HTTP Error Handling:**
+
+Axon provides `axon.HttpError` for structured HTTP error responses:
+
+```go
+// Common HTTP errors
+return axon.ErrBadRequest("Invalid input")
+return axon.ErrUnauthorized("Authentication required")
+return axon.ErrForbidden("Access denied")
+return axon.ErrNotFound("Resource not found")
+return axon.ErrConflict("Resource already exists")
+return axon.ErrUnprocessableEntity("Validation failed")
+
+// With additional details
+return axon.ErrBadRequestWithDetails("Validation failed", map[string]string{
+    "email": "Invalid email format",
+    "age": "Must be at least 18",
+})
+
+// Custom HTTP error
+return axon.NewHttpError(418, "I'm a teapot")
+```
+
+**Advanced Response Control:**
+
+For complete control over HTTP responses, use `*axon.Response`:
+
+```go
+// Basic response
+return axon.OK(data)
+return axon.Created(user)
+return axon.NoContent()
+
+// With headers
+return axon.Created(user).WithHeader("Location", "/users/123")
+
+// With multiple headers
+return axon.OK(data).WithHeaders(map[string]string{
+    "Cache-Control": "max-age=3600",
+    "ETag": "\"abc123\"",
+})
+
+// With cookies
+return axon.OK(data).WithSimpleCookie("preference", "dark-mode")
+
+// With secure cookies
+return axon.OK(data).WithSecureCookie("session", "token", "/", 3600)
+
+// Custom content type
+return axon.NewResponse(200, xmlData).WithContentType("application/xml")
+
+// Redirects
+return axon.RedirectTo("/login")
+return axon.RedirectPermanent("/new-url")
+
+// Fluent API chaining
+return axon.Created(user).
+    WithHeader("Location", "/users/123").
+    WithCacheControl("no-cache").
+    WithSecureCookie("session", sessionID, "/", 3600)
+```
 
 ### Service Annotations
 

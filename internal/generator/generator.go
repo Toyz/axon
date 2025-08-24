@@ -154,6 +154,13 @@ func (g *Generator) generateControllerModuleWithModule(metadata *models.PackageM
 		moduleBuilder.WriteString("\n")
 	}
 
+	// Generate shared helper functions for response handling
+	if len(metadata.Controllers) > 0 {
+		helperFunctions := g.generateResponseHelperFunctions()
+		moduleBuilder.WriteString(helperFunctions)
+		moduleBuilder.WriteString("\n\n")
+	}
+
 	// Generate controller providers
 	for _, controller := range metadata.Controllers {
 		providerCode, err := g.generateControllerProvider(controller)
@@ -348,8 +355,8 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 		}
 	}
 	
-	// Add fmt import only if custom parsers are used (for error formatting)
-	if hasCustomParsers {
+	// Add fmt import if custom parsers are used (for error formatting) or if controllers exist (for response handling)
+	if hasCustomParsers || len(metadata.Controllers) > 0 {
 		analysis.StandardLibrary = append(analysis.StandardLibrary, "fmt")
 	}
 	
@@ -804,6 +811,60 @@ func extractDependencyName(depType string) string {
 	
 	// Keep the original case for field names - Go struct fields are exported (PascalCase)
 	return name
+}
+
+// generateResponseHelperFunctions generates shared helper functions for response handling
+func (g *Generator) generateResponseHelperFunctions() string {
+	return `// handleAxonResponse processes an axon.Response and applies headers, cookies, and content type
+func handleAxonResponse(c echo.Context, response *axon.Response) error {
+	// Set headers
+	for key, value := range response.Headers {
+		c.Response().Header().Set(key, value)
+	}
+	
+	// Set cookies
+	for _, cookie := range response.Cookies {
+		httpCookie := &http.Cookie{
+			Name:     cookie.Name,
+			Value:    cookie.Value,
+			Path:     cookie.Path,
+			Domain:   cookie.Domain,
+			MaxAge:   cookie.MaxAge,
+			Secure:   cookie.Secure,
+			HttpOnly: cookie.HttpOnly,
+		}
+		if cookie.SameSite != "" {
+			switch cookie.SameSite {
+			case "Strict":
+				httpCookie.SameSite = http.SameSiteStrictMode
+			case "Lax":
+				httpCookie.SameSite = http.SameSiteLaxMode
+			case "None":
+				httpCookie.SameSite = http.SameSiteNoneMode
+			}
+		}
+		c.SetCookie(httpCookie)
+	}
+	
+	// Set content type and return response
+	if response.ContentType != "" {
+		return c.Blob(response.StatusCode, response.ContentType, []byte(fmt.Sprintf("%v", response.Body)))
+	}
+	return c.JSON(response.StatusCode, response.Body)
+}
+
+// handleHttpError processes an axon.HttpError and returns appropriate JSON response
+func handleHttpError(c echo.Context, httpErr *axon.HttpError) error {
+	return c.JSON(httpErr.StatusCode, httpErr)
+}
+
+// handleError processes any error and returns appropriate response (HttpError or generic error)
+func handleError(c echo.Context, err error) error {
+	if httpErr, ok := err.(*axon.HttpError); ok {
+		return handleHttpError(c, httpErr)
+	}
+	return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+}`
 }
 
 // GetParserRegistry returns the parser registry for cross-package parser discovery

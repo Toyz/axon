@@ -196,7 +196,8 @@ jobs:
           curl -f http://localhost:8080/products/by-code/PROD-12345
 
           echo "Testing get product sales by date range..."
-          curl -f http://localhost:8080/products/sales/2024-01-01_2024-12-31
+          curl -f http://localhost:8080/products/sales/2024-01-01_2024-12-31 \
+            -H "Authorization: Bearer valid-token"
 
           echo "Testing create product in category..."
           curl -f -X POST http://localhost:8080/products/550e8400-e29b-41d4-a716-446655440000/items \
