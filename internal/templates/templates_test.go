@@ -182,7 +182,8 @@ func TestGenerateParameterBindingCode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := GenerateParameterBindingCode(tt.parameters)
+			registry := createTestParserRegistry()
+			result, err := GenerateParameterBindingCode(tt.parameters, registry)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 				return
@@ -205,7 +206,8 @@ func TestGenerateParameterBindingCodeError(t *testing.T) {
 		},
 	}
 
-	_, err := GenerateParameterBindingCode(parameters)
+	registry := createTestParserRegistry()
+	_, err := GenerateParameterBindingCode(parameters, registry)
 	if err == nil {
 		t.Errorf("expected error for unsupported parameter type")
 	}
@@ -368,7 +370,7 @@ func TestGenerateCoreServiceProvider(t *testing.T) {
 				StructName:   "UserService",
 				HasLifecycle: false,
 				IsManual:     false,
-				Dependencies: []string{},
+				Dependencies: []models.Dependency{},
 			},
 			expected: `func NewUserService() *UserService {
 	return &UserService{
@@ -383,7 +385,10 @@ func TestGenerateCoreServiceProvider(t *testing.T) {
 				StructName:   "UserService",
 				HasLifecycle: false,
 				IsManual:     false,
-				Dependencies: []string{"UserRepository", "*Config"},
+				Dependencies: []models.Dependency{
+					{Name: "UserRepository", Type: "UserRepository"},
+					{Name: "Config", Type: "*Config"},
+				},
 			},
 			expected: `func NewUserService(UserRepository UserRepository, Config *Config) *UserService {
 	return &UserService{
@@ -401,7 +406,9 @@ func TestGenerateCoreServiceProvider(t *testing.T) {
 				HasStart:     true,
 				HasStop:      false,
 				IsManual:     false,
-				Dependencies: []string{"*Config"},
+				Dependencies: []models.Dependency{
+					{Name: "Config", Type: "*Config"},
+				},
 			},
 			expected: `func NewDatabaseService(lc fx.Lifecycle, Config *Config) *DatabaseService {
 	service := &DatabaseService{
@@ -426,7 +433,10 @@ func TestGenerateCoreServiceProvider(t *testing.T) {
 				HasStart:     true,
 				HasStop:      true,
 				IsManual:     false,
-				Dependencies: []string{"*Config", "Logger"},
+				Dependencies: []models.Dependency{
+					{Name: "Config", Type: "*Config"},
+					{Name: "Logger", Type: "Logger"},
+				},
 			},
 			expected: `func NewMessageConsumer(lc fx.Lifecycle, Config *Config, Logger Logger) *MessageConsumer {
 	service := &MessageConsumer{
@@ -454,7 +464,7 @@ func TestGenerateCoreServiceProvider(t *testing.T) {
 				HasLifecycle: false,
 				IsManual:     true,
 				ModuleName:   "CustomModule",
-				Dependencies: []string{},
+				Dependencies: []models.Dependency{},
 			},
 			expected: "",
 		},
@@ -509,14 +519,18 @@ func TestGenerateCoreServiceModule(t *testing.T) {
 						StructName:   "UserService",
 						HasLifecycle: false,
 						IsManual:     false,
-						Dependencies: []string{"UserRepository"},
+						Dependencies: []models.Dependency{
+							{Name: "UserRepository", Type: "UserRepository"},
+						},
 					},
 					{
 						Name:         "DatabaseService",
 						StructName:   "DatabaseService",
 						HasLifecycle: true,
 						IsManual:     false,
-						Dependencies: []string{"*Config"},
+						Dependencies: []models.Dependency{
+							{Name: "Config", Type: "*Config"},
+						},
 					},
 					{
 						Name:         "ConfigService",
@@ -524,7 +538,7 @@ func TestGenerateCoreServiceModule(t *testing.T) {
 						HasLifecycle: false,
 						IsManual:     true,
 						ModuleName:   "CustomModule",
-						Dependencies: []string{},
+						Dependencies: []models.Dependency{},
 					},
 				},
 			},
@@ -537,7 +551,7 @@ func TestGenerateCoreServiceModule(t *testing.T) {
 				"func NewDatabaseService(",
 				"var AutogenModule = fx.Module(",
 				"fx.Provide(NewUserService),",
-				"fx.Invoke(NewDatabaseService),",
+				"fx.Provide(NewDatabaseService),",
 				"CustomModule,",
 			},
 		},
@@ -553,7 +567,7 @@ func TestGenerateCoreServiceModule(t *testing.T) {
 						HasLifecycle: false,
 						IsManual:     true,
 						ModuleName:   "Module",
-						Dependencies: []string{},
+						Dependencies: []models.Dependency{},
 					},
 				},
 			},
@@ -779,7 +793,9 @@ func TestGenerateCoreServiceModuleWithInterfaces(t *testing.T) {
 				StructName:   "UserService",
 				HasLifecycle: false,
 				IsManual:     false,
-				Dependencies: []string{"UserRepository"},
+				Dependencies: []models.Dependency{
+					{Name: "UserRepository", Type: "UserRepository"},
+				},
 			},
 		},
 		Interfaces: []models.InterfaceMetadata{
@@ -896,7 +912,8 @@ func TestGenerateParameterBindingCode_WithContextParameters(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := GenerateParameterBindingCode(tt.parameters)
+			registry := createTestParserRegistry()
+			result, err := GenerateParameterBindingCode(tt.parameters, registry)
 
 			if tt.expectError {
 				if err == nil {

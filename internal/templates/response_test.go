@@ -29,7 +29,8 @@ func TestGenerateResponseHandling(t *testing.T) {
 				},
 			},
 			controllerName: "UserController",
-			expected: `		data, err := handler.GetUser(id)
+			expected: `		var data interface{}
+		data, err = handler.GetUser(id)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 		}
@@ -72,7 +73,7 @@ func TestGenerateResponseHandling(t *testing.T) {
 				Flags: []string{"-PassContext"},
 			},
 			controllerName: "UserController",
-			expected: `		err := handler.DeleteUser(c, id)
+			expected: `		err = handler.DeleteUser(c, id)
 		if err != nil {
 			return err
 		}
@@ -281,7 +282,8 @@ func TestGenerateRouteWrapper(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := GenerateRouteWrapper(tt.route, tt.controllerName)
+			registry := createTestParserRegistry()
+			result, err := GenerateRouteWrapper(tt.route, tt.controllerName, registry)
 			
 			if tt.expectError {
 				if err == nil {

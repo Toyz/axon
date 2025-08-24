@@ -7,12 +7,26 @@ import (
 	"strings"
 
 	"github.com/toyz/axon/internal/models"
+	"github.com/toyz/axon/internal/registry"
 	"github.com/toyz/axon/internal/templates"
+	"github.com/toyz/axon/pkg/axon"
 )
+
+// ParserRegistryInterface defines the interface for parser registry operations
+type ParserRegistryInterface interface {
+	RegisterParser(parser models.RouteParserMetadata) error
+	GetParser(typeName string) (models.RouteParserMetadata, bool)
+	ListParsers() []string
+	HasParser(typeName string) bool
+	Clear()
+	ClearCustomParsers()
+	GetAllParsers() map[string]models.RouteParserMetadata
+}
 
 // Generator implements the CodeGenerator interface
 type Generator struct {
 	moduleResolver ModuleResolver
+	parserRegistry ParserRegistryInterface
 }
 
 // ModuleResolver interface for resolving module paths
@@ -23,13 +37,16 @@ type ModuleResolver interface {
 
 // NewGenerator creates a new code generator instance
 func NewGenerator() *Generator {
-	return &Generator{}
+	return &Generator{
+		parserRegistry: registry.NewParserRegistry(),
+	}
 }
 
 // NewGeneratorWithResolver creates a new code generator instance with a module resolver
 func NewGeneratorWithResolver(resolver ModuleResolver) *Generator {
 	return &Generator{
 		moduleResolver: resolver,
+		parserRegistry: registry.NewParserRegistry(),
 	}
 }
 
@@ -150,7 +167,7 @@ func (g *Generator) generateControllerModuleWithModule(metadata *models.PackageM
 	// Generate route wrapper functions
 	for _, controller := range metadata.Controllers {
 		for _, route := range controller.Routes {
-			wrapperCode, err := templates.GenerateRouteWrapper(route, controller.StructName)
+			wrapperCode, err := templates.GenerateRouteWrapper(route, controller.StructName, g.parserRegistry)
 			if err != nil {
 				return "", fmt.Errorf("failed to generate wrapper for route %s.%s: %w", controller.Name, route.HandlerName, err)
 			}
@@ -248,12 +265,80 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 		}
 	}
 	
-	// Analyze route parameters for model imports
+	// Analyze route parameters for model imports and parser imports
 	modelPackages := make(map[string]bool)
+	parserPackages := make(map[string]bool)
+	hasUUIDParams := false
+	hasCustomParsers := false
+	addedPaths := make(map[string]bool) // Track added paths to avoid duplicates
 	for _, controller := range metadata.Controllers {
 		for _, route := range controller.Routes {
 			for _, param := range route.Parameters {
-				if packageName := g.extractPackageFromType(param.Type); packageName != "" {
+				// Resolve type alias to check for imports
+				resolvedType := axon.ResolveTypeAlias(param.Type)
+				
+				// Check for UUID parameters (including alias)
+				// Only add UUID import if using a custom parser, not built-in parser
+				if resolvedType == "uuid.UUID" {
+					if parser, exists := g.parserRegistry.GetParser(param.Type); exists {
+						// Only set hasUUIDParams if this is a custom parser, not built-in
+						if parser.PackagePath != "builtin" {
+							hasUUIDParams = true
+						}
+					} else {
+						// If no parser found, assume it needs the import (fallback)
+						hasUUIDParams = true
+					}
+				}
+				
+				// Only analyze path parameters for parser imports
+				if param.Source == models.ParameterSourcePath {
+					// Check if this parameter uses a custom parser
+					if parser, exists := g.parserRegistry.GetParser(param.Type); exists {
+						// Add parser import if it's not a built-in parser
+						if parser.PackagePath != "builtin" && parser.PackagePath != "" {
+							hasCustomParsers = true
+							
+							// Resolve import path from package path
+							importPath := g.resolvePackageImportPath(moduleName, metadata.PackagePath, filepath.Base(parser.PackagePath))
+							
+							// Check if this is a third-party import (contains github.com, etc.)
+							if strings.Contains(importPath, "github.com") || strings.Contains(importPath, "golang.org") || strings.Contains(importPath, "gopkg.in") {
+								// Add to third-party imports, avoiding duplicates
+								found := false
+								for _, existing := range analysis.ThirdParty {
+									if existing == importPath {
+										found = true
+										break
+									}
+								}
+								if !found {
+									analysis.ThirdParty = append(analysis.ThirdParty, importPath)
+								}
+							} else {
+								// For local parser packages, use the import path directly
+								if !addedPaths[importPath] {
+									analysis.Local = append(analysis.Local, ImportSpec{
+										Alias: "", // No alias for parsers
+										Path:  importPath,
+									})
+									addedPaths[importPath] = true
+								}
+							}
+						}
+					}
+				}
+				
+				// Analyze all parameter types for model imports (path, body, etc.)
+				// Skip built-in parser types since they use axon.ParseXXX functions
+				if param.Source == models.ParameterSourcePath {
+					if parser, exists := g.parserRegistry.GetParser(param.Type); exists && parser.PackagePath == "builtin" {
+						// Skip import analysis for built-in parser types
+						continue
+					}
+				}
+				
+				if packageName := g.extractPackageFromType(resolvedType); packageName != "" {
 					// Skip well-known packages that are already imported
 					if !g.isWellKnownPackage(packageName) {
 						modelPackages[packageName] = true
@@ -261,6 +346,16 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 				}
 			}
 		}
+	}
+	
+	// Add fmt import only if custom parsers are used (for error formatting)
+	if hasCustomParsers {
+		analysis.StandardLibrary = append(analysis.StandardLibrary, "fmt")
+	}
+	
+	// Add UUID import if needed
+	if hasUUIDParams {
+		analysis.ThirdParty = append(analysis.ThirdParty, "github.com/google/uuid")
 	}
 	
 	// Analyze middleware dependencies
@@ -271,7 +366,6 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 	}
 	
 	// Resolve import paths for detected packages
-	addedPaths := make(map[string]bool) // Track added paths to avoid duplicates
 	
 	for pkg := range servicePackages {
 		importPath := g.resolvePackageImportPath(moduleName, metadata.PackagePath, pkg)
@@ -289,6 +383,17 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 		if !addedPaths[importPath] {
 			analysis.Local = append(analysis.Local, ImportSpec{
 				Alias: "", // No alias for models
+				Path:  importPath,
+			})
+			addedPaths[importPath] = true
+		}
+	}
+	
+	for pkg := range parserPackages {
+		importPath := g.resolvePackageImportPath(moduleName, metadata.PackagePath, pkg)
+		if !addedPaths[importPath] {
+			analysis.Local = append(analysis.Local, ImportSpec{
+				Alias: "", // No alias for parsers
 				Path:  importPath,
 			})
 			addedPaths[importPath] = true
@@ -335,6 +440,7 @@ func (g *Generator) isWellKnownPackage(packageName string) bool {
 		"context": true, // context
 		"fmt":     true, // fmt
 		"errors":  true, // errors
+		"uuid":    true, // github.com/google/uuid (already imported in controller)
 	}
 	
 	return wellKnownPackages[packageName]
@@ -353,9 +459,23 @@ func (g *Generator) resolvePackageImportPath(moduleName, currentPackagePath, tar
 		if importPath, err := g.moduleResolver.BuildPackagePath(moduleName, targetPackageDir); err == nil {
 			return importPath
 		}
+		
+		// If BuildPackagePath fails, try to construct the path manually
+		// Get current working directory
+		if currentDir, err := os.Getwd(); err == nil {
+			// Calculate relative path from current directory to target package
+			if relPath, err := filepath.Rel(currentDir, targetPackageDir); err == nil {
+				// Convert to import path format
+				importPath := filepath.ToSlash(relPath)
+				if importPath != "." {
+					return fmt.Sprintf("%s/%s", moduleName, importPath)
+				}
+				return moduleName
+			}
+		}
 	}
 	
-	// Fallback to standard internal structure
+	// Final fallback to standard internal structure
 	if moduleName != "" {
 		return fmt.Sprintf("%s/internal/%s", moduleName, targetPackage)
 	}
@@ -671,4 +791,9 @@ func extractDependencyName(depType string) string {
 	
 	// Keep the original case for field names - Go struct fields are exported (PascalCase)
 	return name
+}
+
+// GetParserRegistry returns the parser registry for cross-package parser discovery
+func (g *Generator) GetParserRegistry() ParserRegistryInterface {
+	return g.parserRegistry
 }

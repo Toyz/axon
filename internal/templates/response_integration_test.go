@@ -94,7 +94,8 @@ func TestCompleteRouteWrapperGeneration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Generate the complete route wrapper
-			wrapper, err := GenerateRouteWrapper(tt.route, tt.controllerName)
+			registry := createTestParserRegistry()
+			wrapper, err := GenerateRouteWrapper(tt.route, tt.controllerName, registry)
 			if err != nil {
 				t.Fatalf("failed to generate route wrapper: %v", err)
 			}
@@ -221,7 +222,8 @@ func TestResponseHandlingErrorCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := GenerateRouteWrapper(tt.route, "TestController")
+			registry := createTestParserRegistry()
+			_, err := GenerateRouteWrapper(tt.route, "TestController", registry)
 			
 			if tt.expectError {
 				if err == nil {
@@ -251,7 +253,8 @@ func TestResponseModelUsage(t *testing.T) {
 		},
 	}
 
-	wrapper, err := GenerateRouteWrapper(route, "TestController")
+	registry := createTestParserRegistry()
+	wrapper, err := GenerateRouteWrapper(route, "TestController", registry)
 	if err != nil {
 		t.Fatalf("failed to generate wrapper: %v", err)
 	}

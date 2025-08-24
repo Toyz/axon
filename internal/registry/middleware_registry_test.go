@@ -248,14 +248,18 @@ func TestMiddlewareRegistry_Get(t *testing.T) {
 		Name:        "AuthMiddleware",
 		PackagePath: "/auth",
 		StructName:  "AuthMiddleware",
-		Dependencies: []string{"TokenService"},
+		Dependencies: []models.Dependency{
+			{Name: "TokenService", Type: "*TokenService"},
+		},
 	}
 	
 	loggingMiddleware := &models.MiddlewareMetadata{
 		Name:        "LoggingMiddleware",
 		PackagePath: "/logging",
 		StructName:  "LoggingMiddleware",
-		Dependencies: []string{"Logger"},
+		Dependencies: []models.Dependency{
+			{Name: "Logger", Type: "*Logger"},
+		},
 	}
 	
 	err := registry.Register("AuthMiddleware", authMiddleware)

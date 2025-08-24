@@ -10,4 +10,6 @@ import (
 type AnnotationParser interface {
 	ParseDirectory(path string) (*models.PackageMetadata, error)
 	ExtractAnnotations(file *ast.File, fileName string) ([]models.Annotation, error)
+	SetSkipParserValidation(skip bool)
+	ValidateCustomParsersWithRegistry(metadata *models.PackageMetadata, parserRegistry map[string]models.RouteParserMetadata) error
 }

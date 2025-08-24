@@ -9,6 +9,7 @@ type PackageMetadata struct {
 	CoreServices  []CoreServiceMetadata   // all core services found in the package
 	Interfaces    []InterfaceMetadata     // all interfaces to be generated
 	Loggers       []LoggerMetadata        // all loggers found in the package
+	RouteParsers  []RouteParserMetadata   // all route parsers found in the package
 }
 
 // ModuleReference represents a reference to a generated module

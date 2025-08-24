@@ -31,7 +31,7 @@ func TestParser_parseAnnotationComment(t *testing.T) {
 				Target:       "UserController",
 				Parameters:   map[string]string{},
 				Flags:        []string{},
-				Dependencies: []string{},
+				Dependencies: []models.Dependency{},
 			},
 			expectError: false,
 		},
@@ -47,7 +47,7 @@ func TestParser_parseAnnotationComment(t *testing.T) {
 					"path":   "/users/{id:int}",
 				},
 				Flags:        []string{},
-				Dependencies: []string{},
+				Dependencies: []models.Dependency{},
 			},
 			expectError: false,
 		},
@@ -64,7 +64,7 @@ func TestParser_parseAnnotationComment(t *testing.T) {
 					"-Middleware": "Auth,Logging",
 				},
 				Flags:        []string{},
-				Dependencies: []string{},
+				Dependencies: []models.Dependency{},
 			},
 			expectError: false,
 		},
@@ -80,7 +80,7 @@ func TestParser_parseAnnotationComment(t *testing.T) {
 					"path":   "/health",
 				},
 				Flags:        []string{"-PassContext"},
-				Dependencies: []string{},
+				Dependencies: []models.Dependency{},
 			},
 			expectError: false,
 		},
@@ -95,7 +95,7 @@ func TestParser_parseAnnotationComment(t *testing.T) {
 					"name": "AuthMiddleware",
 				},
 				Flags:        []string{},
-				Dependencies: []string{},
+				Dependencies: []models.Dependency{},
 			},
 			expectError: false,
 		},
@@ -108,7 +108,7 @@ func TestParser_parseAnnotationComment(t *testing.T) {
 				Target:       "DatabaseService",
 				Parameters:   map[string]string{},
 				Flags:        []string{"-Init"},
-				Dependencies: []string{},
+				Dependencies: []models.Dependency{},
 			},
 			expectError: false,
 		},
@@ -123,7 +123,7 @@ func TestParser_parseAnnotationComment(t *testing.T) {
 					"-Manual": "CustomModule",
 				},
 				Flags:        []string{},
-				Dependencies: []string{},
+				Dependencies: []models.Dependency{},
 			},
 			expectError: false,
 		},
@@ -136,7 +136,7 @@ func TestParser_parseAnnotationComment(t *testing.T) {
 				Target:       "ConfigService",
 				Parameters:   map[string]string{},
 				Flags:        []string{"-Manual"},
-				Dependencies: []string{},
+				Dependencies: []models.Dependency{},
 			},
 			expectError: false,
 		},
@@ -149,7 +149,7 @@ func TestParser_parseAnnotationComment(t *testing.T) {
 				Target:       "UserService",
 				Parameters:   map[string]string{},
 				Flags:        []string{},
-				Dependencies: []string{},
+				Dependencies: []models.Dependency{},
 			},
 			expectError: false,
 		},
@@ -175,7 +175,7 @@ func TestParser_parseAnnotationComment(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := p.parseAnnotationComment(tt.comment, tt.target)
+			result, err := p.parseAnnotationComment(tt.comment, tt.target, token.NoPos)
 
 			if tt.expectError {
 				if err == nil {
@@ -293,7 +293,7 @@ func (c *UserController) CreateUser(user User) (*User, error) {
 					Target:       "UserController",
 					Parameters:   map[string]string{},
 					Flags:        []string{},
-					Dependencies: []string{"UserServiceInterface"},
+					Dependencies: []models.Dependency{{Name: "UserServiceInterface", Type: "UserServiceInterface"}},
 				},
 				{
 					Type:   models.AnnotationTypeRoute,
@@ -303,7 +303,7 @@ func (c *UserController) CreateUser(user User) (*User, error) {
 						"path":   "/users/{id:int}",
 					},
 					Flags:        []string{},
-					Dependencies: []string{},
+					Dependencies: []models.Dependency{},
 				},
 				{
 					Type:   models.AnnotationTypeRoute,
@@ -314,7 +314,7 @@ func (c *UserController) CreateUser(user User) (*User, error) {
 						"-Middleware": "Auth",
 					},
 					Flags:        []string{},
-					Dependencies: []string{},
+					Dependencies: []models.Dependency{},
 				},
 			},
 		},
@@ -341,14 +341,14 @@ type DatabaseService struct {
 						"name": "AuthMiddleware",
 					},
 					Flags:        []string{},
-					Dependencies: []string{"TokenServiceInterface"},
+					Dependencies: []models.Dependency{{Name: "TokenServiceInterface", Type: "TokenServiceInterface"}},
 				},
 				{
 					Type:         models.AnnotationTypeCore,
 					Target:       "DatabaseService",
 					Parameters:   map[string]string{},
 					Flags:        []string{"-Init"},
-					Dependencies: []string{"*Config"},
+					Dependencies: []models.Dependency{{Name: "*Config", Type: "*Config"}},
 				},
 			},
 		},
@@ -368,14 +368,14 @@ type UserService struct {
 					Target:       "UserService",
 					Parameters:   map[string]string{},
 					Flags:        []string{},
-					Dependencies: []string{"UserRepository"},
+					Dependencies: []models.Dependency{{Name: "UserRepository", Type: "UserRepository"}},
 				},
 				{
 					Type:         models.AnnotationTypeInterface,
 					Target:       "UserService",
 					Parameters:   map[string]string{},
 					Flags:        []string{},
-					Dependencies: []string{"UserRepository"},
+					Dependencies: []models.Dependency{{Name: "UserRepository", Type: "UserRepository"}},
 				},
 			},
 		},
@@ -448,7 +448,7 @@ func TestParser_processAnnotations(t *testing.T) {
 			Target:       "UserController",
 			Parameters:   map[string]string{},
 			Flags:        []string{},
-			Dependencies: []string{"UserServiceInterface"},
+			Dependencies: []models.Dependency{{Name: "UserServiceInterface", Type: "UserServiceInterface"}},
 		},
 		{
 			Type:   models.AnnotationTypeRoute,
@@ -458,7 +458,7 @@ func TestParser_processAnnotations(t *testing.T) {
 				"path":   "/users/{id:int}",
 			},
 			Flags:        []string{},
-			Dependencies: []string{},
+			Dependencies: []models.Dependency{},
 		},
 		{
 			Type:   models.AnnotationTypeMiddleware,
@@ -467,28 +467,28 @@ func TestParser_processAnnotations(t *testing.T) {
 				"name": "AuthMiddleware",
 			},
 			Flags:        []string{},
-			Dependencies: []string{"TokenServiceInterface"},
+			Dependencies: []models.Dependency{{Name: "TokenServiceInterface", Type: "TokenServiceInterface"}},
 		},
 		{
 			Type:         models.AnnotationTypeCore,
 			Target:       "DatabaseService",
 			Parameters:   map[string]string{},
 			Flags:        []string{"-Init"},
-			Dependencies: []string{"*Config"},
+			Dependencies: []models.Dependency{{Name: "*Config", Type: "*Config"}},
 		},
 		{
 			Type:         models.AnnotationTypeCore,
 			Target:       "UserService",
 			Parameters:   map[string]string{},
 			Flags:        []string{},
-			Dependencies: []string{"UserRepository"},
+			Dependencies: []models.Dependency{{Name: "UserRepository", Type: "UserRepository"}},
 		},
 		{
 			Type:         models.AnnotationTypeInterface,
 			Target:       "UserService",
 			Parameters:   map[string]string{},
 			Flags:        []string{},
-			Dependencies: []string{"UserRepository"},
+			Dependencies: []models.Dependency{{Name: "UserRepository", Type: "UserRepository"}},
 		},
 	}
 
@@ -510,7 +510,7 @@ func TestParser_processAnnotations(t *testing.T) {
 		if controller.Name != "UserController" {
 			t.Errorf("expected controller name UserController, got %s", controller.Name)
 		}
-		if len(controller.Dependencies) != 1 || controller.Dependencies[0] != "UserServiceInterface" {
+		if len(controller.Dependencies) != 1 || controller.Dependencies[0].Name != "UserServiceInterface" {
 			t.Errorf("expected controller dependencies [UserServiceInterface], got %v", controller.Dependencies)
 		}
 		if len(controller.Routes) != 1 {
@@ -590,7 +590,7 @@ func TestParser_InvalidSyntax(t *testing.T) {
 
 	for _, comment := range invalidComments {
 		t.Run(comment, func(t *testing.T) {
-			_, err := p.parseAnnotationComment(comment, "TestTarget")
+			_, err := p.parseAnnotationComment(comment, "TestTarget", token.NoPos)
 			if err == nil {
 				t.Errorf("expected error for invalid comment: %s", comment)
 			}
@@ -679,8 +679,8 @@ func TestParser_extractDependencies(t *testing.T) {
 			}
 
 			for i, expected := range tt.expected {
-				if i >= len(dependencies) || dependencies[i] != expected {
-					t.Errorf("expected dependency %s at position %d, got %s", expected, i, dependencies[i])
+				if i >= len(dependencies) || dependencies[i].Type != expected {
+					t.Errorf("expected dependency %s at position %d, got %s", expected, i, dependencies[i].Type)
 				}
 			}
 		})
@@ -824,10 +824,10 @@ func TestParser_parsePathParameters(t *testing.T) {
 			errorMsg:    "parameter name cannot be empty",
 		},
 		{
-			name:        "unsupported parameter type",
-			path:        "/users/{id:float}",
+			name:        "invalid parameter type name",
+			path:        "/users/{id:123invalid}",
 			expectError: true,
-			errorMsg:    "unsupported parameter type 'float'",
+			errorMsg:    "invalid parameter type '123invalid'",
 		},
 		{
 			name:        "parameter with extra colons",
@@ -983,11 +983,11 @@ func TestParser_parseParameterDefinition(t *testing.T) {
 			errorMsg:     "parameter name cannot be empty",
 		},
 		{
-			name:         "unsupported type - axon syntax",
-			paramDef:     "id:float",
+			name:         "invalid type name - axon syntax",
+			paramDef:     "id:123invalid",
 			isEchoSyntax: false,
 			expectError:  true,
-			errorMsg:     "unsupported parameter type 'float'",
+			errorMsg:     "invalid parameter type '123invalid'",
 		},
 		{
 			name:         "multiple colons - axon syntax",
@@ -1217,13 +1217,20 @@ func TestParser_validateParameterType(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:        "unsupported float type",
-			typeStr:     "float",
-			expectError: true,
+			name:        "valid custom type",
+			typeStr:     "CustomType",
+			expectError: false,
+			expected:    "CustomType",
 		},
 		{
-			name:        "unsupported bool type",
-			typeStr:     "bool",
+			name:        "valid qualified type",
+			typeStr:     "uuid.UUID",
+			expectError: false,
+			expected:    "uuid.UUID",
+		},
+		{
+			name:        "invalid type name starting with number",
+			typeStr:     "123Invalid",
 			expectError: true,
 		},
 		{
@@ -1373,7 +1380,7 @@ func TestParser_StandaloneInterfaceAnnotation(t *testing.T) {
 			Target:       "UserService",
 			Parameters:   map[string]string{},
 			Flags:        []string{},
-			Dependencies: []string{"UserRepository"},
+			Dependencies: []models.Dependency{{Name: "UserRepository", Type: "UserRepository"}},
 		},
 	}
 
@@ -1412,14 +1419,14 @@ func TestParser_ControllerWithInterface(t *testing.T) {
 			Target:       "UserController",
 			Parameters:   map[string]string{},
 			Flags:        []string{},
-			Dependencies: []string{"UserService"},
+			Dependencies: []models.Dependency{{Name: "UserService", Type: "UserService"}},
 		},
 		{
 			Type:         models.AnnotationTypeInterface,
 			Target:       "UserController",
 			Parameters:   map[string]string{},
 			Flags:        []string{},
-			Dependencies: []string{"UserService"},
+			Dependencies: []models.Dependency{{Name: "UserService", Type: "UserService"}},
 		},
 	}
 
@@ -1789,13 +1796,13 @@ func TestParser_MiddlewareValidation(t *testing.T) {
 					Parameters: map[string]string{
 						"name": "Auth",
 					},
-					Dependencies: []string{},
+					Dependencies: []models.Dependency{},
 				},
 				{
 					Type:         models.AnnotationTypeController,
 					Target:       "UserController",
 					Parameters:   map[string]string{},
-					Dependencies: []string{},
+					Dependencies: []models.Dependency{},
 				},
 				{
 					Type:   models.AnnotationTypeRoute,
@@ -1805,7 +1812,7 @@ func TestParser_MiddlewareValidation(t *testing.T) {
 						"path":        "/users/{id:int}",
 						"-Middleware": "Auth",
 					},
-					Dependencies: []string{},
+					Dependencies: []models.Dependency{},
 				},
 			},
 			expectError: false,
@@ -1817,7 +1824,7 @@ func TestParser_MiddlewareValidation(t *testing.T) {
 					Type:         models.AnnotationTypeController,
 					Target:       "UserController",
 					Parameters:   map[string]string{},
-					Dependencies: []string{},
+					Dependencies: []models.Dependency{},
 				},
 				{
 					Type:   models.AnnotationTypeRoute,
@@ -1827,7 +1834,7 @@ func TestParser_MiddlewareValidation(t *testing.T) {
 						"path":        "/users/{id:int}",
 						"-Middleware": "NonExistentMiddleware",
 					},
-					Dependencies: []string{},
+					Dependencies: []models.Dependency{},
 				},
 			},
 			expectError: true,
@@ -1842,7 +1849,7 @@ func TestParser_MiddlewareValidation(t *testing.T) {
 					Parameters: map[string]string{
 						"name": "Auth",
 					},
-					Dependencies: []string{},
+					Dependencies: []models.Dependency{},
 				},
 				{
 					Type:   models.AnnotationTypeMiddleware,
@@ -1850,13 +1857,13 @@ func TestParser_MiddlewareValidation(t *testing.T) {
 					Parameters: map[string]string{
 						"name": "Logging",
 					},
-					Dependencies: []string{},
+					Dependencies: []models.Dependency{},
 				},
 				{
 					Type:         models.AnnotationTypeController,
 					Target:       "UserController",
 					Parameters:   map[string]string{},
-					Dependencies: []string{},
+					Dependencies: []models.Dependency{},
 				},
 				{
 					Type:   models.AnnotationTypeRoute,
@@ -1866,7 +1873,7 @@ func TestParser_MiddlewareValidation(t *testing.T) {
 						"path":        "/users",
 						"-Middleware": "Auth,Logging",
 					},
-					Dependencies: []string{},
+					Dependencies: []models.Dependency{},
 				},
 			},
 			expectError: false,
@@ -1880,13 +1887,13 @@ func TestParser_MiddlewareValidation(t *testing.T) {
 					Parameters: map[string]string{
 						"name": "Auth",
 					},
-					Dependencies: []string{},
+					Dependencies: []models.Dependency{},
 				},
 				{
 					Type:         models.AnnotationTypeController,
 					Target:       "UserController",
 					Parameters:   map[string]string{},
-					Dependencies: []string{},
+					Dependencies: []models.Dependency{},
 				},
 				{
 					Type:   models.AnnotationTypeRoute,
@@ -1896,7 +1903,7 @@ func TestParser_MiddlewareValidation(t *testing.T) {
 						"path":        "/users",
 						"-Middleware": "Auth,InvalidMiddleware",
 					},
-					Dependencies: []string{},
+					Dependencies: []models.Dependency{},
 				},
 			},
 			expectError: true,
@@ -1942,7 +1949,7 @@ func TestParser_MiddlewareOrdering(t *testing.T) {
 			Parameters: map[string]string{
 				"name": "Auth",
 			},
-			Dependencies: []string{},
+			Dependencies: []models.Dependency{},
 		},
 		{
 			Type:   models.AnnotationTypeMiddleware,
@@ -1950,7 +1957,7 @@ func TestParser_MiddlewareOrdering(t *testing.T) {
 			Parameters: map[string]string{
 				"name": "Logging",
 			},
-			Dependencies: []string{},
+			Dependencies: []models.Dependency{},
 		},
 		{
 			Type:   models.AnnotationTypeMiddleware,
@@ -1958,13 +1965,13 @@ func TestParser_MiddlewareOrdering(t *testing.T) {
 			Parameters: map[string]string{
 				"name": "RateLimit",
 			},
-			Dependencies: []string{},
+			Dependencies: []models.Dependency{},
 		},
 		{
 			Type:         models.AnnotationTypeController,
 			Target:       "UserController",
 			Parameters:   map[string]string{},
-			Dependencies: []string{},
+			Dependencies: []models.Dependency{},
 		},
 		{
 			Type:   models.AnnotationTypeRoute,
@@ -1974,7 +1981,7 @@ func TestParser_MiddlewareOrdering(t *testing.T) {
 				"path":        "/users",
 				"-Middleware": "Auth,Logging,RateLimit",
 			},
-			Dependencies: []string{},
+			Dependencies: []models.Dependency{},
 		},
 	}
 
@@ -2042,7 +2049,7 @@ func (m *AuthMiddleware) Handle(next echo.HandlerFunc) echo.HandlerFunc {
 					Name:         "AuthMiddleware",
 					PackagePath:  "/test",
 					StructName:   "AuthMiddleware",
-					Dependencies: []string{"TokenServiceInterface"},
+					Dependencies: []models.Dependency{{Name: "TokenServiceInterface", Type: "TokenServiceInterface"}},
 				},
 			},
 		},
@@ -2079,13 +2086,13 @@ func (m *LoggingMiddleware) Handle(next echo.HandlerFunc) echo.HandlerFunc {
 					Name:         "AuthMiddleware",
 					PackagePath:  "/test",
 					StructName:   "AuthMiddleware",
-					Dependencies: []string{"TokenServiceInterface"},
+					Dependencies: []models.Dependency{{Name: "TokenServiceInterface", Type: "TokenServiceInterface"}},
 				},
 				{
 					Name:         "LoggingMiddleware",
 					PackagePath:  "/test",
 					StructName:   "LoggingMiddleware",
-					Dependencies: []string{"LoggerInterface"},
+					Dependencies: []models.Dependency{{Name: "LoggerInterface", Type: "LoggerInterface"}},
 				},
 			},
 		},
@@ -2235,8 +2242,8 @@ func (m *AuthMiddleware) Handle(next echo.HandlerFunc, extra string) echo.Handle
 					}
 
 					for j, expectedDep := range expected.Dependencies {
-						if j >= len(actual.Dependencies) || actual.Dependencies[j] != expectedDep {
-							t.Errorf("middleware %d: expected dependency %s at position %d, got %s", i, expectedDep, j, actual.Dependencies[j])
+						if j >= len(actual.Dependencies) || actual.Dependencies[j].Type != expectedDep.Type {
+							t.Errorf("middleware %d: expected dependency %s at position %d, got %s", i, expectedDep.Type, j, actual.Dependencies[j].Type)
 						}
 					}
 				}
@@ -2813,7 +2820,7 @@ func (s *DatabaseService) Stop(ctx context.Context) error {
 					HasLifecycle: true,
 					IsManual:     false,
 					ModuleName:   "",
-					Dependencies: []string{"*Config"},
+					Dependencies: []models.Dependency{{Name: "*Config", Type: "*Config"}},
 				},
 			},
 		},
@@ -2835,7 +2842,7 @@ type ConfigService struct {
 					HasLifecycle: false,
 					IsManual:     true,
 					ModuleName:   "CustomModule",
-					Dependencies: []string{"LoggerInterface"},
+					Dependencies: []models.Dependency{{Name: "LoggerInterface", Type: "LoggerInterface"}},
 				},
 			},
 		},
@@ -2857,7 +2864,7 @@ type ConfigService struct {
 					HasLifecycle: false,
 					IsManual:     true,
 					ModuleName:   "Module",
-					Dependencies: []string{"LoggerInterface"},
+					Dependencies: []models.Dependency{{Name: "LoggerInterface", Type: "LoggerInterface"}},
 				},
 			},
 		},
@@ -2879,7 +2886,7 @@ type UserService struct {
 					HasLifecycle: false,
 					IsManual:     false,
 					ModuleName:   "",
-					Dependencies: []string{"UserRepository"},
+					Dependencies: []models.Dependency{{Name: "UserRepository", Type: "UserRepository"}},
 				},
 			},
 		},
@@ -2920,7 +2927,7 @@ type UserService struct {
 					HasLifecycle: true,
 					IsManual:     false,
 					ModuleName:   "",
-					Dependencies: []string{"*Config"},
+					Dependencies: []models.Dependency{{Name: "*Config", Type: "*Config"}},
 				},
 				{
 					Name:         "ConfigService",
@@ -2928,7 +2935,7 @@ type UserService struct {
 					HasLifecycle: false,
 					IsManual:     true,
 					ModuleName:   "CustomModule",
-					Dependencies: []string{"LoggerInterface"},
+					Dependencies: []models.Dependency{{Name: "LoggerInterface", Type: "LoggerInterface"}},
 				},
 				{
 					Name:         "UserService",
@@ -2936,7 +2943,7 @@ type UserService struct {
 					HasLifecycle: false,
 					IsManual:     false,
 					ModuleName:   "",
-					Dependencies: []string{"UserRepository"},
+					Dependencies: []models.Dependency{{Name: "UserRepository", Type: "UserRepository"}},
 				},
 			},
 		},
@@ -2998,8 +3005,8 @@ type UserService struct {
 					t.Errorf("service %d: expected %d dependencies, got %d", i, len(expected.Dependencies), len(actual.Dependencies))
 				} else {
 					for j, dep := range expected.Dependencies {
-						if actual.Dependencies[j] != dep {
-							t.Errorf("service %d dependency %d: expected %s, got %s", i, j, dep, actual.Dependencies[j])
+						if actual.Dependencies[j].Type != dep.Type {
+							t.Errorf("service %d dependency %d: expected %s, got %s", i, j, dep.Type, actual.Dependencies[j].Type)
 						}
 					}
 				}
@@ -3054,8 +3061,8 @@ func (s *DatabaseService) Start(ctx context.Context) error {
 		return
 	}
 
-	if service.Dependencies[0] != "*config.Config" {
-		t.Errorf("expected dependency '*config.Config', got '%s'", service.Dependencies[0])
+	if service.Dependencies[0].Name != "*config.Config" {
+		t.Errorf("expected dependency '*config.Config', got '%s'", service.Dependencies[0].Name)
 	}
 }
 
@@ -3265,6 +3272,166 @@ func (s *DatabaseService) Start() error {
 }
 
 // TestParser_CoreServiceValidation tests validation of core service annotations
+func TestParser_RouteParserValidation(t *testing.T) {
+	tests := []struct {
+		name        string
+		source      string
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "valid parser function",
+			source: `package main
+
+import (
+	"github.com/labstack/echo/v4"
+	"github.com/google/uuid"
+)
+
+//axon::route_parser UUID
+func ParseUUID(c echo.Context, paramValue string) (uuid.UUID, error) {
+	return uuid.Parse(paramValue)
+}`,
+			expectError: false,
+		},
+		{
+			name: "parser with wrong number of parameters",
+			source: `package main
+
+import "github.com/labstack/echo/v4"
+
+//axon::route_parser InvalidType
+func InvalidParser(paramValue string) (string, error) {
+	return paramValue, nil
+}`,
+			expectError: true,
+			errorMsg:    "parser function 'InvalidParser' must have exactly 2 parameters",
+		},
+		{
+			name: "parser with wrong first parameter type",
+			source: `package main
+
+//axon::route_parser InvalidType
+func InvalidParser(ctx string, paramValue string) (string, error) {
+	return paramValue, nil
+}`,
+			expectError: true,
+			errorMsg:    "parser function 'InvalidParser' first parameter must be echo.Context",
+		},
+		{
+			name: "parser with wrong second parameter type",
+			source: `package main
+
+import "github.com/labstack/echo/v4"
+
+//axon::route_parser InvalidType
+func InvalidParser(c echo.Context, paramValue int) (string, error) {
+	return "", nil
+}`,
+			expectError: true,
+			errorMsg:    "parser function 'InvalidParser' second parameter must be string",
+		},
+		{
+			name: "parser with wrong return type count",
+			source: `package main
+
+import "github.com/labstack/echo/v4"
+
+//axon::route_parser InvalidType
+func InvalidParser(c echo.Context, paramValue string) string {
+	return paramValue
+}`,
+			expectError: true,
+			errorMsg:    "parser function 'InvalidParser' must return exactly 2 values",
+		},
+		{
+			name: "parser with wrong second return type",
+			source: `package main
+
+import "github.com/labstack/echo/v4"
+
+//axon::route_parser InvalidType
+func InvalidParser(c echo.Context, paramValue string) (string, string) {
+	return paramValue, ""
+}`,
+			expectError: true,
+			errorMsg:    "parser function 'InvalidParser' second return value must be error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewParser()
+			_, err := p.ParseSource("test.go", tt.source)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("expected error but got none")
+				} else if !strings.Contains(err.Error(), tt.errorMsg) {
+					t.Errorf("expected error containing '%s', got '%s'", tt.errorMsg, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestParser_RouteParserMetadataExtraction(t *testing.T) {
+	source := `package main
+
+import (
+	"github.com/labstack/echo/v4"
+	"github.com/google/uuid"
+)
+
+//axon::route_parser UUID
+func ParseUUID(c echo.Context, paramValue string) (uuid.UUID, error) {
+	return uuid.Parse(paramValue)
+}
+
+//axon::route_parser CustomID
+func ParseCustomID(c echo.Context, value string) (string, error) {
+	return value, nil
+}`
+
+	p := NewParser()
+	metadata, err := p.ParseSource("test.go", source)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(metadata.RouteParsers) != 2 {
+		t.Errorf("expected 2 route parsers, got %d", len(metadata.RouteParsers))
+	}
+
+	// Check first parser
+	parser1 := metadata.RouteParsers[0]
+	if parser1.TypeName != "UUID" {
+		t.Errorf("expected type name 'UUID', got '%s'", parser1.TypeName)
+	}
+	if parser1.FunctionName != "ParseUUID" {
+		t.Errorf("expected function name 'ParseUUID', got '%s'", parser1.FunctionName)
+	}
+	if len(parser1.ParameterTypes) != 2 || parser1.ParameterTypes[0] != "echo.Context" || parser1.ParameterTypes[1] != "string" {
+		t.Errorf("expected parameter types [echo.Context, string], got %v", parser1.ParameterTypes)
+	}
+	if len(parser1.ReturnTypes) != 2 || parser1.ReturnTypes[0] != "uuid.UUID" || parser1.ReturnTypes[1] != "error" {
+		t.Errorf("expected return types [uuid.UUID, error], got %v", parser1.ReturnTypes)
+	}
+
+	// Check second parser
+	parser2 := metadata.RouteParsers[1]
+	if parser2.TypeName != "CustomID" {
+		t.Errorf("expected type name 'CustomID', got '%s'", parser2.TypeName)
+	}
+	if parser2.FunctionName != "ParseCustomID" {
+		t.Errorf("expected function name 'ParseCustomID', got '%s'", parser2.FunctionName)
+	}
+}
+
 func TestParser_CoreServiceValidation(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -3344,5 +3511,183 @@ type ConfigService struct {}`,
 				}
 			}
 		})
+	}
+}
+
+func TestParser_RouteParserSignatureValidation_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name        string
+		source      string
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "parser with pointer return type",
+			source: `package main
+
+import "github.com/labstack/echo/v4"
+
+//axon::route_parser PointerType
+func ParsePointer(c echo.Context, paramValue string) (*string, error) {
+	return &paramValue, nil
+}`,
+			expectError: false,
+		},
+		{
+			name: "parser with qualified return type",
+			source: `package main
+
+import (
+	"github.com/labstack/echo/v4"
+	"time"
+)
+
+//axon::route_parser TimeType
+func ParseTime(c echo.Context, paramValue string) (time.Time, error) {
+	return time.Parse("2006-01-02", paramValue)
+}`,
+			expectError: false,
+		},
+		{
+			name: "parser with slice return type",
+			source: `package main
+
+import "github.com/labstack/echo/v4"
+
+//axon::route_parser SliceType
+func ParseSlice(c echo.Context, paramValue string) ([]string, error) {
+	return strings.Split(paramValue, ","), nil
+}`,
+			expectError: false,
+		},
+		{
+			name: "parser with three parameters",
+			source: `package main
+
+import "github.com/labstack/echo/v4"
+
+//axon::route_parser ThreeParams
+func ParseThreeParams(c echo.Context, paramValue string, extra int) (string, error) {
+	return paramValue, nil
+}`,
+			expectError: true,
+			errorMsg:    "parser function 'ParseThreeParams' must have exactly 2 parameters",
+		},
+		{
+			name: "parser with no parameters",
+			source: `package main
+
+//axon::route_parser NoParams
+func ParseNoParams() (string, error) {
+	return "", nil
+}`,
+			expectError: true,
+			errorMsg:    "parser function 'ParseNoParams' must have exactly 2 parameters",
+		},
+		{
+			name: "parser with three return values",
+			source: `package main
+
+import "github.com/labstack/echo/v4"
+
+//axon::route_parser ThreeReturns
+func ParseThreeReturns(c echo.Context, paramValue string) (string, error, bool) {
+	return paramValue, nil, true
+}`,
+			expectError: true,
+			errorMsg:    "parser function 'ParseThreeReturns' must return exactly 2 values",
+		},
+		{
+			name: "parser with no return values",
+			source: `package main
+
+import "github.com/labstack/echo/v4"
+
+//axon::route_parser NoReturns
+func ParseNoReturns(c echo.Context, paramValue string) {
+}`,
+			expectError: true,
+			errorMsg:    "parser function 'ParseNoReturns' must return exactly 2 values",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewParser()
+			_, err := p.ParseSource("test.go", tt.source)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("expected error but got none")
+				} else if !strings.Contains(err.Error(), tt.errorMsg) {
+					t.Errorf("expected error containing '%s', got '%s'", tt.errorMsg, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestParser_RouteParserSignatureExtraction_ComplexTypes(t *testing.T) {
+	source := `package main
+
+import (
+	"github.com/labstack/echo/v4"
+	"time"
+)
+
+//axon::route_parser PointerType
+func ParsePointer(c echo.Context, paramValue string) (*string, error) {
+	return &paramValue, nil
+}
+
+//axon::route_parser TimeType
+func ParseTime(c echo.Context, paramValue string) (time.Time, error) {
+	return time.Parse("2006-01-02", paramValue)
+}
+
+//axon::route_parser SliceType
+func ParseSlice(c echo.Context, paramValue string) ([]string, error) {
+	return []string{paramValue}, nil
+}`
+
+	p := NewParser()
+	metadata, err := p.ParseSource("test.go", source)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(metadata.RouteParsers) != 3 {
+		t.Errorf("expected 3 route parsers, got %d", len(metadata.RouteParsers))
+	}
+
+	// Check pointer type parser
+	parser1 := metadata.RouteParsers[0]
+	if parser1.TypeName != "PointerType" {
+		t.Errorf("expected type name 'PointerType', got '%s'", parser1.TypeName)
+	}
+	if len(parser1.ReturnTypes) != 2 || parser1.ReturnTypes[0] != "*string" || parser1.ReturnTypes[1] != "error" {
+		t.Errorf("expected return types [*string, error], got %v", parser1.ReturnTypes)
+	}
+
+	// Check qualified type parser
+	parser2 := metadata.RouteParsers[1]
+	if parser2.TypeName != "TimeType" {
+		t.Errorf("expected type name 'TimeType', got '%s'", parser2.TypeName)
+	}
+	if len(parser2.ReturnTypes) != 2 || parser2.ReturnTypes[0] != "time.Time" || parser2.ReturnTypes[1] != "error" {
+		t.Errorf("expected return types [time.Time, error], got %v", parser2.ReturnTypes)
+	}
+
+	// Check slice type parser
+	parser3 := metadata.RouteParsers[2]
+	if parser3.TypeName != "SliceType" {
+		t.Errorf("expected type name 'SliceType', got '%s'", parser3.TypeName)
+	}
+	if len(parser3.ReturnTypes) != 2 || parser3.ReturnTypes[0] != "[]string" || parser3.ReturnTypes[1] != "error" {
+		t.Errorf("expected return types [[]string, error], got %v", parser3.ReturnTypes)
 	}
 }

@@ -19,16 +19,29 @@ type ResponseHandlerData struct {
 func GenerateResponseHandling(route models.RouteMetadata, controllerName string) (string, error) {
 	handlerCall := generateHandlerCall(route, controllerName)
 	
+	// Check if err variable is already declared by parameter binding
+	errAlreadyDeclared := hasPathParameters(route.Parameters)
+	
 	switch route.ReturnType.Type {
 	case models.ReturnTypeDataError:
-		return generateDataErrorResponse(handlerCall), nil
+		return generateDataErrorResponse(handlerCall, errAlreadyDeclared), nil
 	case models.ReturnTypeResponseError:
-		return generateResponseErrorResponse(handlerCall), nil
+		return generateResponseErrorResponse(handlerCall, errAlreadyDeclared), nil
 	case models.ReturnTypeError:
-		return generateErrorResponse(handlerCall), nil
+		return generateErrorResponse(handlerCall, errAlreadyDeclared), nil
 	default:
 		return "", fmt.Errorf("unsupported return type: %v", route.ReturnType.Type)
 	}
+}
+
+// hasPathParameters checks if the route has path parameters that would declare err variable
+func hasPathParameters(parameters []models.Parameter) bool {
+	for _, param := range parameters {
+		if param.Source == models.ParameterSourcePath {
+			return true
+		}
+	}
+	return false
 }
 
 // generateHandlerCall creates the handler method call with appropriate parameters
@@ -83,7 +96,7 @@ func generateHandlerCall(route models.RouteMetadata, controllerName string) stri
 			})
 		case models.ParameterSourceBody:
 			orderedParams = append(orderedParams, paramWithPosition{
-				name:     param.Name, // Use the actual parameter name from the method signature
+				name:     "body", // Always use 'body' for body parameters in wrapper
 				position: -1, // Will be assigned later
 				source:   param.Source,
 			})
@@ -134,17 +147,28 @@ func generateHandlerCall(route models.RouteMetadata, controllerName string) stri
 }
 
 // generateDataErrorResponse generates response handling for (data, error) return type
-func generateDataErrorResponse(handlerCall string) string {
-	return fmt.Sprintf(`		data, err := %s
+func generateDataErrorResponse(handlerCall string, errAlreadyDeclared bool) string {
+	if errAlreadyDeclared {
+		return fmt.Sprintf(`		var data interface{}
+		data, err = %s
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 		}
 		return c.JSON(http.StatusOK, data)`, handlerCall)
+	} else {
+		return fmt.Sprintf(`		data, err := %s
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		return c.JSON(http.StatusOK, data)`, handlerCall)
+	}
 }
 
 // generateResponseErrorResponse generates response handling for (*Response, error) return type
-func generateResponseErrorResponse(handlerCall string) string {
-	return fmt.Sprintf(`		response, err := %s
+func generateResponseErrorResponse(handlerCall string, errAlreadyDeclared bool) string {
+	if errAlreadyDeclared {
+		return fmt.Sprintf(`		var response *axon.Response
+		response, err = %s
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 		}
@@ -152,15 +176,32 @@ func generateResponseErrorResponse(handlerCall string) string {
 			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
 		}
 		return c.JSON(response.StatusCode, response.Body)`, handlerCall)
+	} else {
+		return fmt.Sprintf(`		response, err := %s
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		if response == nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
+		}
+		return c.JSON(response.StatusCode, response.Body)`, handlerCall)
+	}
 }
 
 // generateErrorResponse generates response handling for error return type
-func generateErrorResponse(handlerCall string) string {
-	return fmt.Sprintf(`		handlerErr := %s
-		if handlerErr != nil {
-			return handlerErr
+func generateErrorResponse(handlerCall string, errAlreadyDeclared bool) string {
+	var assignment string
+	if errAlreadyDeclared {
+		assignment = "err ="
+	} else {
+		assignment = "err :="
+	}
+	
+	return fmt.Sprintf(`		%s %s
+		if err != nil {
+			return err
 		}
-		return nil`, handlerCall)
+		return nil`, assignment, handlerCall)
 }
 
 // hasPassContextFlag checks if the route has the PassContext flag
@@ -169,11 +210,11 @@ func hasPassContextFlag(flags []string) bool {
 }
 
 // GenerateRouteWrapper generates a complete route wrapper function
-func GenerateRouteWrapper(route models.RouteMetadata, controllerName string) (string, error) {
+func GenerateRouteWrapper(route models.RouteMetadata, controllerName string, parserRegistry ParserRegistryInterface) (string, error) {
 	wrapperName := fmt.Sprintf("wrap%s%s", controllerName, route.HandlerName)
 	
 	// Generate parameter binding code
-	paramBindingCode, err := GenerateParameterBindingCode(route.Parameters)
+	paramBindingCode, err := GenerateParameterBindingCode(route.Parameters, parserRegistry)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate parameter binding: %w", err)
 	}
@@ -235,11 +276,11 @@ func GenerateRouteWrapper(route models.RouteMetadata, controllerName string) (st
 func generateBodyBindingCode(parameters []models.Parameter) string {
 	for _, param := range parameters {
 		if param.Source == models.ParameterSourceBody {
-			return fmt.Sprintf(`		var %s %s
-		if err := c.Bind(&%s); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
+			return fmt.Sprintf(`		var body %s
+		if err := c.Bind(&body); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
-`, param.Name, param.Type, param.Name)
+`, param.Type)
 		}
 	}
 	return ""

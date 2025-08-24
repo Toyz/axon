@@ -9,12 +9,14 @@ import (
 
 	"github.com/toyz/axon/internal/models"
 	"github.com/toyz/axon/internal/registry"
+	"github.com/toyz/axon/pkg/axon"
 )
 
 // Parser implements the AnnotationParser interface
 type Parser struct {
 	fileSet            *token.FileSet
 	middlewareRegistry registry.MiddlewareRegistry
+	skipParserValidation bool // Skip custom parser validation during discovery phase
 }
 
 // NewParser creates a new annotation parser
@@ -147,7 +149,7 @@ func (p *Parser) ExtractAnnotations(file *ast.File, fileName string) ([]models.A
 							// Extract annotations from comments
 							if node.Doc != nil {
 								for _, comment := range node.Doc.List {
-									if annotation, err := p.parseAnnotationComment(comment.Text, typeSpec.Name.Name); err == nil {
+									if annotation, err := p.parseAnnotationComment(comment.Text, typeSpec.Name.Name, comment.Pos()); err == nil {
 										// Extract dependencies for controller, middleware, and core service annotations
 										if annotation.Type == models.AnnotationTypeController || 
 										   annotation.Type == models.AnnotationTypeMiddleware ||
@@ -179,7 +181,7 @@ func (p *Parser) ExtractAnnotations(file *ast.File, fileName string) ([]models.A
 				}
 
 				for _, comment := range node.Doc.List {
-					if annotation, err := p.parseAnnotationComment(comment.Text, targetName); err == nil {
+					if annotation, err := p.parseAnnotationComment(comment.Text, targetName, comment.Pos()); err == nil {
 						annotation.FileName = fileName
 						annotations = append(annotations, annotation)
 					}
@@ -193,7 +195,7 @@ func (p *Parser) ExtractAnnotations(file *ast.File, fileName string) ([]models.A
 }
 
 // parseAnnotationComment parses a single comment line for axon:: annotations
-func (p *Parser) parseAnnotationComment(comment, target string) (models.Annotation, error) {
+func (p *Parser) parseAnnotationComment(comment, target string, pos token.Pos) (models.Annotation, error) {
 	// Remove comment prefix
 	text := strings.TrimPrefix(comment, "//")
 	text = strings.TrimSpace(text)
@@ -221,6 +223,7 @@ func (p *Parser) parseAnnotationComment(comment, target string) (models.Annotati
 		Target:     target,
 		Parameters: make(map[string]string),
 		Flags:      []string{},
+		Line:       p.fileSet.Position(pos).Line,
 	}
 
 	// Parse remaining parts as parameters and flags
@@ -253,6 +256,11 @@ func (p *Parser) parseAnnotationComment(comment, target string) (models.Annotati
 				}
 			case models.AnnotationTypeCore:
 				// Core services may have additional parameters in the future
+			case models.AnnotationTypeRouteParser:
+				// For route parsers: //axon::route_parser TypeName
+				if i == 1 {
+					annotation.Parameters[ParamName] = part
+				}
 			}
 		}
 	}
@@ -269,6 +277,10 @@ func (p *Parser) parseAnnotationComment(comment, target string) (models.Annotati
 	case models.AnnotationTypeMiddleware:
 		if _, hasName := annotation.Parameters[ParamName]; !hasName {
 			return models.Annotation{}, fmt.Errorf("middleware annotation missing name")
+		}
+	case models.AnnotationTypeRouteParser:
+		if _, hasName := annotation.Parameters[ParamName]; !hasName {
+			return models.Annotation{}, fmt.Errorf("route_parser annotation missing type name")
 		}
 	}
 
@@ -294,6 +306,8 @@ func (p *Parser) parseAnnotationType(typeStr string) (models.AnnotationType, err
 		return models.AnnotationTypeInit, nil
 	case AnnotationTypeLogger:
 		return models.AnnotationTypeLogger, nil
+	case AnnotationTypeRouteParser:
+		return models.AnnotationTypeRouteParser, nil
 	default:
 		return 0, fmt.Errorf("unknown annotation type: %s", typeStr)
 	}
@@ -554,10 +568,52 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 			
 			metadata.Loggers = append(metadata.Loggers, logger)
 
+		case models.AnnotationTypeRouteParser:
+			// Route parser annotations should be on function declarations
+			typeName := annotation.Parameters[ParamName]
+			
+			// Validate that this is actually on a function and has correct signature
+			file := fileMap[annotation.FileName]
+			if file != nil {
+				err := p.ValidateParserFunctionSignature(file, annotation.Target, typeName)
+				if err != nil {
+					return fmt.Errorf("parser function validation failed for %s: %w", annotation.Target, err)
+				}
+			}
+			
+			parser := models.RouteParserMetadata{
+				TypeName:     typeName,
+				FunctionName: annotation.Target,
+				PackagePath:  metadata.PackagePath,
+				FileName:     annotation.FileName,
+				Line:         annotation.Line,
+			}
+			
+			// Extract function signature information for validation
+			if file != nil {
+				paramTypes, returnTypes, err := p.extractParserSignature(file, annotation.Target)
+				if err != nil {
+					return fmt.Errorf("failed to extract parser signature for %s: %w", annotation.Target, err)
+				}
+				parser.ParameterTypes = paramTypes
+				parser.ReturnTypes = returnTypes
+			}
+			
+			metadata.RouteParsers = append(metadata.RouteParsers, parser)
+
 		case models.AnnotationTypeInterface:
 			// Interface annotations are processed in combination with other annotations
 			// They don't create standalone components, so we skip them here
 			continue
+		}
+	}
+
+	// Validate and link custom parsers to their registered parser functions
+	// Skip validation during discovery phase
+	if !p.skipParserValidation {
+		err := p.validateAndLinkCustomParsers(metadata)
+		if err != nil {
+			return fmt.Errorf("parser validation failed: %w", err)
 		}
 	}
 
@@ -836,10 +892,11 @@ func (p *Parser) parseParameterDefinition(paramDef string, isEchoSyntax bool) (m
 		}
 		
 		return models.Parameter{
-			Name:     name,
-			Type:     "string", // Echo parameters default to string
-			Source:   models.ParameterSourcePath,
-			Required: true,
+			Name:         name,
+			Type:         "string", // Echo parameters default to string
+			Source:       models.ParameterSourcePath,
+			Required:     true,
+			IsCustomType: false, // Echo syntax always uses built-in string type
 		}, nil
 	}
 	
@@ -862,24 +919,228 @@ func (p *Parser) parseParameterDefinition(paramDef string, isEchoSyntax bool) (m
 		return models.Parameter{}, fmt.Errorf("invalid parameter type '%s': %w", typeStr, err)
 	}
 	
-	return models.Parameter{
-		Name:     name,
-		Type:     goType,
-		Source:   models.ParameterSourcePath,
-		Required: true, // Path parameters are always required
-	}, nil
+	// Check if this is a custom type (not a built-in type)
+	isCustomType := !axon.IsBuiltinType(typeStr)
+	
+	param := models.Parameter{
+		Name:         name,
+		Type:         goType,
+		Source:       models.ParameterSourcePath,
+		Required:     true, // Path parameters are always required
+		IsCustomType: isCustomType,
+	}
+	
+	// For custom types, we'll resolve the parser function and import path later
+	// during the parser registry validation phase
+	
+	return param, nil
 }
 
 // validateParameterType validates and normalizes parameter types
 func (p *Parser) validateParameterType(typeStr string) (string, error) {
+	// Check built-in types first
 	switch typeStr {
 	case "int":
 		return "int", nil
 	case "string":
 		return "string", nil
-	default:
-		return "", fmt.Errorf("unsupported parameter type '%s', supported types: int, string", typeStr)
+	case "float64", "float32":
+		return typeStr, nil
 	}
+	
+	// Check if it's a built-in parser type (including aliases)
+	if axon.IsBuiltinType(typeStr) {
+		return axon.ResolveTypeAlias(typeStr), nil
+	}
+	
+	// For custom types, we'll validate them later during parser registry lookup
+	// For now, accept any type that looks like a valid Go type
+	if p.isValidGoTypeName(typeStr) {
+		return typeStr, nil
+	}
+	
+	return "", fmt.Errorf("invalid parameter type '%s'", typeStr)
+}
+
+// isValidGoTypeName checks if a string is a valid Go type name
+func (p *Parser) isValidGoTypeName(typeName string) bool {
+	if typeName == "" {
+		return false
+	}
+	
+	// Allow package.Type syntax (e.g., uuid.UUID, time.Time)
+	if strings.Contains(typeName, ".") {
+		parts := strings.Split(typeName, ".")
+		if len(parts) != 2 {
+			return false
+		}
+		// Both package and type name should be valid identifiers
+		return p.isValidIdentifier(parts[0]) && p.isValidIdentifier(parts[1])
+	}
+	
+	// Single identifier (e.g., CustomType)
+	return p.isValidIdentifier(typeName)
+}
+
+// isValidIdentifier checks if a string is a valid Go identifier
+func (p *Parser) isValidIdentifier(name string) bool {
+	if name == "" {
+		return false
+	}
+	
+	// First character must be letter or underscore
+	first := rune(name[0])
+	if !((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') || first == '_') {
+		return false
+	}
+	
+	// Remaining characters must be letters, digits, or underscores
+	for _, r := range name[1:] {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_') {
+			return false
+		}
+	}
+	
+	return true
+}
+
+// validateAndLinkCustomParsers validates that all custom parameter types have registered parsers
+// and links them to the appropriate parser functions
+func (p *Parser) validateAndLinkCustomParsers(metadata *models.PackageMetadata) error {
+	// Build a registry of available parsers from the metadata
+	parserRegistry := make(map[string]models.RouteParserMetadata)
+	
+	// Add parsers from current package
+	for _, parser := range metadata.RouteParsers {
+		parserRegistry[parser.TypeName] = parser
+	}
+	
+	// Add built-in parsers
+	for typeName, parser := range axon.BuiltinParsers {
+		parserRegistry[typeName] = parser
+	}
+	
+	// Validate all routes and their parameters
+	for controllerIdx := range metadata.Controllers {
+		controller := &metadata.Controllers[controllerIdx]
+		
+		for routeIdx := range controller.Routes {
+			route := &controller.Routes[routeIdx]
+			
+			for paramIdx := range route.Parameters {
+				param := &route.Parameters[paramIdx]
+				
+				// Only validate custom types
+				if param.IsCustomType {
+					// Look for a registered parser
+					parser, exists := parserRegistry[param.Type]
+					if !exists {
+						// Try resolving aliases
+						resolvedType := axon.ResolveTypeAlias(param.Type)
+						if resolvedType != param.Type {
+							parser, exists = parserRegistry[resolvedType]
+							if exists {
+								param.Type = resolvedType // Update to resolved type
+							}
+						}
+					}
+					
+					if !exists {
+						return fmt.Errorf("no parser registered for custom type '%s' used in route %s %s (parameter '%s'). Available parsers: %s",
+							param.Type,
+							route.Method,
+							route.Path,
+							param.Name,
+							p.formatAvailableParsers(parserRegistry))
+					}
+					
+					// Link the parameter to the parser
+					param.ParserFunc = parser.FunctionName
+				}
+			}
+		}
+	}
+	
+	return nil
+}
+
+// SetSkipParserValidation controls whether custom parser validation is skipped
+func (p *Parser) SetSkipParserValidation(skip bool) {
+	p.skipParserValidation = skip
+}
+
+// ValidateCustomParsersWithRegistry validates custom parsers using an external parser registry
+func (p *Parser) ValidateCustomParsersWithRegistry(metadata *models.PackageMetadata, parserRegistry map[string]models.RouteParserMetadata) error {
+	// Validate all routes and their parameters
+	for controllerIdx := range metadata.Controllers {
+		controller := &metadata.Controllers[controllerIdx]
+		
+		for routeIdx := range controller.Routes {
+			route := &controller.Routes[routeIdx]
+			
+			for paramIdx := range route.Parameters {
+				param := &route.Parameters[paramIdx]
+				
+				// Only validate custom types
+				if param.IsCustomType {
+					// Look for a registered parser
+					parser, exists := parserRegistry[param.Type]
+					if !exists {
+						// Try resolving aliases
+						resolvedType := axon.ResolveTypeAlias(param.Type)
+						if resolvedType != param.Type {
+							parser, exists = parserRegistry[resolvedType]
+							if exists {
+								param.Type = resolvedType // Update to resolved type
+							}
+						}
+					}
+					
+					if !exists {
+						return fmt.Errorf("no parser registered for custom type '%s' used in route %s %s (parameter '%s'). Available parsers: %s",
+							param.Type,
+							route.Method,
+							route.Path,
+							param.Name,
+							p.formatAvailableParsersFromMap(parserRegistry))
+					}
+					
+					// Link the parameter to the parser
+					param.ParserFunc = parser.FunctionName
+				}
+			}
+		}
+	}
+	
+	return nil
+}
+
+// formatAvailableParsers formats the list of available parsers for error messages
+func (p *Parser) formatAvailableParsers(parsers map[string]models.RouteParserMetadata) string {
+	return p.formatAvailableParsersFromMap(parsers)
+}
+
+// formatAvailableParsersFromMap formats the list of available parsers from a map for error messages
+func (p *Parser) formatAvailableParsersFromMap(parsers map[string]models.RouteParserMetadata) string {
+	if len(parsers) == 0 {
+		return "none"
+	}
+	
+	var types []string
+	for typeName := range parsers {
+		types = append(types, typeName)
+	}
+	
+	// Sort for consistent output
+	for i := 0; i < len(types)-1; i++ {
+		for j := i + 1; j < len(types); j++ {
+			if types[i] > types[j] {
+				types[i], types[j] = types[j], types[i]
+			}
+		}
+	}
+	
+	return strings.Join(types, ", ")
 }
 
 // addRouteToController finds the appropriate controller and adds the route to it
@@ -974,6 +1235,119 @@ func (p *Parser) isEchoHandlerFunc(expr ast.Expr) bool {
 		if ident, ok := selectorExpr.X.(*ast.Ident); ok {
 			return ident.Name == "echo" && selectorExpr.Sel.Name == "HandlerFunc"
 		}
+	}
+	return false
+}
+
+// ValidateParserFunctionSignature validates that a parser function has the correct signature
+// Expected signature: func(c echo.Context, paramValue string) (T, error)
+func (p *Parser) ValidateParserFunctionSignature(file *ast.File, functionName, typeName string) error {
+	var parserFunc *ast.FuncDecl
+	
+	// Find the parser function
+	ast.Inspect(file, func(n ast.Node) bool {
+		if funcDecl, ok := n.(*ast.FuncDecl); ok {
+			// Check if this is the parser function (not a method)
+			if funcDecl.Recv == nil && funcDecl.Name.Name == functionName {
+				parserFunc = funcDecl
+				return false // Stop searching
+			}
+		}
+		return true
+	})
+	
+	if parserFunc == nil {
+		return fmt.Errorf("parser function '%s' not found", functionName)
+	}
+	
+	// Validate function signature: func(c echo.Context, paramValue string) (T, error)
+	
+	// Check parameters: should have exactly 2 parameters
+	if parserFunc.Type.Params == nil || len(parserFunc.Type.Params.List) != 2 {
+		return fmt.Errorf("parser function '%s' must have exactly 2 parameters: (c echo.Context, paramValue string)", functionName)
+	}
+	
+	// Check first parameter: echo.Context
+	firstParam := parserFunc.Type.Params.List[0]
+	if !p.isEchoContext(firstParam.Type) {
+		return fmt.Errorf("parser function '%s' first parameter must be echo.Context", functionName)
+	}
+	
+	// Check second parameter: string
+	secondParam := parserFunc.Type.Params.List[1]
+	if !p.isStringType(secondParam.Type) {
+		return fmt.Errorf("parser function '%s' second parameter must be string", functionName)
+	}
+	
+	// Check return values: should have exactly 2 return values
+	if parserFunc.Type.Results == nil || len(parserFunc.Type.Results.List) != 2 {
+		return fmt.Errorf("parser function '%s' must return exactly 2 values: (T, error)", functionName)
+	}
+	
+	// Check second return value: error
+	secondReturn := parserFunc.Type.Results.List[1]
+	if !p.isErrorType(secondReturn.Type) {
+		return fmt.Errorf("parser function '%s' second return value must be error", functionName)
+	}
+	
+	// First return value can be any type T (we don't validate the specific type here)
+	// The type name from the annotation should match the actual return type, but we'll
+	// leave that validation for the code generation phase
+	
+	return nil
+}
+
+// extractParserSignature extracts parameter and return types from a parser function
+func (p *Parser) extractParserSignature(file *ast.File, functionName string) ([]string, []string, error) {
+	var parserFunc *ast.FuncDecl
+	
+	// Find the parser function
+	ast.Inspect(file, func(n ast.Node) bool {
+		if funcDecl, ok := n.(*ast.FuncDecl); ok {
+			if funcDecl.Recv == nil && funcDecl.Name.Name == functionName {
+				parserFunc = funcDecl
+				return false
+			}
+		}
+		return true
+	})
+	
+	if parserFunc == nil {
+		return nil, nil, fmt.Errorf("parser function '%s' not found", functionName)
+	}
+	
+	var paramTypes []string
+	var returnTypes []string
+	
+	// Extract parameter types
+	if parserFunc.Type.Params != nil {
+		for _, param := range parserFunc.Type.Params.List {
+			paramTypes = append(paramTypes, p.getTypeString(param.Type))
+		}
+	}
+	
+	// Extract return types
+	if parserFunc.Type.Results != nil {
+		for _, result := range parserFunc.Type.Results.List {
+			returnTypes = append(returnTypes, p.getTypeString(result.Type))
+		}
+	}
+	
+	return paramTypes, returnTypes, nil
+}
+
+// isStringType checks if the given type expression represents string
+func (p *Parser) isStringType(expr ast.Expr) bool {
+	if ident, ok := expr.(*ast.Ident); ok {
+		return ident.Name == "string"
+	}
+	return false
+}
+
+// isErrorType checks if the given type expression represents error
+func (p *Parser) isErrorType(expr ast.Expr) bool {
+	if ident, ok := expr.(*ast.Ident); ok {
+		return ident.Name == "error"
 	}
 	return false
 }

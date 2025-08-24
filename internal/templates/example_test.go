@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/toyz/axon/internal/models"
+	"github.com/toyz/axon/internal/registry"
 )
 
 // ExampleGenerateRouteWrapper demonstrates how to use the route wrapper generation
@@ -24,7 +25,8 @@ func ExampleGenerateRouteWrapper() {
 		},
 	}
 
-	wrapper1, _ := GenerateRouteWrapper(route1, "UserController")
+	registry := registry.NewParserRegistry()
+	wrapper1, _ := GenerateRouteWrapper(route1, "UserController", registry)
 	fmt.Println("Generated wrapper for GET /users/{id:int}:")
 	fmt.Println(wrapper1)
 
@@ -43,7 +45,7 @@ func ExampleGenerateRouteWrapper() {
 		},
 	}
 
-	wrapper2, _ := GenerateRouteWrapper(route2, "UserController")
+	wrapper2, _ := GenerateRouteWrapper(route2, "UserController", registry)
 	fmt.Println("\nGenerated wrapper for POST /users:")
 	fmt.Println(wrapper2)
 }
@@ -70,7 +72,8 @@ func TestExampleUsage(t *testing.T) {
 	}
 
 	// Generate the wrapper
-	wrapper, err := GenerateRouteWrapper(route, "UserController")
+	registry := registry.NewParserRegistry()
+	wrapper, err := GenerateRouteWrapper(route, "UserController", registry)
 	if err != nil {
 		t.Fatalf("Failed to generate wrapper: %v", err)
 	}

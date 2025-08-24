@@ -404,38 +404,155 @@ var AllCoreModule = fx.Module("all_core",
 
 ## 5. Future Work & Potential Enhancements
 
-### `//fx::RouteParser <TypeName>`
+### `//axon::route_parser <TypeName>`
 
-- **Purpose**: To create a discoverable, reusable parser for a custom type used in route parameters. This extends the framework beyond the built-in int, string, etc., parsers.
+- **Purpose**: To create a discoverable, reusable parser for a custom type used in route parameters. This extends the framework beyond the built-in int, string, etc., parsers with validation and custom parsing logic.
 - **Placement**: Must be placed directly above a func definition.
 - **Convention**: The annotated function must have the signature `func(c echo.Context, paramValue string) (T, error)`, where T is the TypeName specified in the annotation.
-- **Behavior**: The generator will discover this function and add it to an internal registry. When it encounters a route parameter of this type (e.g., `{id:CompositeID}`), it will generate a call to this registered parser function instead of attempting a simple type conversion.
+- **Behavior**: The generator will discover this function and add it to an internal registry. When it encounters a route parameter of this type (e.g., `{id:UUID}`, `{id:CompositeID}`), it will generate a call to this registered parser function instead of attempting a simple type conversion.
+- **Error Handling**: If the parser returns an error, the framework will automatically return a 400 Bad Request with the error message.
 
-**Example:**
+#### UUID Validation Example
 ```go
 // In a central 'parsers' package
-import "strings"
+import (
+    "github.com/google/uuid"
+    "github.com/labstack/echo/v4"
+)
 
-type CompositeID struct {
-   Prefix string
-   UUID   string
+//axon::route_parser UUID
+func ParseUUID(c echo.Context, paramValue string) (uuid.UUID, error) {
+    id, err := uuid.Parse(paramValue)
+    if err != nil {
+        return uuid.Nil, fmt.Errorf("invalid UUID format: %s", paramValue)
+    }
+    return id, nil
 }
 
-//fx::RouteParser CompositeID
+// In a controller, for a URL like /users/123e4567-e89b-12d3-a456-426614174000
+//axon::route GET /users/{id:UUID}
+func (h *UserController) GetUser(id uuid.UUID) (*User, error) {
+    // The 'id' is already validated as a proper UUID
+    // No need for manual parsing or validation
+    return h.userService.GetByID(id)
+}
+```
+
+#### Custom Composite ID Example
+```go
+type CompositeID struct {
+   Prefix string
+   UUID   uuid.UUID
+}
+
+//axon::route_parser CompositeID
 func ParseCompositeID(c echo.Context, paramValue string) (CompositeID, error) {
    parts := strings.Split(paramValue, "_")
    if len(parts) != 2 {
-       return CompositeID{}, errors.New("invalid composite ID format")
+       return CompositeID{}, errors.New("invalid composite ID format, expected: prefix_uuid")
    }
-   return CompositeID{Prefix: parts[0], UUID: parts[1]}, nil
+   
+   // Validate the UUID part
+   parsedUUID, err := uuid.Parse(parts[1])
+   if err != nil {
+       return CompositeID{}, fmt.Errorf("invalid UUID in composite ID: %s", parts[1])
+   }
+   
+   return CompositeID{Prefix: parts[0], UUID: parsedUUID}, nil
 }
 
 // In a controller, for a URL like /items/user_123e4567-e89b-12d3-a456-426614174000
-//fx::route GET /items/{id:CompositeID}
+//axon::route GET /items/{id:CompositeID}
 func (h *ItemController) GetItem(id CompositeID) (*Item, error) {
-   // The 'id' object is already parsed and ready to use.
+   // The 'id' object is already parsed and validated
    // id.Prefix == "user"
-   // id.UUID == "123e4567-e89b-12d3-a456-426614174000"
+   // id.UUID == uuid.UUID{...}
+   return h.itemService.GetByCompositeID(id)
+}
+```
+
+#### Advanced Validation Examples
+```go
+// Email validation with custom type
+type Email string
+
+//axon::route_parser Email
+func ParseEmail(c echo.Context, paramValue string) (Email, error) {
+    if !strings.Contains(paramValue, "@") || !strings.Contains(paramValue, ".") {
+        return "", errors.New("invalid email format")
+    }
+    // Could use a more sophisticated email validation library
+    return Email(paramValue), nil
+}
+
+// Date range validation
+type DateRange struct {
+    Start time.Time
+    End   time.Time
+}
+
+//axon::route_parser DateRange
+func ParseDateRange(c echo.Context, paramValue string) (DateRange, error) {
+    parts := strings.Split(paramValue, "to")
+    if len(parts) != 2 {
+        return DateRange{}, errors.New("invalid date range format, expected: YYYY-MM-DD_to_YYYY-MM-DD")
+    }
+    
+    start, err := time.Parse("2006-01-02", strings.TrimSpace(parts[0]))
+    if err != nil {
+        return DateRange{}, fmt.Errorf("invalid start date: %v", err)
+    }
+    
+    end, err := time.Parse("2006-01-02", strings.TrimSpace(parts[1]))
+    if err != nil {
+        return DateRange{}, fmt.Errorf("invalid end date: %v", err)
+    }
+    
+    if end.Before(start) {
+        return DateRange{}, errors.New("end date must be after start date")
+    }
+    
+    return DateRange{Start: start, End: end}, nil
+}
+
+// Usage: /reports/{period:DateRange}
+// URL: /reports/2024-01-01_to_2024-12-31
+//axon::route GET /reports/{period:DateRange}
+func (h *ReportController) GetReport(period DateRange) (*Report, error) {
+    return h.reportService.GenerateReport(period.Start, period.End)
+}
+```
+
+#### Built-in Parser Extensions
+The framework could also provide built-in parsers for common types:
+
+```go
+// These would be provided by the framework
+//axon::route GET /users/{id:uuid.UUID}        // Built-in UUID parser
+//axon::route GET /posts/{slug:Slug}           // Built-in URL slug validator
+//axon::route GET /api/v{version:SemVer}       // Built-in semantic version parser
+//axon::route GET /files/{path:SafePath}       // Built-in path traversal protection
+```
+
+#### Generated Code Example
+For a route with custom parsers, the generator would create:
+
+```go
+// Generated wrapper function
+func GetUserWrapper(c echo.Context) error {
+    // Parse the UUID parameter using the registered parser
+    id, err := ParseUUID(c, c.Param("id"))
+    if err != nil {
+        return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+    }
+    
+    // Call the actual handler
+    result, err := controller.GetUser(id)
+    if err != nil {
+        return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+    }
+    
+    return c.JSON(http.StatusOK, result)
 }
 ```
 

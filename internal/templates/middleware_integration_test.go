@@ -26,7 +26,8 @@ func TestMiddlewareIntegration_CompleteWorkflow(t *testing.T) {
 	controllerName := "UserController"
 
 	// Generate route wrapper with middleware
-	wrapper, err := GenerateRouteWrapper(route, controllerName)
+	registry := createTestParserRegistry()
+	wrapper, err := GenerateRouteWrapper(route, controllerName, registry)
 	if err != nil {
 		t.Fatalf("failed to generate route wrapper: %v", err)
 	}
@@ -166,7 +167,8 @@ func TestMiddlewareIntegration_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			wrapper, err := GenerateRouteWrapper(tt.route, tt.controller)
+			registry := createTestParserRegistry()
+			wrapper, err := GenerateRouteWrapper(tt.route, tt.controller, registry)
 			if tt.shouldError {
 				if err == nil {
 					t.Errorf("expected error but got none")

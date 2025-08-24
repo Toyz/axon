@@ -9,9 +9,9 @@ import (
 	"github.com/toyz/axon/examples/complete-app/internal/config"
 )
 
-func NewDatabaseService(lc fx.Lifecycle, config *config.Config) *DatabaseService {
+func NewDatabaseService(lc fx.Lifecycle, Config *config.Config) *DatabaseService {
 	service := &DatabaseService{
-		Config: config,
+		Config: Config,
 	}
 	
 	lc.Append(fx.Hook{
@@ -26,9 +26,9 @@ func NewDatabaseService(lc fx.Lifecycle, config *config.Config) *DatabaseService
 	return service
 }
 
-func NewUserService(lc fx.Lifecycle, config *config.Config) *UserService {
+func NewUserService(lc fx.Lifecycle, Config *config.Config) *UserService {
 	service := &UserService{
-		Config: config,
+		Config: Config,
 	}
 	
 	lc.Append(fx.Hook{

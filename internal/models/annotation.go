@@ -8,4 +8,5 @@ type Annotation struct {
 	Flags        []string          // flags like -Init, -Manual, etc.
 	Dependencies []Dependency      // dependencies extracted from fx.In fields
 	FileName     string            // name of the file containing this annotation
+	Line         int               // line number of the annotation
 }

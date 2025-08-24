@@ -3,12 +3,23 @@ package templates
 import (
 	"bytes"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"text/template"
 
 	"github.com/toyz/axon/internal/models"
 )
+
+// ParserRegistryInterface defines the interface for parser registry operations
+type ParserRegistryInterface interface {
+	RegisterParser(parser models.RouteParserMetadata) error
+	GetParser(typeName string) (models.RouteParserMetadata, bool)
+	ListParsers() []string
+	HasParser(typeName string) bool
+	Clear()
+	GetAllParsers() map[string]models.RouteParserMetadata
+}
 
 // This package contains Go templates for code generation
 // Route wrapper generation is handled in response.go
@@ -25,7 +36,9 @@ const (
 
 	// FXProviderTemplate is the template for generating FX provider functions with fx.In
 	FXProviderTemplate = `func New{{.StructName}}() *{{.StructName}} {
-	return &{{.StructName}}{}
+	return &{{.StructName}}{
+		
+	}
 }`
 
 	// FXLifecycleProviderTemplate is the template for generating FX provider functions with fx.In and lifecycle
@@ -230,25 +243,75 @@ func GenerateParameterBinding(param models.Parameter) (ParameterBindingData, err
 }
 
 // GenerateParameterBindingCode generates the complete parameter binding code for a list of parameters
-func GenerateParameterBindingCode(parameters []models.Parameter) (string, error) {
+func GenerateParameterBindingCode(parameters []models.Parameter, parserRegistry ParserRegistryInterface) (string, error) {
 	var bindingCode strings.Builder
 
 	for _, param := range parameters {
 		switch param.Source {
 		case models.ParameterSourcePath:
-			// Generate parameter binding code for path parameters
-			switch param.Type {
-			case "int":
-				bindingCode.WriteString(fmt.Sprintf(`		%s, err := strconv.Atoi(c.Param("%s"))
+			// Generate parameter binding code for path parameters using parser registry
+			parser, exists := parserRegistry.GetParser(param.Type)
+			if !exists {
+				return "", fmt.Errorf("unsupported parameter type: %s", param.Type)
+			}
+			
+			// Resolve type alias if needed
+			resolvedType := parser.TypeName
+			
+			// Generate parser call based on whether it's built-in or custom
+			if parser.PackagePath == "builtin" {
+				// Built-in parsers use direct function calls
+				switch resolvedType {
+				case "int":
+					bindingCode.WriteString(fmt.Sprintf(`		%s, err := strconv.Atoi(c.Param("%s"))
 		if err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "Invalid %s: must be an integer")
 		}
 `, param.Name, param.Name, param.Name))
-			case "string":
-				bindingCode.WriteString(fmt.Sprintf(`		%s := c.Param("%s")
+				case "string":
+					bindingCode.WriteString(fmt.Sprintf(`		%s := c.Param("%s")
 `, param.Name, param.Name))
-			default:
-				return "", fmt.Errorf("unsupported parameter type: %s", param.Type)
+				case "float64":
+					bindingCode.WriteString(fmt.Sprintf(`		%s, err := strconv.ParseFloat(c.Param("%s"), 64)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid %s: must be a valid number")
+		}
+`, param.Name, param.Name, param.Name))
+				case "float32":
+					bindingCode.WriteString(fmt.Sprintf(`		%sFloat64, err := strconv.ParseFloat(c.Param("%s"), 32)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid %s: must be a valid number")
+		}
+		%s := float32(%sFloat64)
+`, param.Name, param.Name, param.Name, param.Name, param.Name))
+				case "uuid.UUID":
+					bindingCode.WriteString(fmt.Sprintf(`		%s, err := axon.ParseUUID(c, c.Param("%s"))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid %s: must be a valid UUID")
+		}
+`, param.Name, param.Name, param.Name))
+				default:
+					return "", fmt.Errorf("unsupported built-in parameter type: %s", resolvedType)
+				}
+			} else {
+				// Custom parsers use the registered parser function
+				// Generate the full function call with package prefix if needed
+				var functionCall string
+				if parser.PackagePath != "" && parser.PackagePath != "builtin" {
+					// Extract package name from package path (e.g., "/path/to/parsers" -> "parsers")
+					packageName := filepath.Base(parser.PackagePath)
+					// For custom parsers, use package.FunctionName format
+					functionCall = fmt.Sprintf("%s.%s", packageName, parser.FunctionName)
+				} else {
+					// For parsers in the same package, use direct function name
+					functionCall = parser.FunctionName
+				}
+				
+				bindingCode.WriteString(fmt.Sprintf(`		%s, err := %s(c, c.Param("%s"))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid %s: %%v", err))
+		}
+`, param.Name, functionCall, param.Name, param.Name))
 			}
 		case models.ParameterSourceContext:
 			// Context parameters don't need binding code - they're passed directly
@@ -409,8 +472,8 @@ func GenerateCoreServiceProvider(service models.CoreServiceMetadata) (string, er
 	
 	for _, dep := range service.Dependencies {
 		depData := DependencyData{
-			Name:      strings.ToLower(dep.Name[:1]) + dep.Name[1:], // Convert to camelCase for parameter
-			FieldName: dep.Name,                                     // Original field name
+			Name:      dep.Name, // Keep original field name for parameter
+			FieldName: dep.Name, // Original field name
 			Type:      dep.Type,
 			IsInit:    dep.IsInit,
 		}

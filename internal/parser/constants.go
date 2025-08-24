@@ -13,6 +13,7 @@ const (
 	AnnotationTypeInject     = "inject"
 	AnnotationTypeInit       = "init"
 	AnnotationTypeLogger     = "logger"
+	AnnotationTypeRouteParser = "route_parser"
 	
 	// Flag constants
 	FlagInit        = "-Init"

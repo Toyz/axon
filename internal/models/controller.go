@@ -21,11 +21,13 @@ type RouteMetadata struct {
 
 // Parameter represents a route parameter
 type Parameter struct {
-	Name     string          // parameter name
-	Type     string          // Go type (int, string, etc.)
-	Source   ParameterSource // where parameter comes from
-	Required bool            // whether parameter is required
-	Position int             // position in handler signature (for context parameters)
+	Name         string          // parameter name
+	Type         string          // Go type (int, string, etc.)
+	Source       ParameterSource // where parameter comes from
+	Required     bool            // whether parameter is required
+	Position     int             // position in handler signature (for context parameters)
+	IsCustomType bool            // whether this parameter uses a custom parser
+	ParserFunc   string          // function name for custom parsers
 }
 
 // ReturnTypeInfo describes handler return signature

@@ -6,20 +6,16 @@ package controllers
 import (
 	"net/http"
 	"strconv"
+	"fmt"
 
 	"github.com/labstack/echo/v4"
 	"go.uber.org/fx"
 	"github.com/toyz/axon/pkg/axon"
+	"github.com/toyz/axon/examples/complete-app/internal/parsers"
 
 	"github.com/toyz/axon/examples/complete-app/internal/services"
 	"github.com/toyz/axon/examples/complete-app/internal/models"
 )
-
-func NewUserController(userService *services.UserService) *UserController {
-	return &UserController{
-		UserService: userService,
-	}
-}
 
 func NewHealthController(databaseService *services.DatabaseService) *HealthController {
 	return &HealthController{
@@ -27,84 +23,15 @@ func NewHealthController(databaseService *services.DatabaseService) *HealthContr
 	}
 }
 
-func wrapUserControllerGetAllUsers(handler *UserController) echo.HandlerFunc {
-	return func(c echo.Context) error {
-
-		data, err := handler.GetAllUsers()
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-		}
-		return c.JSON(http.StatusOK, data)
+func NewProductController(databaseService *services.DatabaseService) *ProductController {
+	return &ProductController{
+		DatabaseService: databaseService,
 	}
 }
 
-func wrapUserControllerGetUser(handler *UserController) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		id, err := strconv.Atoi(c.Param("id"))
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id: must be an integer")
-		}
-
-		data, err := handler.GetUser(id)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-		}
-		return c.JSON(http.StatusOK, data)
-	}
-}
-
-func wrapUserControllerCreateUser(handler *UserController) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		var req models.CreateUserRequest
-		if err := c.Bind(&req); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
-		}
-
-		response, err := handler.CreateUser(req)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-		}
-		if response == nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
-		}
-		return c.JSON(response.StatusCode, response.Body)
-	}
-}
-
-func wrapUserControllerUpdateUser(handler *UserController) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		id, err := strconv.Atoi(c.Param("id"))
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id: must be an integer")
-		}
-		var req models.UpdateUserRequest
-		if err := c.Bind(&req); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
-		}
-
-		response, err := handler.UpdateUser(id, req)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-		}
-		if response == nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
-		}
-		return c.JSON(response.StatusCode, response.Body)
-	}
-}
-
-func wrapUserControllerDeleteUser(handler *UserController) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		id, err := strconv.Atoi(c.Param("id"))
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id: must be an integer")
-		}
-
-		handlerErr := handler.DeleteUser(c, id)
-		if handlerErr != nil {
-			return handlerErr
-		}
-		return nil
+func NewUserController(userService *services.UserService) *UserController {
+	return &UserController{
+		UserService: userService,
 	}
 }
 
@@ -130,8 +57,306 @@ func wrapHealthControllerGetReadiness(handler *HealthController) echo.HandlerFun
 	}
 }
 
+func wrapProductControllerGetProduct(handler *ProductController) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		id, err := axon.ParseUUID(c, c.Param("id"))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id: must be a valid UUID")
+		}
+
+		var data interface{}
+		data, err = handler.GetProduct(id)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		return c.JSON(http.StatusOK, data)
+	}
+}
+
+func wrapProductControllerGetProductByCode(handler *ProductController) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		code, err := parsers.ParseProductCode(c, c.Param("code"))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid code: %v", err))
+		}
+
+		var data interface{}
+		data, err = handler.GetProductByCode(code)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		return c.JSON(http.StatusOK, data)
+	}
+}
+
+func wrapProductControllerGetProductSales(handler *ProductController) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		dateRange, err := parsers.ParseDateRange(c, c.Param("dateRange"))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid dateRange: %v", err))
+		}
+
+		var data interface{}
+		data, err = handler.GetProductSales(dateRange)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		return c.JSON(http.StatusOK, data)
+	}
+}
+
+func wrapProductControllerCreateProductInCategory(handler *ProductController) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		categoryId, err := axon.ParseUUID(c, c.Param("categoryId"))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid categoryId: must be a valid UUID")
+		}
+		var body models.CreateProductRequest
+		if err := c.Bind(&body); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+
+		var data interface{}
+		data, err = handler.CreateProductInCategory(categoryId, body)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		return c.JSON(http.StatusOK, data)
+	}
+}
+
+func wrapProductControllerUpdateProduct(handler *ProductController) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		id, err := axon.ParseUUID(c, c.Param("id"))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id: must be a valid UUID")
+		}
+		var body models.UpdateProductRequest
+		if err := c.Bind(&body); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+
+		var data interface{}
+		data, err = handler.UpdateProduct(id, body)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		return c.JSON(http.StatusOK, data)
+	}
+}
+
+func wrapProductControllerDeleteProduct(handler *ProductController) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		id, err := axon.ParseUUID(c, c.Param("id"))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id: must be a valid UUID")
+		}
+
+		err = handler.DeleteProduct(id)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+}
+
+func wrapUserControllerGetAllUsers(handler *UserController) echo.HandlerFunc {
+	return func(c echo.Context) error {
+
+		data, err := handler.GetAllUsers()
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		return c.JSON(http.StatusOK, data)
+	}
+}
+
+func wrapUserControllerGetUser(handler *UserController) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id: must be an integer")
+		}
+
+		var data interface{}
+		data, err = handler.GetUser(id)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		return c.JSON(http.StatusOK, data)
+	}
+}
+
+func wrapUserControllerCreateUser(handler *UserController) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		var body models.CreateUserRequest
+		if err := c.Bind(&body); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+
+		response, err := handler.CreateUser(body)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		if response == nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
+		}
+		return c.JSON(response.StatusCode, response.Body)
+	}
+}
+
+func wrapUserControllerUpdateUser(handler *UserController) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id: must be an integer")
+		}
+		var body models.UpdateUserRequest
+		if err := c.Bind(&body); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+
+		var response *axon.Response
+		response, err = handler.UpdateUser(id, body)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		if response == nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
+		}
+		return c.JSON(response.StatusCode, response.Body)
+	}
+}
+
+func wrapUserControllerDeleteUser(handler *UserController) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id: must be an integer")
+		}
+
+		err = handler.DeleteUser(c, id)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+}
+
 // RegisterRoutes registers all HTTP routes with the Echo instance
-func RegisterRoutes(e *echo.Echo, usercontroller *UserController, healthcontroller *HealthController) {
+func RegisterRoutes(e *echo.Echo, healthcontroller *HealthController, productcontroller *ProductController, usercontroller *UserController) {
+	handler_healthcontrollergethealth := wrapHealthControllerGetHealth(healthcontroller)
+	e.GET("/health", handler_healthcontrollergethealth)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "GET",
+		Path:                "/health",
+		EchoPath:            "/health",
+		HandlerName:         "GetHealth",
+		ControllerName:      "HealthController",
+		PackageName:         "controllers",
+		Middlewares:         []string{},
+		MiddlewareInstances: []axon.MiddlewareInstance{},
+		ParameterTypes:      map[string]string{},
+		Handler:             handler_healthcontrollergethealth,
+	})
+	handler_healthcontrollergetreadiness := wrapHealthControllerGetReadiness(healthcontroller)
+	e.GET("/ready", handler_healthcontrollergetreadiness)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "GET",
+		Path:                "/ready",
+		EchoPath:            "/ready",
+		HandlerName:         "GetReadiness",
+		ControllerName:      "HealthController",
+		PackageName:         "controllers",
+		Middlewares:         []string{},
+		MiddlewareInstances: []axon.MiddlewareInstance{},
+		ParameterTypes:      map[string]string{},
+		Handler:             handler_healthcontrollergetreadiness,
+	})
+	handler_productcontrollergetproduct := wrapProductControllerGetProduct(productcontroller)
+	e.GET("/products/:id", handler_productcontrollergetproduct)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "GET",
+		Path:                "/products/{id:UUID}",
+		EchoPath:            "/products/:id",
+		HandlerName:         "GetProduct",
+		ControllerName:      "ProductController",
+		PackageName:         "controllers",
+		Middlewares:         []string{},
+		MiddlewareInstances: []axon.MiddlewareInstance{},
+		ParameterTypes:      map[string]string{"id": "uuid.UUID"},
+		Handler:             handler_productcontrollergetproduct,
+	})
+	handler_productcontrollergetproductbycode := wrapProductControllerGetProductByCode(productcontroller)
+	e.GET("/products/by-code/:code", handler_productcontrollergetproductbycode)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "GET",
+		Path:                "/products/by-code/{code:ProductCode}",
+		EchoPath:            "/products/by-code/:code",
+		HandlerName:         "GetProductByCode",
+		ControllerName:      "ProductController",
+		PackageName:         "controllers",
+		Middlewares:         []string{},
+		MiddlewareInstances: []axon.MiddlewareInstance{},
+		ParameterTypes:      map[string]string{"code": "ProductCode"},
+		Handler:             handler_productcontrollergetproductbycode,
+	})
+	handler_productcontrollergetproductsales := wrapProductControllerGetProductSales(productcontroller)
+	e.GET("/products/sales/:dateRange", handler_productcontrollergetproductsales)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "GET",
+		Path:                "/products/sales/{dateRange:DateRange}",
+		EchoPath:            "/products/sales/:dateRange",
+		HandlerName:         "GetProductSales",
+		ControllerName:      "ProductController",
+		PackageName:         "controllers",
+		Middlewares:         []string{},
+		MiddlewareInstances: []axon.MiddlewareInstance{},
+		ParameterTypes:      map[string]string{"dateRange": "DateRange"},
+		Handler:             handler_productcontrollergetproductsales,
+	})
+	handler_productcontrollercreateproductincategory := wrapProductControllerCreateProductInCategory(productcontroller)
+	e.POST("/products/:categoryId/items", handler_productcontrollercreateproductincategory)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "POST",
+		Path:                "/products/{categoryId:UUID}/items",
+		EchoPath:            "/products/:categoryId/items",
+		HandlerName:         "CreateProductInCategory",
+		ControllerName:      "ProductController",
+		PackageName:         "controllers",
+		Middlewares:         []string{},
+		MiddlewareInstances: []axon.MiddlewareInstance{},
+		ParameterTypes:      map[string]string{"categoryId": "uuid.UUID"},
+		Handler:             handler_productcontrollercreateproductincategory,
+	})
+	handler_productcontrollerupdateproduct := wrapProductControllerUpdateProduct(productcontroller)
+	e.PUT("/products/:id", handler_productcontrollerupdateproduct)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "PUT",
+		Path:                "/products/{id:UUID}",
+		EchoPath:            "/products/:id",
+		HandlerName:         "UpdateProduct",
+		ControllerName:      "ProductController",
+		PackageName:         "controllers",
+		Middlewares:         []string{},
+		MiddlewareInstances: []axon.MiddlewareInstance{},
+		ParameterTypes:      map[string]string{"id": "uuid.UUID"},
+		Handler:             handler_productcontrollerupdateproduct,
+	})
+	handler_productcontrollerdeleteproduct := wrapProductControllerDeleteProduct(productcontroller)
+	e.DELETE("/products/:id", handler_productcontrollerdeleteproduct)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "DELETE",
+		Path:                "/products/{id:UUID}",
+		EchoPath:            "/products/:id",
+		HandlerName:         "DeleteProduct",
+		ControllerName:      "ProductController",
+		PackageName:         "controllers",
+		Middlewares:         []string{},
+		MiddlewareInstances: []axon.MiddlewareInstance{},
+		ParameterTypes:      map[string]string{"id": "uuid.UUID"},
+		Handler:             handler_productcontrollerdeleteproduct,
+	})
 	handler_usercontrollergetallusers := wrapUserControllerGetAllUsers(usercontroller)
 	e.GET("/users", handler_usercontrollergetallusers)
 	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
@@ -202,39 +427,12 @@ func RegisterRoutes(e *echo.Echo, usercontroller *UserController, healthcontroll
 		ParameterTypes:      map[string]string{"id": "int"},
 		Handler:             handler_usercontrollerdeleteuser,
 	})
-	handler_healthcontrollergethealth := wrapHealthControllerGetHealth(healthcontroller)
-	e.GET("/health", handler_healthcontrollergethealth)
-	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
-		Method:              "GET",
-		Path:                "/health",
-		EchoPath:            "/health",
-		HandlerName:         "GetHealth",
-		ControllerName:      "HealthController",
-		PackageName:         "controllers",
-		Middlewares:         []string{},
-		MiddlewareInstances: []axon.MiddlewareInstance{},
-		ParameterTypes:      map[string]string{},
-		Handler:             handler_healthcontrollergethealth,
-	})
-	handler_healthcontrollergetreadiness := wrapHealthControllerGetReadiness(healthcontroller)
-	e.GET("/ready", handler_healthcontrollergetreadiness)
-	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
-		Method:              "GET",
-		Path:                "/ready",
-		EchoPath:            "/ready",
-		HandlerName:         "GetReadiness",
-		ControllerName:      "HealthController",
-		PackageName:         "controllers",
-		Middlewares:         []string{},
-		MiddlewareInstances: []axon.MiddlewareInstance{},
-		ParameterTypes:      map[string]string{},
-		Handler:             handler_healthcontrollergetreadiness,
-	})
 }
 
 // AutogenModule provides all controllers and route registration in this package
 var AutogenModule = fx.Module("controllers",
-	fx.Provide(NewUserController),
 	fx.Provide(NewHealthController),
+	fx.Provide(NewProductController),
+	fx.Provide(NewUserController),
 	fx.Invoke(RegisterRoutes),
 )
