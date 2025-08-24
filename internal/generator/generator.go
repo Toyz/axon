@@ -256,7 +256,7 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 	}
 	
 	// Always needed for controllers
-	analysis.StandardLibrary = append(analysis.StandardLibrary, "net/http", "strconv")
+	analysis.StandardLibrary = append(analysis.StandardLibrary, "net/http")
 	analysis.ThirdParty = append(analysis.ThirdParty, 
 		"github.com/labstack/echo/v4",
 		"go.uber.org/fx",
