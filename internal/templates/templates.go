@@ -310,28 +310,144 @@ func generateInitCode(fieldType string) string {
 	}
 }
 
-// isStandardLibraryPackage checks if a package name is from the Go standard library
-func isStandardLibraryPackage(packageName string) bool {
-	// List of common standard library packages that might appear in type annotations
-	standardLibPackages := map[string]bool{
-		"slog":    true, // log/slog
-		"log":     true, // log
-		"fmt":     true, // fmt
-		"time":    true, // time
-		"context": true, // context
-		"http":    true, // net/http
-		"url":     true, // net/url
-		"json":    true, // encoding/json
-		"sql":     true, // database/sql
-		"os":      true, // os
-		"io":      true, // io
-		"strings": true, // strings
-		"strconv": true, // strconv
-		"sync":    true, // sync
-		"errors":  true, // errors
+// ImportAnalysis holds the results of analyzing what imports are needed
+type ImportAnalysis struct {
+	Dependencies   map[string]bool // package names that need to be imported
+	NeedsContext   bool           // whether context package is needed
+	NeedsLogger    bool           // whether logger packages are needed
+	StandardLib    []string       // standard library imports needed
+	ThirdParty     []string       // third-party imports needed
+}
+
+// analyzeRequiredImports analyzes metadata to determine what imports are needed
+func analyzeRequiredImports(metadata *models.PackageMetadata) ImportAnalysis {
+	analysis := ImportAnalysis{
+		Dependencies: make(map[string]bool),
+		StandardLib:  []string{},
+		ThirdParty:   []string{},
 	}
 	
-	return standardLibPackages[packageName]
+	// Analyze core services
+	for _, service := range metadata.CoreServices {
+		if service.HasLifecycle {
+			analysis.NeedsContext = true
+		}
+		
+		// Analyze dependencies for imports
+		for _, dep := range service.Dependencies {
+			if packagePath := extractPackageFromType(dep.Type); packagePath != "" {
+				analysis.Dependencies[packagePath] = true
+			}
+		}
+	}
+	
+	// Analyze loggers
+	for _, logger := range metadata.Loggers {
+		if logger.HasLifecycle {
+			analysis.NeedsContext = true
+		}
+		analysis.NeedsLogger = true
+		
+		// Analyze dependencies for imports
+		for _, dep := range logger.Dependencies {
+			if packagePath := extractPackageFromType(dep.Type); packagePath != "" {
+				analysis.Dependencies[packagePath] = true
+			}
+		}
+	}
+	
+	// Analyze interfaces
+	for _, iface := range metadata.Interfaces {
+		for _, method := range iface.Methods {
+			// Analyze parameters
+			for _, param := range method.Parameters {
+				if packagePath := extractPackageFromType(param.Type); packagePath != "" {
+					analysis.Dependencies[packagePath] = true
+				}
+			}
+			// Analyze return types
+			for _, ret := range method.Returns {
+				if packagePath := extractPackageFromType(ret); packagePath != "" {
+					analysis.Dependencies[packagePath] = true
+				}
+			}
+		}
+	}
+	
+	return analysis
+}
+
+// Note: Removed resolveImportPath and buildModuleImportPath functions
+// These were making assumptions about project structure.
+// Templates now receive actual package paths from the generator.
+
+// isConfigLikeType checks if a type represents a configuration dependency
+func isConfigLikeType(typeName string) bool {
+	// Remove pointer prefix for analysis
+	baseType := strings.TrimPrefix(typeName, "*")
+	
+	// Check for common config patterns (more flexible than before)
+	lowerType := strings.ToLower(baseType)
+	configPatterns := []string{"config", "configuration", "settings", "options"}
+	
+	for _, pattern := range configPatterns {
+		if strings.Contains(lowerType, pattern) {
+			return true
+		}
+	}
+	
+	return false
+}
+
+// isLoggerType checks if a type represents a logger dependency
+func isLoggerType(typeName string) bool {
+	// Remove pointer prefix for analysis
+	baseType := strings.TrimPrefix(typeName, "*")
+	
+	// Check for common logger patterns
+	loggerPatterns := []string{
+		"slog.Logger",
+		"log.Logger", 
+		"Logger",
+		"log.Entry",
+		"logrus.Logger",
+		"zap.Logger",
+	}
+	
+	for _, pattern := range loggerPatterns {
+		if strings.Contains(baseType, pattern) {
+			return true
+		}
+	}
+	
+	return false
+}
+
+
+
+// isStandardLibraryPackage checks if a package name is from the Go standard library
+func isStandardLibraryPackage(packageName string) bool {
+	// If it contains a dot, it's definitely not standard library
+	if strings.Contains(packageName, ".") {
+		return false
+	}
+	
+	// Common standard library packages (not exhaustive, but covers common cases)
+	commonStdLib := map[string]bool{
+		"fmt": true, "os": true, "io": true, "net": true, "http": true,
+		"context": true, "time": true, "strings": true, "strconv": true,
+		"errors": true, "log": true, "slog": true, "json": true, "sql": true,
+		"sync": true, "crypto": true, "encoding": true, "path": true,
+		"sort": true, "math": true, "bytes": true, "bufio": true, "regexp": true,
+	}
+	
+	// Check if it's a known standard library package
+	if commonStdLib[packageName] {
+		return true
+	}
+	
+	// For unknown simple names, assume they are local packages that need import resolution
+	return false
 }
 
 // extractPackageFromType extracts the package name from a type string like "*config.Config"
@@ -471,6 +587,17 @@ func GenerateCoreServiceModule(metadata *models.PackageMetadata) (string, error)
 
 // GenerateCoreServiceModuleWithModule generates the complete FX module for core services in a package with module name
 func GenerateCoreServiceModuleWithModule(metadata *models.PackageMetadata, moduleName string) (string, error) {
+	return GenerateCoreServiceModuleWithResolver(metadata, moduleName, nil)
+}
+
+// PackagePathMap maps package names to their actual import paths
+type PackagePathMap map[string]string
+
+// GenerateCoreServiceModuleWithResolver generates the complete FX module with actual package paths
+func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, moduleName string, packagePaths PackagePathMap) (string, error) {
+	if packagePaths == nil {
+		packagePaths = make(PackagePathMap)
+	}
 	var moduleBuilder strings.Builder
 	
 	// Generate package declaration with DO NOT EDIT header
@@ -479,80 +606,28 @@ func GenerateCoreServiceModuleWithModule(metadata *models.PackageMetadata, modul
 	moduleBuilder.WriteString(fmt.Sprintf("package %s\n\n", metadata.PackageName))
 	
 	// Analyze what imports are needed
-	needsContext := false
-	needsModels := false
-	dependencyImports := make(map[string]bool)
-	
-	// Check if any core services have lifecycle (need context)
-	for _, service := range metadata.CoreServices {
-		if service.HasLifecycle {
-			needsContext = true
-		}
-		
-		// Analyze dependencies for imports
-		for _, dep := range service.Dependencies {
-			if packagePath := extractPackageFromType(dep.Type); packagePath != "" {
-				dependencyImports[packagePath] = true
-			}
-		}
-	}
-	
-	// Check if any loggers have lifecycle (need context)
-	for _, logger := range metadata.Loggers {
-		if logger.HasLifecycle {
-			needsContext = true
-		}
-		
-		// Analyze dependencies for imports
-		for _, dep := range logger.Dependencies {
-			if packagePath := extractPackageFromType(dep.Type); packagePath != "" {
-				dependencyImports[packagePath] = true
-			}
-		}
-	}
-	
-	// Check if any interfaces reference model types
-	for _, iface := range metadata.Interfaces {
-		for _, method := range iface.Methods {
-			for _, param := range method.Parameters {
-				if strings.Contains(param.Type, "models.") {
-					needsModels = true
-					break
-				}
-			}
-			if needsModels {
-				break
-			}
-			for _, ret := range method.Returns {
-				if strings.Contains(ret, "models.") {
-					needsModels = true
-					break
-				}
-			}
-			if needsModels {
-				break
-			}
-		}
-		if needsModels {
-			break
-		}
-	}
+	requiredImports := analyzeRequiredImports(metadata)
+	dependencyImports := requiredImports.Dependencies
 	
 	// Generate imports
 	moduleBuilder.WriteString("import (\n")
-	if needsContext {
+	
+	// Add standard library imports
+	if requiredImports.NeedsContext {
 		moduleBuilder.WriteString("\t\"context\"\n")
 	}
+	
+	// Always need fx for module generation
 	moduleBuilder.WriteString("\t\"go.uber.org/fx\"\n")
 	
-	// Add fxevent import if there are loggers
-	if len(metadata.Loggers) > 0 {
+	// Add logger-specific imports
+	if requiredImports.NeedsLogger {
 		moduleBuilder.WriteString("\t\"go.uber.org/fx/fxevent\"\n")
 		moduleBuilder.WriteString("\t\"log/slog\"\n")
 		moduleBuilder.WriteString("\t\"os\"\n")
 	}
 	
-	// Add dependency imports
+	// Add dependency imports using actual package paths
 	for packageName := range dependencyImports {
 		// Handle standard library packages
 		if isStandardLibraryPackage(packageName) {
@@ -561,18 +636,12 @@ func GenerateCoreServiceModuleWithModule(metadata *models.PackageMetadata, modul
 			continue
 		}
 		
-		if moduleName != "" {
-			moduleBuilder.WriteString(fmt.Sprintf("\t\"%s/internal/%s\"\n", moduleName, packageName))
-		} else {
-			moduleBuilder.WriteString(fmt.Sprintf("\t\"../%s\"\n", packageName))
-		}
-	}
-	
-	if needsModels {
-		if moduleName != "" {
-			moduleBuilder.WriteString(fmt.Sprintf("\t\"%s/internal/models\"\n", moduleName))
-		} else {
-			moduleBuilder.WriteString("\t\"../models\"\n")
+		// Use actual package path if available, otherwise construct with module name
+		if actualPath, exists := packagePaths[packageName]; exists {
+			moduleBuilder.WriteString(fmt.Sprintf("\t\"%s\"\n", actualPath))
+		} else if moduleName != "" {
+			// Fallback: construct path with module name (this should be rare)
+			moduleBuilder.WriteString(fmt.Sprintf("\t\"%s/%s\"\n", moduleName, packageName))
 		}
 	}
 	moduleBuilder.WriteString(")\n\n")
@@ -845,8 +914,9 @@ func GenerateLoggerProvider(logger models.LoggerMetadata) (string, error) {
 		// Only add to injected deps if it's not an init dependency
 		if !dep.IsInit {
 			injectedDeps = append(injectedDeps, depData)
-			// Check if this is a config dependency
-			if strings.Contains(dep.Type, "Config") {
+			
+			// Check if this dependency can be used for logger configuration
+			if isConfigLikeType(dep.Type) {
 				configParam = depData.Name
 			}
 		}
@@ -855,7 +925,7 @@ func GenerateLoggerProvider(logger models.LoggerMetadata) (string, error) {
 	// Check if this is a logger that needs immediate initialization
 	hasLoggerField := false
 	for _, dep := range dependencies {
-		if dep.IsInit && (strings.Contains(dep.Type, "slog.Logger") || strings.Contains(dep.Type, "*slog.Logger")) {
+		if dep.IsInit && isLoggerType(dep.Type) {
 			hasLoggerField = true
 			break
 		}

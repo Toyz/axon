@@ -57,6 +57,11 @@ func (g *Generator) GenerateModule(metadata *models.PackageMetadata) (*models.Ge
 
 // GenerateModuleWithModule generates a complete FX module file for a package with annotations and module name
 func (g *Generator) GenerateModuleWithModule(metadata *models.PackageMetadata, moduleName string) (*models.GeneratedModule, error) {
+	return g.GenerateModuleWithPackagePaths(metadata, moduleName, nil)
+}
+
+// GenerateModuleWithPackagePaths generates a complete FX module file with package path mappings
+func (g *Generator) GenerateModuleWithPackagePaths(metadata *models.PackageMetadata, moduleName string, packagePaths map[string]string) (*models.GeneratedModule, error) {
 	if metadata == nil {
 		return nil, fmt.Errorf("metadata cannot be nil")
 	}
@@ -76,7 +81,7 @@ func (g *Generator) GenerateModuleWithModule(metadata *models.PackageMetadata, m
 		content, err = g.generateMiddlewareModule(metadata)
 	} else if len(metadata.CoreServices) > 0 || len(metadata.Interfaces) > 0 || len(metadata.Loggers) > 0 {
 		// Generate core services module (includes loggers)
-		content, err = templates.GenerateCoreServiceModuleWithModule(metadata, moduleName)
+		content, err = templates.GenerateCoreServiceModuleWithResolver(metadata, moduleName, packagePaths)
 	} else {
 		// Empty module
 		content = g.generateEmptyModule(metadata)

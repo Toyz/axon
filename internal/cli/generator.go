@@ -260,6 +260,18 @@ func (g *Generator) Run(config Config) error {
 		fmt.Printf("Phase 3: Code generation\n")
 	}
 	
+	// Build package path mappings for all discovered packages
+	packagePathMappings := make(map[string]string)
+	for i, metadata := range allPackageMetadata {
+		packageDir := packageDirs[i]
+		if moduleName != "" {
+			packageImportPath, err := g.moduleResolver.BuildPackagePath(moduleName, packageDir)
+			if err == nil {
+				packagePathMappings[metadata.PackageName] = packageImportPath
+			}
+		}
+	}
+
 	var allModules []models.ModuleReference
 	for i, metadata := range allPackageMetadata {
 		packageDir := packageDirs[i]
@@ -286,8 +298,8 @@ func (g *Generator) Run(config Config) error {
 		// Keep the original directory path for file generation
 		metadata.PackagePath = packageDir
 
-		// Generate module for this package
-		generatedModule, err := g.codeGenerator.GenerateModuleWithModule(metadata, moduleName)
+		// Generate module for this package with package path mappings
+		generatedModule, err := g.codeGenerator.GenerateModuleWithPackagePaths(metadata, moduleName, packagePathMappings)
 		if err != nil {
 			return &models.GeneratorError{
 				Type:    models.ErrorTypeGeneration,

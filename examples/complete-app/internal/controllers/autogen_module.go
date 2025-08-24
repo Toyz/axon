@@ -71,6 +71,12 @@ func handleError(c echo.Context, err error) error {
 	return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 }
 
+func NewHealthController(databaseService *services.DatabaseService) *HealthController {
+	return &HealthController{
+		DatabaseService: databaseService,
+	}
+}
+
 func NewProductController(databaseService *services.DatabaseService) *ProductController {
 	return &ProductController{
 		DatabaseService: databaseService,
@@ -90,9 +96,25 @@ func NewUserController(userService *services.UserService) *UserController {
 	}
 }
 
-func NewHealthController(databaseService *services.DatabaseService) *HealthController {
-	return &HealthController{
-		DatabaseService: databaseService,
+func wrapHealthControllerGetHealth(handler *HealthController) echo.HandlerFunc {
+	return func(c echo.Context) error {
+
+		data, err := handler.GetHealth()
+		if err != nil {
+			return handleError(c, err)
+		}
+		return c.JSON(http.StatusOK, data)
+	}
+}
+
+func wrapHealthControllerGetReadiness(handler *HealthController) echo.HandlerFunc {
+	return func(c echo.Context) error {
+
+		data, err := handler.GetReadiness()
+		if err != nil {
+			return handleError(c, err)
+		}
+		return c.JSON(http.StatusOK, data)
 	}
 }
 
@@ -377,30 +399,36 @@ func wrapUserControllerDeleteUser(handler *UserController, authmiddleware *AuthM
 	return finalHandler
 }
 
-func wrapHealthControllerGetHealth(handler *HealthController) echo.HandlerFunc {
-	return func(c echo.Context) error {
-
-		data, err := handler.GetHealth()
-		if err != nil {
-			return handleError(c, err)
-		}
-		return c.JSON(http.StatusOK, data)
-	}
-}
-
-func wrapHealthControllerGetReadiness(handler *HealthController) echo.HandlerFunc {
-	return func(c echo.Context) error {
-
-		data, err := handler.GetReadiness()
-		if err != nil {
-			return handleError(c, err)
-		}
-		return c.JSON(http.StatusOK, data)
-	}
-}
-
 // RegisterRoutes registers all HTTP routes with the Echo instance
-func RegisterRoutes(e *echo.Echo, productcontroller *ProductController, sessioncontroller *SessionController, usercontroller *UserController, healthcontroller *HealthController, loggingmiddleware *LoggingMiddleware, authmiddleware *AuthMiddleware) {
+func RegisterRoutes(e *echo.Echo, healthcontroller *HealthController, productcontroller *ProductController, sessioncontroller *SessionController, usercontroller *UserController, loggingmiddleware *LoggingMiddleware, authmiddleware *AuthMiddleware) {
+	handler_healthcontrollergethealth := wrapHealthControllerGetHealth(healthcontroller)
+	e.GET("/health", handler_healthcontrollergethealth)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "GET",
+		Path:                "/health",
+		EchoPath:            "/health",
+		HandlerName:         "GetHealth",
+		ControllerName:      "HealthController",
+		PackageName:         "controllers",
+		Middlewares:         []string{},
+		MiddlewareInstances: []axon.MiddlewareInstance{},
+		ParameterTypes:      map[string]string{},
+		Handler:             handler_healthcontrollergethealth,
+	})
+	handler_healthcontrollergetreadiness := wrapHealthControllerGetReadiness(healthcontroller)
+	e.GET("/ready", handler_healthcontrollergetreadiness)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "GET",
+		Path:                "/ready",
+		EchoPath:            "/ready",
+		HandlerName:         "GetReadiness",
+		ControllerName:      "HealthController",
+		PackageName:         "controllers",
+		Middlewares:         []string{},
+		MiddlewareInstances: []axon.MiddlewareInstance{},
+		ParameterTypes:      map[string]string{},
+		Handler:             handler_healthcontrollergetreadiness,
+	})
 	handler_productcontrollergetproduct := wrapProductControllerGetProduct(productcontroller)
 	e.GET("/products/:id", handler_productcontrollergetproduct)
 	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
@@ -633,41 +661,13 @@ func RegisterRoutes(e *echo.Echo, productcontroller *ProductController, sessionc
 		ParameterTypes:      map[string]string{"id": "int"},
 		Handler:             handler_usercontrollerdeleteuser,
 	})
-	handler_healthcontrollergethealth := wrapHealthControllerGetHealth(healthcontroller)
-	e.GET("/health", handler_healthcontrollergethealth)
-	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
-		Method:              "GET",
-		Path:                "/health",
-		EchoPath:            "/health",
-		HandlerName:         "GetHealth",
-		ControllerName:      "HealthController",
-		PackageName:         "controllers",
-		Middlewares:         []string{},
-		MiddlewareInstances: []axon.MiddlewareInstance{},
-		ParameterTypes:      map[string]string{},
-		Handler:             handler_healthcontrollergethealth,
-	})
-	handler_healthcontrollergetreadiness := wrapHealthControllerGetReadiness(healthcontroller)
-	e.GET("/ready", handler_healthcontrollergetreadiness)
-	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
-		Method:              "GET",
-		Path:                "/ready",
-		EchoPath:            "/ready",
-		HandlerName:         "GetReadiness",
-		ControllerName:      "HealthController",
-		PackageName:         "controllers",
-		Middlewares:         []string{},
-		MiddlewareInstances: []axon.MiddlewareInstance{},
-		ParameterTypes:      map[string]string{},
-		Handler:             handler_healthcontrollergetreadiness,
-	})
 }
 
 // AutogenModule provides all controllers and route registration in this package
 var AutogenModule = fx.Module("controllers",
+	fx.Provide(NewHealthController),
 	fx.Provide(NewProductController),
 	fx.Provide(NewSessionController),
 	fx.Provide(NewUserController),
-	fx.Provide(NewHealthController),
 	fx.Invoke(RegisterRoutes),
 )
