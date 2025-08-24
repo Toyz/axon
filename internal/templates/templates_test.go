@@ -5,7 +5,13 @@ import (
 	"testing"
 
 	"github.com/toyz/axon/internal/models"
+	"github.com/toyz/axon/internal/registry"
 )
+
+// createTestParserRegistry creates a test parser registry for testing
+func createTestParserRegistry() ParserRegistryInterface {
+	return registry.NewParserRegistry()
+}
 
 func TestGenerateParameterBinding(t *testing.T) {
 	tests := []struct {

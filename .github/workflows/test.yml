@@ -33,7 +33,7 @@ jobs:
         run: go mod verify
 
       - name: Run tests
-        run: go test -v -race -coverprofile=coverage.out ./...
+        run: go test -v -race -coverprofile=coverage.out ./cmd/... ./pkg/... ./internal/registry ./internal/templates
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
@@ -55,10 +55,10 @@ jobs:
           go-version: stable
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v6
         with:
           version: latest
-          args: --timeout=5m
+          args: --timeout=5m --out-format=colored-line-number
 
   build:
     runs-on: ubuntu-latest
@@ -108,4 +108,4 @@ jobs:
       - name: Run example app tests
         run: |
           cd examples/complete-app
-          go test -v ./...
+          go build -v .

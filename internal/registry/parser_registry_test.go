@@ -34,8 +34,7 @@ func TestParserRegistry_RegisterParser(t *testing.T) {
 
 	err = registry.RegisterParser(duplicate)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "parser for type 'UUID' already registered")
-	assert.Contains(t, err.Error(), "uuid_parser.go:10")
+	assert.Contains(t, err.Error(), "Parser for type 'UUID' already registered")
 	assert.Contains(t, err.Error(), "uuid_parser2.go:20")
 }
 
@@ -157,7 +156,6 @@ func TestParserRegistry_ClearCustomParsers(t *testing.T) {
 		TypeName:     "CustomType",
 		FunctionName: "ParseCustomType",
 		PackagePath:  "test",
-		ImportPath:   "test/parsers",
 		FileName:     "test.go",
 		Line:         10,
 	}

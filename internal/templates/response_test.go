@@ -7,6 +7,8 @@ import (
 	"github.com/toyz/axon/internal/models"
 )
 
+
+
 func TestGenerateResponseHandling(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -197,7 +199,8 @@ func TestGenerateRouteWrapper(t *testing.T) {
 			shouldContain: []string{
 				"func wrapUserControllerGetUser(handler *UserController) echo.HandlerFunc",
 				"id, err := strconv.Atoi(c.Param(\"id\"))",
-				"data, err := handler.GetUser(id)",
+				"var data interface{}",
+				"data, err = handler.GetUser(id)",
 				"return c.JSON(http.StatusOK, data)",
 			},
 		},
