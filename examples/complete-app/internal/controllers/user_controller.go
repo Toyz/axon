@@ -25,7 +25,7 @@ func (c *UserController) GetUser(id int) (*models.User, error) {
 	return c.UserService.GetUser(id)
 }
 
-//axon::route POST /users
+//axon::route POST /users -Middleware=AuthMiddleware
 func (c *UserController) CreateUser(req models.CreateUserRequest) (*axon.Response, error) {
 	user, err := c.UserService.CreateUser(req)
 	if err != nil {
@@ -41,7 +41,7 @@ func (c *UserController) CreateUser(req models.CreateUserRequest) (*axon.Respons
 	}, nil
 }
 
-//axon::route PUT /users/{id:int}
+//axon::route PUT /users/{id:int} -Middleware=AuthMiddleware
 func (c *UserController) UpdateUser(id int, req models.UpdateUserRequest) (*axon.Response, error) {
 	user, err := c.UserService.UpdateUser(id, req)
 	if err != nil {
@@ -57,7 +57,7 @@ func (c *UserController) UpdateUser(id int, req models.UpdateUserRequest) (*axon
 	}, nil
 }
 
-//axon::route DELETE /users/{id:int} -PassContext
+//axon::route DELETE /users/{id:int} -Middleware=AuthMiddleware -PassContext
 func (c *UserController) DeleteUser(ctx echo.Context, id int) error {
 	err := c.UserService.DeleteUser(id)
 	if err != nil {

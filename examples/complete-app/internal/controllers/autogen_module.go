@@ -18,8 +18,14 @@ import (
 	middleware "github.com/toyz/axon/examples/complete-app/internal/middleware"
 )
 
-type LoggingMiddleware = middleware.LoggingMiddleware
 type AuthMiddleware = middleware.AuthMiddleware
+type LoggingMiddleware = middleware.LoggingMiddleware
+
+func NewUserController(userService *services.UserService) *UserController {
+	return &UserController{
+		UserService: userService,
+	}
+}
 
 func NewHealthController(databaseService *services.DatabaseService) *HealthController {
 	return &HealthController{
@@ -40,10 +46,105 @@ func NewSessionController(sessionFactory func() *services.SessionService, userSe
 	}
 }
 
-func NewUserController(userService *services.UserService) *UserController {
-	return &UserController{
-		UserService: userService,
+func wrapUserControllerGetAllUsers(handler *UserController) echo.HandlerFunc {
+	return func(c echo.Context) error {
+
+		data, err := handler.GetAllUsers()
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		return c.JSON(http.StatusOK, data)
 	}
+}
+
+func wrapUserControllerGetUser(handler *UserController) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id: must be an integer")
+		}
+
+		var data interface{}
+		data, err = handler.GetUser(id)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		return c.JSON(http.StatusOK, data)
+	}
+}
+
+func wrapUserControllerCreateUser(handler *UserController, authmiddleware *AuthMiddleware) echo.HandlerFunc {
+	baseHandler := func(c echo.Context) error {
+		var body models.CreateUserRequest
+		if err := c.Bind(&body); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+
+		response, err := handler.CreateUser(body)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		if response == nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
+		}
+		return c.JSON(response.StatusCode, response.Body)
+	}
+
+	// Apply middlewares in order
+	finalHandler := baseHandler
+	finalHandler = authmiddleware.Handle(finalHandler)
+
+	return finalHandler
+}
+
+func wrapUserControllerUpdateUser(handler *UserController, authmiddleware *AuthMiddleware) echo.HandlerFunc {
+	baseHandler := func(c echo.Context) error {
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id: must be an integer")
+		}
+		var body models.UpdateUserRequest
+		if err := c.Bind(&body); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+
+		var response *axon.Response
+		response, err = handler.UpdateUser(id, body)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		if response == nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
+		}
+		return c.JSON(response.StatusCode, response.Body)
+	}
+
+	// Apply middlewares in order
+	finalHandler := baseHandler
+	finalHandler = authmiddleware.Handle(finalHandler)
+
+	return finalHandler
+}
+
+func wrapUserControllerDeleteUser(handler *UserController, authmiddleware *AuthMiddleware) echo.HandlerFunc {
+	baseHandler := func(c echo.Context) error {
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id: must be an integer")
+		}
+
+		err = handler.DeleteUser(c, id)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// Apply middlewares in order
+	finalHandler := baseHandler
+	finalHandler = authmiddleware.Handle(finalHandler)
+
+	return finalHandler
 }
 
 func wrapHealthControllerGetHealth(handler *HealthController) echo.HandlerFunc {
@@ -248,91 +349,90 @@ func wrapSessionControllerCompareSessionInstances(handler *SessionController) ec
 	}
 }
 
-func wrapUserControllerGetAllUsers(handler *UserController) echo.HandlerFunc {
-	return func(c echo.Context) error {
-
-		data, err := handler.GetAllUsers()
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-		}
-		return c.JSON(http.StatusOK, data)
-	}
-}
-
-func wrapUserControllerGetUser(handler *UserController) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		id, err := strconv.Atoi(c.Param("id"))
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id: must be an integer")
-		}
-
-		var data interface{}
-		data, err = handler.GetUser(id)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-		}
-		return c.JSON(http.StatusOK, data)
-	}
-}
-
-func wrapUserControllerCreateUser(handler *UserController) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		var body models.CreateUserRequest
-		if err := c.Bind(&body); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
-		}
-
-		response, err := handler.CreateUser(body)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-		}
-		if response == nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
-		}
-		return c.JSON(response.StatusCode, response.Body)
-	}
-}
-
-func wrapUserControllerUpdateUser(handler *UserController) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		id, err := strconv.Atoi(c.Param("id"))
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id: must be an integer")
-		}
-		var body models.UpdateUserRequest
-		if err := c.Bind(&body); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
-		}
-
-		var response *axon.Response
-		response, err = handler.UpdateUser(id, body)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-		}
-		if response == nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
-		}
-		return c.JSON(response.StatusCode, response.Body)
-	}
-}
-
-func wrapUserControllerDeleteUser(handler *UserController) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		id, err := strconv.Atoi(c.Param("id"))
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid id: must be an integer")
-		}
-
-		err = handler.DeleteUser(c, id)
-		if err != nil {
-			return err
-		}
-		return nil
-	}
-}
-
 // RegisterRoutes registers all HTTP routes with the Echo instance
-func RegisterRoutes(e *echo.Echo, healthcontroller *HealthController, productcontroller *ProductController, sessioncontroller *SessionController, usercontroller *UserController, authmiddleware *AuthMiddleware, loggingmiddleware *LoggingMiddleware) {
+func RegisterRoutes(e *echo.Echo, usercontroller *UserController, healthcontroller *HealthController, productcontroller *ProductController, sessioncontroller *SessionController, authmiddleware *AuthMiddleware, loggingmiddleware *LoggingMiddleware) {
+	handler_usercontrollergetallusers := wrapUserControllerGetAllUsers(usercontroller)
+	e.GET("/users", handler_usercontrollergetallusers)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "GET",
+		Path:                "/users",
+		EchoPath:            "/users",
+		HandlerName:         "GetAllUsers",
+		ControllerName:      "UserController",
+		PackageName:         "controllers",
+		Middlewares:         []string{},
+		MiddlewareInstances: []axon.MiddlewareInstance{},
+		ParameterTypes:      map[string]string{},
+		Handler:             handler_usercontrollergetallusers,
+	})
+	handler_usercontrollergetuser := wrapUserControllerGetUser(usercontroller)
+	e.GET("/users/:id", handler_usercontrollergetuser)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "GET",
+		Path:                "/users/{id:int}",
+		EchoPath:            "/users/:id",
+		HandlerName:         "GetUser",
+		ControllerName:      "UserController",
+		PackageName:         "controllers",
+		Middlewares:         []string{},
+		MiddlewareInstances: []axon.MiddlewareInstance{},
+		ParameterTypes:      map[string]string{"id": "int"},
+		Handler:             handler_usercontrollergetuser,
+	})
+	handler_usercontrollercreateuser := wrapUserControllerCreateUser(usercontroller, authmiddleware)
+	e.POST("/users", handler_usercontrollercreateuser)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "POST",
+		Path:                "/users",
+		EchoPath:            "/users",
+		HandlerName:         "CreateUser",
+		ControllerName:      "UserController",
+		PackageName:         "controllers",
+		Middlewares:         []string{"AuthMiddleware"},
+		MiddlewareInstances: []axon.MiddlewareInstance{{
+			Name:     "AuthMiddleware",
+			Handler:  authmiddleware.Handle,
+			Instance: authmiddleware,
+		}},
+		ParameterTypes:      map[string]string{},
+		Handler:             handler_usercontrollercreateuser,
+	})
+	handler_usercontrollerupdateuser := wrapUserControllerUpdateUser(usercontroller, authmiddleware)
+	e.PUT("/users/:id", handler_usercontrollerupdateuser)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "PUT",
+		Path:                "/users/{id:int}",
+		EchoPath:            "/users/:id",
+		HandlerName:         "UpdateUser",
+		ControllerName:      "UserController",
+		PackageName:         "controllers",
+		Middlewares:         []string{"AuthMiddleware"},
+		MiddlewareInstances: []axon.MiddlewareInstance{{
+			Name:     "AuthMiddleware",
+			Handler:  authmiddleware.Handle,
+			Instance: authmiddleware,
+		}},
+		ParameterTypes:      map[string]string{"id": "int"},
+		Handler:             handler_usercontrollerupdateuser,
+	})
+	handler_usercontrollerdeleteuser := wrapUserControllerDeleteUser(usercontroller, authmiddleware)
+	e.DELETE("/users/:id", handler_usercontrollerdeleteuser)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "DELETE",
+		Path:                "/users/{id:int}",
+		EchoPath:            "/users/:id",
+		HandlerName:         "DeleteUser",
+		ControllerName:      "UserController",
+		PackageName:         "controllers",
+		Middlewares:         []string{"AuthMiddleware"},
+		MiddlewareInstances: []axon.MiddlewareInstance{{
+			Name:     "AuthMiddleware",
+			Handler:  authmiddleware.Handle,
+			Instance: authmiddleware,
+		}},
+		ParameterTypes:      map[string]string{"id": "int"},
+		Handler:             handler_usercontrollerdeleteuser,
+	})
 	handler_healthcontrollergethealth := wrapHealthControllerGetHealth(healthcontroller)
 	e.GET("/health", handler_healthcontrollergethealth)
 	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
@@ -511,83 +611,13 @@ func RegisterRoutes(e *echo.Echo, healthcontroller *HealthController, productcon
 		ParameterTypes:      map[string]string{},
 		Handler:             handler_sessioncontrollercomparesessioninstances,
 	})
-	handler_usercontrollergetallusers := wrapUserControllerGetAllUsers(usercontroller)
-	e.GET("/users", handler_usercontrollergetallusers)
-	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
-		Method:              "GET",
-		Path:                "/users",
-		EchoPath:            "/users",
-		HandlerName:         "GetAllUsers",
-		ControllerName:      "UserController",
-		PackageName:         "controllers",
-		Middlewares:         []string{},
-		MiddlewareInstances: []axon.MiddlewareInstance{},
-		ParameterTypes:      map[string]string{},
-		Handler:             handler_usercontrollergetallusers,
-	})
-	handler_usercontrollergetuser := wrapUserControllerGetUser(usercontroller)
-	e.GET("/users/:id", handler_usercontrollergetuser)
-	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
-		Method:              "GET",
-		Path:                "/users/{id:int}",
-		EchoPath:            "/users/:id",
-		HandlerName:         "GetUser",
-		ControllerName:      "UserController",
-		PackageName:         "controllers",
-		Middlewares:         []string{},
-		MiddlewareInstances: []axon.MiddlewareInstance{},
-		ParameterTypes:      map[string]string{"id": "int"},
-		Handler:             handler_usercontrollergetuser,
-	})
-	handler_usercontrollercreateuser := wrapUserControllerCreateUser(usercontroller)
-	e.POST("/users", handler_usercontrollercreateuser)
-	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
-		Method:              "POST",
-		Path:                "/users",
-		EchoPath:            "/users",
-		HandlerName:         "CreateUser",
-		ControllerName:      "UserController",
-		PackageName:         "controllers",
-		Middlewares:         []string{},
-		MiddlewareInstances: []axon.MiddlewareInstance{},
-		ParameterTypes:      map[string]string{},
-		Handler:             handler_usercontrollercreateuser,
-	})
-	handler_usercontrollerupdateuser := wrapUserControllerUpdateUser(usercontroller)
-	e.PUT("/users/:id", handler_usercontrollerupdateuser)
-	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
-		Method:              "PUT",
-		Path:                "/users/{id:int}",
-		EchoPath:            "/users/:id",
-		HandlerName:         "UpdateUser",
-		ControllerName:      "UserController",
-		PackageName:         "controllers",
-		Middlewares:         []string{},
-		MiddlewareInstances: []axon.MiddlewareInstance{},
-		ParameterTypes:      map[string]string{"id": "int"},
-		Handler:             handler_usercontrollerupdateuser,
-	})
-	handler_usercontrollerdeleteuser := wrapUserControllerDeleteUser(usercontroller)
-	e.DELETE("/users/:id", handler_usercontrollerdeleteuser)
-	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
-		Method:              "DELETE",
-		Path:                "/users/{id:int}",
-		EchoPath:            "/users/:id",
-		HandlerName:         "DeleteUser",
-		ControllerName:      "UserController",
-		PackageName:         "controllers",
-		Middlewares:         []string{},
-		MiddlewareInstances: []axon.MiddlewareInstance{},
-		ParameterTypes:      map[string]string{"id": "int"},
-		Handler:             handler_usercontrollerdeleteuser,
-	})
 }
 
 // AutogenModule provides all controllers and route registration in this package
 var AutogenModule = fx.Module("controllers",
+	fx.Provide(NewUserController),
 	fx.Provide(NewHealthController),
 	fx.Provide(NewProductController),
 	fx.Provide(NewSessionController),
-	fx.Provide(NewUserController),
 	fx.Invoke(RegisterRoutes),
 )
