@@ -85,7 +85,7 @@ type User struct {
 	defer os.Chdir(originalDir)
 	require.NoError(t, os.Chdir(tempDir))
 
-	generator := NewGenerator()
+	generator := NewGenerator(false)
 
 	t.Run("generate modules", func(t *testing.T) {
 		config := Config{
@@ -179,7 +179,7 @@ type User struct {
 }
 
 func TestGenerator_hasNoAnnotations(t *testing.T) {
-	generator := NewGenerator()
+	generator := NewGenerator(false)
 
 	testCases := []struct {
 		name     string

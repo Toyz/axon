@@ -8,4 +8,7 @@ type Config struct {
 	// ModuleName is the custom module name for imports
 	// If empty, will be determined from go.mod file
 	ModuleName string
+	
+	// Verbose enables detailed logging and error reporting
+	Verbose bool
 }

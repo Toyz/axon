@@ -3,8 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"os"
+	"strings"
 
 	"github.com/toyz/axon/internal/cli"
 	"github.com/toyz/axon/internal/parser"
@@ -13,8 +13,9 @@ import (
 func main() {
 	// Define command-line flags
 	var (
-		moduleFlag = flag.String("module", "", "Custom module name for imports (defaults to go.mod module)")
-		helpFlag   = flag.Bool("help", false, "Show help information")
+		moduleFlag  = flag.String("module", "", "Custom module name for imports (defaults to go.mod module)")
+		verboseFlag = flag.Bool("verbose", false, "Enable verbose output and detailed error reporting")
+		helpFlag    = flag.Bool("help", false, "Show help information")
 	)
 
 	flag.Usage = func() {
@@ -26,11 +27,16 @@ func main() {
 		fmt.Fprintf(os.Stderr, "\nArguments:\n")
 		fmt.Fprintf(os.Stderr, "  directory-paths    One or more directories to scan for annotated Go files\n")
 		fmt.Fprintf(os.Stderr, "                     Supports Go-style patterns like './...' for recursive scanning\n")
+		fmt.Fprintf(os.Stderr, "\nDirectory Patterns:\n")
+		fmt.Fprintf(os.Stderr, "  ./...              Scan current directory and all subdirectories recursively\n")
+		fmt.Fprintf(os.Stderr, "  ./internal/...     Scan internal directory and all its subdirectories\n")
+		fmt.Fprintf(os.Stderr, "  ./pkg/controllers  Scan only the specific directory (no recursion)\n")
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
-		fmt.Fprintf(os.Stderr, "  %s ./internal/controllers ./internal/services\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  %s ./...  # Scan all subdirectories recursively\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  %s ./internal/controllers ./internal/services\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  %s --module github.com/myorg/myapp ./internal\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s ./...                                       # Scan everything recursively\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s ./internal/...                             # Scan internal directory recursively\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s ./internal/controllers ./internal/services # Scan specific directories\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --module github.com/myorg/myapp ./...      # Specify custom module name\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --verbose ./internal/...                   # Enable detailed output\n", os.Args[0])
 	}
 
 	flag.Parse()
@@ -49,11 +55,25 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Validate directory paths
+	// Validate directory paths (handle Go-style patterns like ./...)
 	for _, dir := range directories {
-		if _, err := os.Stat(dir); os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "Error: Directory does not exist: %s\n", dir)
-			os.Exit(1)
+		// Handle Go-style recursive patterns
+		if strings.HasSuffix(dir, "/...") {
+			baseDir := strings.TrimSuffix(dir, "/...")
+			if baseDir == "" {
+				baseDir = "."
+			}
+			// Validate the base directory exists
+			if _, err := os.Stat(baseDir); os.IsNotExist(err) {
+				fmt.Fprintf(os.Stderr, "Error: Base directory does not exist: %s (from pattern %s)\n", baseDir, dir)
+				os.Exit(1)
+			}
+		} else {
+			// Validate regular directory paths
+			if _, err := os.Stat(dir); os.IsNotExist(err) {
+				fmt.Fprintf(os.Stderr, "Error: Directory does not exist: %s\n", dir)
+				os.Exit(1)
+			}
 		}
 	}
 
@@ -61,13 +81,18 @@ func main() {
 	config := cli.Config{
 		Directories: directories,
 		ModuleName:  *moduleFlag,
+		Verbose:     *verboseFlag,
 	}
 
 	// Run the generator
-	generator := cli.NewGenerator()
+	generator := cli.NewGenerator(*verboseFlag)
 	if err := generator.Run(config); err != nil {
-		log.Fatalf("Generation failed: %v", err)
+		// Use diagnostic reporter for better error output
+		reporter := cli.NewDiagnosticReporter(*verboseFlag)
+		reporter.ReportError(err)
+		os.Exit(1)
 	}
 
-	fmt.Println("Code generation completed successfully!")
+	// Report success with summary
+	generator.ReportSuccess()
 }

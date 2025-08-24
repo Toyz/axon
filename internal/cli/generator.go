@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/toyz/axon/internal/generator"
 	"github.com/toyz/axon/internal/models"
@@ -17,10 +18,12 @@ type Generator struct {
 	parser         parser.AnnotationParser
 	codeGenerator  generator.CodeGenerator
 	globalParsers  map[string]models.RouteParserMetadata // Global parser registry for cross-package discovery
+	reporter       *DiagnosticReporter
+	summary        GenerationSummary
 }
 
 // NewGenerator creates a new CLI generator
-func NewGenerator() *Generator {
+func NewGenerator(verbose bool) *Generator {
 	moduleResolver := NewModuleResolver()
 	return &Generator{
 		scanner:        NewDirectoryScanner(),
@@ -28,50 +31,159 @@ func NewGenerator() *Generator {
 		parser:         parser.NewParser(),
 		codeGenerator:  generator.NewGeneratorWithResolver(moduleResolver),
 		globalParsers:  make(map[string]models.RouteParserMetadata),
+		reporter:       NewDiagnosticReporter(verbose),
+		summary:        GenerationSummary{GeneratedFiles: make([]string, 0)},
 	}
 }
 
 // Run executes the complete generation process
 func (g *Generator) Run(config Config) error {
+	startTime := time.Now()
+	
+	// Initialize summary
+	g.summary = GenerationSummary{GeneratedFiles: make([]string, 0)}
+	
+	if config.Verbose {
+		fmt.Printf("Starting code generation at %s\n", startTime.Format("15:04:05"))
+		fmt.Printf("Verbose mode enabled\n")
+		fmt.Printf("Scanning directories: %v\n", config.Directories)
+		if config.ModuleName != "" {
+			fmt.Printf("Using custom module name: %s\n", config.ModuleName)
+		}
+		fmt.Printf("\n")
+	}
+	
 	// Resolve module name
+	if config.Verbose {
+		fmt.Printf("Resolving module name...\n")
+	}
 	moduleName, err := g.moduleResolver.ResolveModuleName(config.ModuleName)
 	if err != nil {
-		return fmt.Errorf("failed to resolve module name: %w", err)
+		return &models.GeneratorError{
+			Type:    models.ErrorTypeValidation,
+			Message: fmt.Sprintf("Failed to resolve module name: %v", err),
+			Suggestions: []string{
+				"Check your go.mod file exists and is valid",
+				"Ensure you're running from the correct directory",
+				"Try specifying --module flag explicitly",
+			},
+			Context: map[string]interface{}{
+				"provided_module": config.ModuleName,
+				"directories":     config.Directories,
+			},
+		}
 	}
 
+	if config.Verbose {
+		fmt.Printf("Resolved module name: %s\n", moduleName)
+	}
+	
 	// Scan directories for Go packages
+	if config.Verbose {
+		fmt.Printf("Scanning directories for Go packages...\n")
+	}
 	packageDirs, err := g.scanner.ScanDirectories(config.Directories)
 	if err != nil {
-		return fmt.Errorf("failed to scan directories: %w", err)
+		return &models.GeneratorError{
+			Type:    models.ErrorTypeFileSystem,
+			Message: fmt.Sprintf("Failed to scan directories: %v", err),
+			Suggestions: []string{
+				"Check that the specified directories exist",
+				"Ensure you have read permissions for the directories",
+				"Verify the directory paths are correct",
+			},
+			Context: map[string]interface{}{
+				"directories": config.Directories,
+			},
+		}
 	}
 
 	if len(packageDirs) == 0 {
-		return fmt.Errorf("no Go packages found in specified directories")
+		return &models.GeneratorError{
+			Type:    models.ErrorTypeValidation,
+			Message: "No Go packages found in specified directories",
+			Suggestions: []string{
+				"Ensure the directories contain Go files",
+				"Check that Go files have valid package declarations",
+				"Try scanning parent directories or use './...' pattern",
+			},
+			Context: map[string]interface{}{
+				"directories": config.Directories,
+			},
+		}
 	}
 
 	fmt.Printf("Found %d packages to process\n", len(packageDirs))
+	g.summary.PackagesProcessed = len(packageDirs)
+	
+	if config.Verbose {
+		fmt.Printf("Package directories:\n")
+		for i, dir := range packageDirs {
+			fmt.Printf("  %d. %s\n", i+1, dir)
+		}
+		fmt.Printf("\n")
+	}
 
 	// First pass: Discover all parsers across packages
 	fmt.Printf("Discovering parsers across all packages...\n")
+	
+	if config.Verbose {
+		fmt.Printf("Phase 1: Parser discovery (validation disabled)\n")
+	}
 	
 	// Skip parser validation during discovery phase
 	g.parser.SetSkipParserValidation(true)
 	
 	var allPackageMetadata []*models.PackageMetadata
-	for _, packageDir := range packageDirs {
+	for i, packageDir := range packageDirs {
+		if config.Verbose {
+			fmt.Printf("  Parsing package %d/%d: %s\n", i+1, len(packageDirs), packageDir)
+		}
+		
 		// Parse the package
 		metadata, err := g.parser.ParseDirectory(packageDir)
 		if err != nil {
-			return fmt.Errorf("failed to parse package %s: %w", packageDir, err)
+			// Enhance error with context
+			if genErr, ok := err.(*models.GeneratorError); ok {
+				genErr.Context = map[string]interface{}{
+					"package_directory": packageDir,
+					"module_name":      moduleName,
+				}
+				return genErr
+			}
+			return &models.GeneratorError{
+				Type:    models.ErrorTypeValidation,
+				Message: fmt.Sprintf("Failed to parse package %s: %v", packageDir, err),
+				Suggestions: []string{
+					"Check for syntax errors in Go files",
+					"Ensure all files have valid package declarations",
+					"Verify annotation syntax is correct",
+				},
+				Context: map[string]interface{}{
+					"package_directory": packageDir,
+					"module_name":      moduleName,
+				},
+			}
 		}
 
 		// Store metadata for second pass
 		allPackageMetadata = append(allPackageMetadata, metadata)
+		
+		// Collect summary information
+		g.collectSummaryInfo(metadata)
+		
+		if config.Verbose {
+			fmt.Printf("    Found: %d controllers, %d services, %d middlewares, %d parsers\n", 
+				len(metadata.Controllers), 
+				len(metadata.CoreServices)+len(metadata.Loggers), 
+				len(metadata.Middlewares),
+				len(metadata.RouteParsers))
+		}
 
 		// Collect parsers from this package
 		err = g.collectParsersFromPackage(metadata, moduleName, packageDir)
 		if err != nil {
-			return fmt.Errorf("failed to collect parsers from package %s: %w", packageDir, err)
+			return err // This already returns a GeneratorError
 		}
 	}
 	
@@ -85,17 +197,42 @@ func (g *Generator) Run(config Config) error {
 	}
 
 	fmt.Printf("Discovered %d parsers across all packages\n", len(g.globalParsers))
+	g.summary.ParsersDiscovered = len(g.globalParsers)
 
 	// Validate custom parsers across all packages using global registry
 	fmt.Printf("Validating custom parsers across all packages...\n")
+	
+	if config.Verbose {
+		fmt.Printf("Phase 2: Parser validation (validation enabled)\n")
+	}
 	for _, metadata := range allPackageMetadata {
 		err = g.parser.ValidateCustomParsersWithRegistry(metadata, g.globalParsers)
 		if err != nil {
-			return fmt.Errorf("parser validation failed for package %s: %w", metadata.PackageName, err)
+			// Enhance error with context
+			if genErr, ok := err.(*models.GeneratorError); ok {
+				if genErr.Context == nil {
+					genErr.Context = make(map[string]interface{})
+				}
+				genErr.Context["package_name"] = metadata.PackageName
+				genErr.Context["package_path"] = metadata.PackagePath
+				return genErr
+			}
+			return &models.GeneratorError{
+				Type:    models.ErrorTypeParserValidation,
+				Message: fmt.Sprintf("Parser validation failed for package %s: %v", metadata.PackageName, err),
+				Context: map[string]interface{}{
+					"package_name": metadata.PackageName,
+					"package_path": metadata.PackagePath,
+				},
+			}
 		}
 	}
 
 	// Second pass: Generate code with global parser registry
+	if config.Verbose {
+		fmt.Printf("Phase 3: Code generation\n")
+	}
+	
 	var allModules []models.ModuleReference
 	for i, metadata := range allPackageMetadata {
 		packageDir := packageDirs[i]
@@ -125,13 +262,38 @@ func (g *Generator) Run(config Config) error {
 		// Generate module for this package
 		generatedModule, err := g.codeGenerator.GenerateModuleWithModule(metadata, moduleName)
 		if err != nil {
-			return fmt.Errorf("failed to generate module for package %s: %w", metadata.PackageName, err)
+			return &models.GeneratorError{
+				Type:    models.ErrorTypeGeneration,
+				Message: fmt.Sprintf("Failed to generate module for package %s: %v", metadata.PackageName, err),
+				Suggestions: []string{
+					"Check that all annotations are valid",
+					"Ensure all dependencies are properly defined",
+					"Verify that all referenced types exist",
+				},
+				Context: map[string]interface{}{
+					"package_name": metadata.PackageName,
+					"package_path": packageDir,
+					"module_name":  moduleName,
+				},
+			}
 		}
 
 		// Write the generated module file
 		err = g.writeModuleFile(generatedModule)
 		if err != nil {
-			return fmt.Errorf("failed to write module file for package %s: %w", metadata.PackageName, err)
+			return &models.GeneratorError{
+				Type:    models.ErrorTypeFileSystem,
+				Message: fmt.Sprintf("Failed to write module file for package %s: %v", metadata.PackageName, err),
+				Suggestions: []string{
+					"Check write permissions for the target directory",
+					"Ensure the target directory exists",
+					"Verify there's enough disk space",
+				},
+				Context: map[string]interface{}{
+					"package_name": metadata.PackageName,
+					"file_path":    generatedModule.FilePath,
+				},
+			}
 		}
 
 		// Add to modules list for main.go generation
@@ -142,9 +304,18 @@ func (g *Generator) Run(config Config) error {
 		})
 
 		fmt.Printf("  Generated module: %s\n", generatedModule.FilePath)
+		g.summary.ModulesGenerated++
+		g.summary.GeneratedFiles = append(g.summary.GeneratedFiles, generatedModule.FilePath)
 	}
 
 	// Users control their own main.go files - we just generate the modules
+	
+	if config.Verbose {
+		duration := time.Since(startTime)
+		fmt.Printf("\nGeneration completed in %v\n", duration)
+		fmt.Printf("Total files processed: %d\n", len(packageDirs))
+		fmt.Printf("Total modules generated: %d\n", g.summary.ModulesGenerated)
+	}
 
 	return nil
 }
@@ -219,10 +390,21 @@ func (g *Generator) collectParsersFromPackage(metadata *models.PackageMetadata, 
 
 		// Check for conflicts
 		if existing, exists := g.globalParsers[parser.TypeName]; exists {
-			return fmt.Errorf("parser conflict: type '%s' is already registered by parser '%s' at %s:%d, cannot register duplicate parser '%s' at %s:%d",
-				parser.TypeName,
-				existing.FunctionName, existing.FileName, existing.Line,
-				parser.FunctionName, parser.FileName, parser.Line)
+			conflicts := []models.ParserConflict{
+				{
+					FileName:     existing.FileName,
+					Line:         existing.Line,
+					FunctionName: existing.FunctionName,
+					PackagePath:  existing.PackagePath,
+				},
+				{
+					FileName:     parser.FileName,
+					Line:         parser.Line,
+					FunctionName: parser.FunctionName,
+					PackagePath:  packageDir,
+				},
+			}
+			return models.NewParserConflictError(parser.TypeName, conflicts)
 		}
 
 		// Add to global registry
@@ -278,4 +460,16 @@ func (g *Generator) resolveParserImportPath(moduleName, packageDir, packageName 
 
 	// Fallback to relative import (not recommended for production)
 	return fmt.Sprintf("./%s", packageName), nil
+}
+
+// collectSummaryInfo collects summary information from package metadata
+func (g *Generator) collectSummaryInfo(metadata *models.PackageMetadata) {
+	g.summary.ControllersFound += len(metadata.Controllers)
+	g.summary.ServicesFound += len(metadata.CoreServices) + len(metadata.Loggers)
+	g.summary.MiddlewaresFound += len(metadata.Middlewares)
+}
+
+// ReportSuccess reports successful generation using the diagnostic reporter
+func (g *Generator) ReportSuccess() {
+	g.reporter.ReportSuccess(g.summary)
 }

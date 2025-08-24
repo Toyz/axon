@@ -1,7 +1,6 @@
 package registry
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/toyz/axon/internal/models"
@@ -45,10 +44,13 @@ func (r *ParserRegistry) RegisterParser(parser models.RouteParserMetadata) error
 	defer r.mu.Unlock()
 
 	if existing, exists := r.parsers[parser.TypeName]; exists {
-		return fmt.Errorf("parser for type '%s' already registered at %s:%d, cannot register duplicate at %s:%d",
+		return models.NewParserRegistrationError(
 			parser.TypeName,
-			existing.FileName, existing.Line,
-			parser.FileName, parser.Line)
+			parser.FileName,
+			parser.Line,
+			existing.FileName,
+			existing.Line,
+		)
 	}
 
 	r.parsers[parser.TypeName] = parser

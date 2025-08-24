@@ -96,7 +96,7 @@ go 1.21
 	require.NoError(t, err)
 
 	// Create generator and run discovery
-	generator := NewGenerator()
+	generator := NewGenerator(false)
 	config := Config{
 		Directories: []string{"parsers", "controllers"},
 		ModuleName:  "test-app",
@@ -200,7 +200,7 @@ go 1.21
 	require.NoError(t, err)
 
 	// Create generator and run discovery - should fail with conflict
-	generator := NewGenerator()
+	generator := NewGenerator(false)
 	config := Config{
 		Directories: []string{"parsers1", "parsers2"},
 		ModuleName:  "conflict-test",
@@ -255,7 +255,7 @@ go 1.21
 	require.NoError(t, err)
 
 	// Create generator and run discovery
-	generator := NewGenerator()
+	generator := NewGenerator(false)
 	config := Config{
 		Directories: []string{"internal/parsers"},
 		ModuleName:  "import-test",

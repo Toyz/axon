@@ -196,7 +196,7 @@ func (c *UserController) GetUser(id string) error {
 }
 `,
 			expectError: true,
-			errorMsg:    "no parser registered for custom type 'CustomID'",
+			errorMsg:    "No parser registered for custom type 'CustomID'",
 		},
 		{
 			name: "route with custom type and matching parser",

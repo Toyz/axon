@@ -41,6 +41,10 @@ const (
 	ErrorTypeValidation
 	ErrorTypeGeneration
 	ErrorTypeFileSystem
+	ErrorTypeParserRegistration
+	ErrorTypeParserValidation
+	ErrorTypeParserImport
+	ErrorTypeParserConflict
 )
 
 // RouteParserMetadata represents metadata for a route parameter parser

@@ -1046,12 +1046,17 @@ func (p *Parser) validateAndLinkCustomParsers(metadata *models.PackageMetadata) 
 					}
 					
 					if !exists {
-						return fmt.Errorf("no parser registered for custom type '%s' used in route %s %s (parameter '%s'). Available parsers: %s",
+						availableParsers := p.getAvailableParsersList(parserRegistry)
+						errorReporter := NewParserErrorReporter(p)
+						return errorReporter.ReportParserNotFoundError(
 							param.Type,
 							route.Method,
 							route.Path,
 							param.Name,
-							p.formatAvailableParsers(parserRegistry))
+							"", // fileName will be set by caller
+							0,  // line will be set by caller
+							availableParsers,
+						)
 					}
 					
 					// Link the parameter to the parser
@@ -1097,12 +1102,17 @@ func (p *Parser) ValidateCustomParsersWithRegistry(metadata *models.PackageMetad
 					}
 					
 					if !exists {
-						return fmt.Errorf("no parser registered for custom type '%s' used in route %s %s (parameter '%s'). Available parsers: %s",
+						availableParsers := p.getAvailableParsersListFromMap(parserRegistry)
+						errorReporter := NewParserErrorReporter(p)
+						return errorReporter.ReportParserNotFoundError(
 							param.Type,
 							route.Method,
 							route.Path,
 							param.Name,
-							p.formatAvailableParsersFromMap(parserRegistry))
+							"", // fileName will be set by caller
+							0,  // line will be set by caller
+							availableParsers,
+						)
 					}
 					
 					// Link the parameter to the parser
@@ -1141,6 +1151,30 @@ func (p *Parser) formatAvailableParsersFromMap(parsers map[string]models.RoutePa
 	}
 	
 	return strings.Join(types, ", ")
+}
+
+// getAvailableParsersList returns a slice of available parser type names
+func (p *Parser) getAvailableParsersList(parsers map[string]models.RouteParserMetadata) []string {
+	var types []string
+	for typeName := range parsers {
+		types = append(types, typeName)
+	}
+	
+	// Sort for consistent output
+	for i := 0; i < len(types)-1; i++ {
+		for j := i + 1; j < len(types); j++ {
+			if types[i] > types[j] {
+				types[i], types[j] = types[j], types[i]
+			}
+		}
+	}
+	
+	return types
+}
+
+// getAvailableParsersListFromMap returns a slice of available parser type names from a map
+func (p *Parser) getAvailableParsersListFromMap(parsers map[string]models.RouteParserMetadata) []string {
+	return p.getAvailableParsersList(parsers)
 }
 
 // addRouteToController finds the appropriate controller and adds the route to it
@@ -1243,6 +1277,8 @@ func (p *Parser) isEchoHandlerFunc(expr ast.Expr) bool {
 // Expected signature: func(c echo.Context, paramValue string) (T, error)
 func (p *Parser) ValidateParserFunctionSignature(file *ast.File, functionName, typeName string) error {
 	var parserFunc *ast.FuncDecl
+	fileName := p.getFileName(file)
+	errorReporter := NewParserErrorReporter(p)
 	
 	// Find the parser function
 	ast.Inspect(file, func(n ast.Node) bool {
@@ -1257,42 +1293,94 @@ func (p *Parser) ValidateParserFunctionSignature(file *ast.File, functionName, t
 	})
 	
 	if parserFunc == nil {
-		return fmt.Errorf("parser function '%s' not found", functionName)
+		return errorReporter.ReportParserValidationError(
+			functionName,
+			fileName,
+			0, // Line will be set by caller if available
+			"function not found",
+			"",
+		)
 	}
+	
+	line := p.fileSet.Position(parserFunc.Pos()).Line
+	actualSignature := p.getFunctionSignatureString(parserFunc)
 	
 	// Validate function signature: func(c echo.Context, paramValue string) (T, error)
 	
 	// Check parameters: should have exactly 2 parameters
 	if parserFunc.Type.Params == nil || len(parserFunc.Type.Params.List) != 2 {
-		return fmt.Errorf("parser function '%s' must have exactly 2 parameters: (c echo.Context, paramValue string)", functionName)
+		return errorReporter.ReportParserValidationError(
+			functionName,
+			fileName,
+			line,
+			fmt.Sprintf("has %d parameters, expected 2", p.countParameters(parserFunc.Type.Params)),
+			actualSignature,
+		)
 	}
 	
 	// Check first parameter: echo.Context
 	firstParam := parserFunc.Type.Params.List[0]
 	if !p.isEchoContext(firstParam.Type) {
-		return fmt.Errorf("parser function '%s' first parameter must be echo.Context", functionName)
+		return errorReporter.ReportParserValidationError(
+			functionName,
+			fileName,
+			line,
+			fmt.Sprintf("first parameter is %s, expected echo.Context", p.getTypeString(firstParam.Type)),
+			actualSignature,
+		)
 	}
 	
 	// Check second parameter: string
 	secondParam := parserFunc.Type.Params.List[1]
 	if !p.isStringType(secondParam.Type) {
-		return fmt.Errorf("parser function '%s' second parameter must be string", functionName)
+		return errorReporter.ReportParserValidationError(
+			functionName,
+			fileName,
+			line,
+			fmt.Sprintf("second parameter is %s, expected string", p.getTypeString(secondParam.Type)),
+			actualSignature,
+		)
 	}
 	
 	// Check return values: should have exactly 2 return values
 	if parserFunc.Type.Results == nil || len(parserFunc.Type.Results.List) != 2 {
-		return fmt.Errorf("parser function '%s' must return exactly 2 values: (T, error)", functionName)
+		return errorReporter.ReportParserValidationError(
+			functionName,
+			fileName,
+			line,
+			fmt.Sprintf("returns %d values, expected 2", p.countResults(parserFunc.Type.Results)),
+			actualSignature,
+		)
 	}
 	
 	// Check second return value: error
 	secondReturn := parserFunc.Type.Results.List[1]
 	if !p.isErrorType(secondReturn.Type) {
-		return fmt.Errorf("parser function '%s' second return value must be error", functionName)
+		return errorReporter.ReportParserValidationError(
+			functionName,
+			fileName,
+			line,
+			fmt.Sprintf("second return value is %s, expected error", p.getTypeString(secondReturn.Type)),
+			actualSignature,
+		)
 	}
 	
-	// First return value can be any type T (we don't validate the specific type here)
-	// The type name from the annotation should match the actual return type, but we'll
-	// leave that validation for the code generation phase
+	// Validate that the first return type matches the expected type name
+	// Note: We're being lenient here for now, as strict type matching can be complex
+	// The main validation is ensuring the function signature structure is correct
+	firstReturn := parserFunc.Type.Results.List[0]
+	actualReturnType := p.getTypeString(firstReturn.Type)
+	
+	// Only validate if the types are clearly incompatible (e.g., basic type mismatch)
+	if p.isObviouslyIncompatible(actualReturnType, typeName) {
+		return errorReporter.ReportParserValidationError(
+			functionName,
+			fileName,
+			line,
+			fmt.Sprintf("first return value is %s, expected %s", actualReturnType, typeName),
+			actualSignature,
+		)
+	}
 	
 	return nil
 }
@@ -1350,6 +1438,310 @@ func (p *Parser) isErrorType(expr ast.Expr) bool {
 		return ident.Name == "error"
 	}
 	return false
+}
+
+// getFileName extracts filename from AST file, handling nil cases
+func (p *Parser) getFileName(file *ast.File) string {
+	if file == nil {
+		return "unknown"
+	}
+	// Try to get filename from file set if available
+	if p.fileSet != nil {
+		pos := p.fileSet.Position(file.Pos())
+		if pos.Filename != "" {
+			return pos.Filename
+		}
+	}
+	return "unknown"
+}
+
+// countParameters safely counts parameters, handling nil cases
+func (p *Parser) countParameters(params *ast.FieldList) int {
+	if params == nil {
+		return 0
+	}
+	return len(params.List)
+}
+
+// countResults safely counts return values, handling nil cases
+func (p *Parser) countResults(results *ast.FieldList) int {
+	if results == nil {
+		return 0
+	}
+	return len(results.List)
+}
+
+// isCompatibleType checks if the actual return type is compatible with the expected type name
+func (p *Parser) isCompatibleType(actualType, expectedType string) bool {
+	// Direct match
+	if actualType == expectedType {
+		return true
+	}
+	
+	// Handle pointer types - be more flexible with pointer matching
+	actualBase := strings.TrimPrefix(actualType, "*")
+	expectedBase := strings.TrimPrefix(expectedType, "*")
+	
+	if actualBase == expectedBase {
+		return true
+	}
+	
+	// Handle package-qualified types
+	if strings.Contains(actualType, ".") || strings.Contains(expectedType, ".") {
+		// Extract just the type name part for comparison
+		actualParts := strings.Split(actualBase, ".")
+		expectedParts := strings.Split(expectedBase, ".")
+		
+		actualTypeName := actualParts[len(actualParts)-1]
+		expectedTypeName := expectedParts[len(expectedParts)-1]
+		
+		// Allow matching if the base type names match
+		if actualTypeName == expectedTypeName {
+			return true
+		}
+		
+		// Also check if one is qualified and matches the other
+		if actualTypeName == expectedBase || expectedTypeName == actualBase {
+			return true
+		}
+	}
+	
+	// For parser validation, be more lenient - allow any type that could reasonably match
+	// This is because the annotation might use a simplified type name while the function
+	// uses the full qualified type
+	return false
+}
+
+// isObviouslyIncompatible checks for clearly incompatible types (e.g., string vs int)
+func (p *Parser) isObviouslyIncompatible(actualType, expectedType string) bool {
+	// Basic type mismatches that are clearly wrong
+	basicTypes := map[string]bool{
+		"string": true, "int": true, "int32": true, "int64": true,
+		"float32": true, "float64": true, "bool": true, "byte": true,
+	}
+	
+	actualBase := strings.TrimPrefix(actualType, "*")
+	expectedBase := strings.TrimPrefix(expectedType, "*")
+	
+	// If both are basic types and different, they're incompatible
+	if basicTypes[actualBase] && basicTypes[expectedBase] && actualBase != expectedBase {
+		return true
+	}
+	
+	// Otherwise, assume they could be compatible (complex types, custom types, etc.)
+	return false
+}
+
+// getFunctionSignatureString returns a string representation of a function signature
+func (p *Parser) getFunctionSignatureString(funcDecl *ast.FuncDecl) string {
+	if funcDecl == nil {
+		return ""
+	}
+	
+	var params []string
+	if funcDecl.Type.Params != nil {
+		for _, param := range funcDecl.Type.Params.List {
+			paramType := p.getTypeString(param.Type)
+			if len(param.Names) > 0 {
+				for _, name := range param.Names {
+					params = append(params, name.Name+" "+paramType)
+				}
+			} else {
+				params = append(params, paramType)
+			}
+		}
+	}
+	
+	var results []string
+	if funcDecl.Type.Results != nil {
+		for _, result := range funcDecl.Type.Results.List {
+			results = append(results, p.getTypeString(result.Type))
+		}
+	}
+	
+	signature := fmt.Sprintf("func %s(%s)", funcDecl.Name.Name, strings.Join(params, ", "))
+	if len(results) > 0 {
+		if len(results) == 1 {
+			signature += " " + results[0]
+		} else {
+			signature += " (" + strings.Join(results, ", ") + ")"
+		}
+	}
+	
+	return signature
+}
+
+// ValidateParserImports validates that all required imports for parsers are available
+func (p *Parser) ValidateParserImports(file *ast.File, parsers []models.RouteParserMetadata) error {
+	if file == nil {
+		return nil // Skip validation if file is not available
+	}
+	
+	// Extract imports from the file
+	imports := make(map[string]bool)
+	for _, imp := range file.Imports {
+		importPath := strings.Trim(imp.Path.Value, `"`)
+		imports[importPath] = true
+		
+		// Also add the package name if it has an alias
+		if imp.Name != nil {
+			imports[imp.Name.Name] = true
+		} else {
+			// Extract package name from import path
+			parts := strings.Split(importPath, "/")
+			if len(parts) > 0 {
+				packageName := parts[len(parts)-1]
+				imports[packageName] = true
+			}
+		}
+	}
+	
+	fileName := p.getFileName(file)
+	
+	// Check each parser for required imports
+	for _, parser := range parsers {
+		// Check if the parser type requires specific imports
+		requiredImport := p.getRequiredImportForType(parser.TypeName)
+		if requiredImport != "" {
+			// Check if the required import is present
+			if !p.hasRequiredImport(imports, requiredImport, parser.TypeName) {
+				return models.NewParserImportError(
+					parser.TypeName,
+					fileName,
+					parser.Line,
+					requiredImport,
+				)
+			}
+		}
+	}
+	
+	return nil
+}
+
+// getRequiredImportForType returns the required import for a given type
+func (p *Parser) getRequiredImportForType(typeName string) string {
+	// Map of types to their required imports
+	typeImports := map[string]string{
+		"uuid.UUID":   "github.com/google/uuid",
+		"time.Time":   "time",
+		"time.Duration": "time",
+		"url.URL":     "net/url",
+		"big.Int":     "math/big",
+		"big.Float":   "math/big",
+	}
+	
+	return typeImports[typeName]
+}
+
+// hasRequiredImport checks if the required import is available in the imports map
+func (p *Parser) hasRequiredImport(imports map[string]bool, requiredImport, typeName string) bool {
+	// Check direct import path
+	if imports[requiredImport] {
+		return true
+	}
+	
+	// Check if the package name is imported
+	parts := strings.Split(requiredImport, "/")
+	if len(parts) > 0 {
+		packageName := parts[len(parts)-1]
+		if imports[packageName] {
+			return true
+		}
+	}
+	
+	// For types like uuid.UUID, check if "uuid" package is available
+	if strings.Contains(typeName, ".") {
+		typeParts := strings.Split(typeName, ".")
+		if len(typeParts) > 0 {
+			packageName := typeParts[0]
+			if imports[packageName] {
+				return true
+			}
+		}
+	}
+	
+	return false
+}
+
+// DetectParserConflicts detects conflicts in parser registrations across multiple packages
+func (p *Parser) DetectParserConflicts(allParsers []models.RouteParserMetadata) error {
+	typeMap := make(map[string][]models.ParserConflict)
+	
+	// Group parsers by type name
+	for _, parser := range allParsers {
+		conflict := models.ParserConflict{
+			FileName:     parser.FileName,
+			Line:         parser.Line,
+			FunctionName: parser.FunctionName,
+			PackagePath:  parser.PackagePath,
+		}
+		typeMap[parser.TypeName] = append(typeMap[parser.TypeName], conflict)
+	}
+	
+	// Check for conflicts (multiple parsers for the same type)
+	for typeName, conflicts := range typeMap {
+		if len(conflicts) > 1 {
+			return models.NewParserConflictError(typeName, conflicts)
+		}
+	}
+	
+	return nil
+}
+
+// ValidateAllParsers performs comprehensive validation of all parser-related functionality
+func (p *Parser) ValidateAllParsers(metadata *models.PackageMetadata, fileMap map[string]*ast.File) error {
+	errorReporter := NewParserErrorReporter(p)
+	
+	// 1. Validate parser function signatures
+	for _, parser := range metadata.RouteParsers {
+		if file, exists := fileMap[parser.FileName]; exists {
+			err := p.ValidateParserFunctionSignature(file, parser.FunctionName, parser.TypeName)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	
+	// 2. Validate parser imports
+	for fileName, file := range fileMap {
+		var fileParsers []models.RouteParserMetadata
+		for _, parser := range metadata.RouteParsers {
+			if parser.FileName == fileName {
+				fileParsers = append(fileParsers, parser)
+			}
+		}
+		
+		if len(fileParsers) > 0 {
+			err := p.ValidateParserImports(file, fileParsers)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	
+	// 3. Detect parser conflicts
+	err := p.DetectParserConflicts(metadata.RouteParsers)
+	if err != nil {
+		return err
+	}
+	
+	// 4. Validate custom parser usage in routes
+	err = p.validateAndLinkCustomParsers(metadata)
+	if err != nil {
+		return err
+	}
+	
+	// 5. Generate diagnostics (warnings, not errors)
+	diagnostics := errorReporter.GenerateParserDiagnostics(metadata)
+	if len(diagnostics) > 0 {
+		// Log diagnostics but don't fail validation
+		// This could be enhanced to use a proper logger
+		for _, diagnostic := range diagnostics {
+			fmt.Printf("Parser diagnostic: %s\n", diagnostic)
+		}
+	}
+	
+	return nil
 }
 
 // extractPublicMethods extracts all public methods from a struct for interface generation

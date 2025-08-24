@@ -3305,7 +3305,7 @@ func InvalidParser(paramValue string) (string, error) {
 	return paramValue, nil
 }`,
 			expectError: true,
-			errorMsg:    "parser function 'InvalidParser' must have exactly 2 parameters",
+			errorMsg:    "has 1 parameters, expected 2",
 		},
 		{
 			name: "parser with wrong first parameter type",
@@ -3316,7 +3316,7 @@ func InvalidParser(ctx string, paramValue string) (string, error) {
 	return paramValue, nil
 }`,
 			expectError: true,
-			errorMsg:    "parser function 'InvalidParser' first parameter must be echo.Context",
+			errorMsg:    "first parameter is string, expected echo.Context",
 		},
 		{
 			name: "parser with wrong second parameter type",
@@ -3329,7 +3329,7 @@ func InvalidParser(c echo.Context, paramValue int) (string, error) {
 	return "", nil
 }`,
 			expectError: true,
-			errorMsg:    "parser function 'InvalidParser' second parameter must be string",
+			errorMsg:    "second parameter is int, expected string",
 		},
 		{
 			name: "parser with wrong return type count",
@@ -3342,7 +3342,7 @@ func InvalidParser(c echo.Context, paramValue string) string {
 	return paramValue
 }`,
 			expectError: true,
-			errorMsg:    "parser function 'InvalidParser' must return exactly 2 values",
+			errorMsg:    "returns 1 values, expected 2",
 		},
 		{
 			name: "parser with wrong second return type",
@@ -3355,7 +3355,7 @@ func InvalidParser(c echo.Context, paramValue string) (string, string) {
 	return paramValue, ""
 }`,
 			expectError: true,
-			errorMsg:    "parser function 'InvalidParser' second return value must be error",
+			errorMsg:    "second return value is string, expected error",
 		},
 	}
 
@@ -3571,7 +3571,7 @@ func ParseThreeParams(c echo.Context, paramValue string, extra int) (string, err
 	return paramValue, nil
 }`,
 			expectError: true,
-			errorMsg:    "parser function 'ParseThreeParams' must have exactly 2 parameters",
+			errorMsg:    "has 3 parameters, expected 2",
 		},
 		{
 			name: "parser with no parameters",
@@ -3582,7 +3582,7 @@ func ParseNoParams() (string, error) {
 	return "", nil
 }`,
 			expectError: true,
-			errorMsg:    "parser function 'ParseNoParams' must have exactly 2 parameters",
+			errorMsg:    "has 0 parameters, expected 2",
 		},
 		{
 			name: "parser with three return values",
@@ -3595,7 +3595,7 @@ func ParseThreeReturns(c echo.Context, paramValue string) (string, error, bool) 
 	return paramValue, nil, true
 }`,
 			expectError: true,
-			errorMsg:    "parser function 'ParseThreeReturns' must return exactly 2 values",
+			errorMsg:    "returns 3 values, expected 2",
 		},
 		{
 			name: "parser with no return values",
@@ -3607,7 +3607,7 @@ import "github.com/labstack/echo/v4"
 func ParseNoReturns(c echo.Context, paramValue string) {
 }`,
 			expectError: true,
-			errorMsg:    "parser function 'ParseNoReturns' must return exactly 2 values",
+			errorMsg:    "returns 0 values, expected 2",
 		},
 	}
 
