@@ -80,6 +80,7 @@ jobs:
       - name: Build example app
         run: |
           cd examples/complete-app
+          ../../axon ./internal/...
           go build -v .
 
   integration:
