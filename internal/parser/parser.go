@@ -487,8 +487,8 @@ func (p *Parser) parseAnnotationComment(comment, target string, pos token.Pos) (
 			if strings.Contains(part, "=") {
 				// Flag with value like -Manual=ModuleName
 				flagParts := strings.SplitN(part, "=", 2)
-				// Remove the leading dash from the parameter key
-				paramKey := strings.TrimPrefix(flagParts[0], "-")
+				// Keep the leading dash for the parameter key to match constants
+				paramKey := flagParts[0]
 				annotation.Parameters[paramKey] = flagParts[1]
 			} else {
 				// Simple flag like -Init
