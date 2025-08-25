@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/toyz/axon/internal/cli"
@@ -15,6 +16,7 @@ func main() {
 	var (
 		moduleFlag  = flag.String("module", "", "Custom module name for imports (defaults to go.mod module)")
 		verboseFlag = flag.Bool("verbose", false, "Enable verbose output and detailed error reporting")
+		cleanFlag   = flag.Bool("clean", false, "Delete all autogen_module.go files from the specified directories")
 		helpFlag    = flag.Bool("help", false, "Show help information")
 	)
 
@@ -37,6 +39,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  %s ./internal/controllers ./internal/services # Scan specific directories\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s --module github.com/myorg/myapp ./...      # Specify custom module name\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s --verbose ./internal/...                   # Enable detailed output\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --clean ./...                              # Delete all autogen_module.go files\n", os.Args[0])
 	}
 
 	flag.Parse()
@@ -77,6 +80,15 @@ func main() {
 		}
 	}
 
+	// Handle clean command
+	if *cleanFlag {
+		if err := cleanAutogenFiles(directories, *verboseFlag); err != nil {
+			fmt.Fprintf(os.Stderr, "Error during cleanup: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	// Create CLI configuration
 	config := cli.Config{
 		Directories: directories,
@@ -95,4 +107,111 @@ func main() {
 
 	// Report success with summary
 	generator.ReportSuccess()
+}
+
+// cleanAutogenFiles removes all autogen_module.go files from the specified directories
+func cleanAutogenFiles(directories []string, verbose bool) error {
+	var deletedFiles []string
+	var errors []error
+
+	for _, dir := range directories {
+		if strings.HasSuffix(dir, "/...") {
+			// Handle recursive patterns
+			baseDir := strings.TrimSuffix(dir, "/...")
+			if baseDir == "" {
+				baseDir = "."
+			}
+			
+			files, err := findAutogenFilesRecursive(baseDir)
+			if err != nil {
+				errors = append(errors, fmt.Errorf("failed to scan directory %s: %w", baseDir, err))
+				continue
+			}
+			
+			for _, file := range files {
+				if err := os.Remove(file); err != nil {
+					errors = append(errors, fmt.Errorf("failed to delete %s: %w", file, err))
+				} else {
+					deletedFiles = append(deletedFiles, file)
+					if verbose {
+						fmt.Printf("Deleted: %s\n", file)
+					}
+				}
+			}
+		} else {
+			// Handle specific directory
+			autogenFile := filepath.Join(dir, "autogen_module.go")
+			if _, err := os.Stat(autogenFile); err == nil {
+				if err := os.Remove(autogenFile); err != nil {
+					errors = append(errors, fmt.Errorf("failed to delete %s: %w", autogenFile, err))
+				} else {
+					deletedFiles = append(deletedFiles, autogenFile)
+					if verbose {
+						fmt.Printf("Deleted: %s\n", autogenFile)
+					}
+				}
+			}
+		}
+	}
+
+	// Report results
+	if len(deletedFiles) > 0 {
+		fmt.Printf("Successfully deleted %d autogen_module.go file(s):\n", len(deletedFiles))
+		if !verbose {
+			for _, file := range deletedFiles {
+				fmt.Printf("  - %s\n", file)
+			}
+		}
+	} else {
+		fmt.Println("No autogen_module.go files found to delete.")
+	}
+
+	if len(errors) > 0 {
+		fmt.Fprintf(os.Stderr, "\nEncountered %d error(s) during cleanup:\n", len(errors))
+		for _, err := range errors {
+			fmt.Fprintf(os.Stderr, "  - %v\n", err)
+		}
+		return fmt.Errorf("cleanup completed with %d error(s)", len(errors))
+	}
+
+	return nil
+}
+
+// findAutogenFilesRecursive recursively finds all autogen_module.go files in a directory
+func findAutogenFilesRecursive(rootDir string) ([]string, error) {
+	var autogenFiles []string
+	
+	// Convert to absolute path for consistency
+	absRootDir, err := filepath.Abs(rootDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get absolute path for %s: %w", rootDir, err)
+	}
+	
+	err = filepath.Walk(absRootDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		
+		// Skip hidden directories and files
+		if strings.HasPrefix(info.Name(), ".") {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		
+		// Skip vendor directory
+		if info.IsDir() && info.Name() == "vendor" {
+			return filepath.SkipDir
+		}
+		
+		// Check if this is an autogen_module.go file
+		if !info.IsDir() && info.Name() == "autogen_module.go" {
+			autogenFiles = append(autogenFiles, path)
+		}
+		
+		return nil
+	})
+	
+	return autogenFiles, err
 }

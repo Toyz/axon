@@ -435,10 +435,13 @@ func GenerateCoreServiceProvider(service models.CoreServiceMetadata) (string, er
 		return generateTransientServiceProvider(data)
 	} else {
 		// Default Singleton mode
-		if service.HasLifecycle {
-			// For services with -Init flag, generate simple provider only
+		if service.HasLifecycle && service.StartMode != "" {
+			// For services with -Init flag (StartMode is set), generate simple provider only
 			// The invoke function will be generated separately
 			return executeTemplate("init-provider", InitProviderTemplate, data)
+		} else if service.HasLifecycle {
+			// For old-style lifecycle services (no -Init flag), generate embedded lifecycle hooks
+			return executeTemplate("lifecycle-provider", LifecycleProviderTemplate, data)
 		} else if len(service.Dependencies) > 0 {
 			// Use regular provider template for services with dependencies
 			return executeTemplate("provider", ProviderTemplate, data)

@@ -95,10 +95,23 @@ func (p *Parser) ParseSource(filename, source string) (*models.PackageMetadata, 
 
 // ParseDirectory recursively scans the specified directory for .go files and extracts annotations
 func (p *Parser) ParseDirectory(path string) (*models.PackageMetadata, error) {
+	// Validate and sanitize the input path to prevent path traversal attacks
+	if !isValidDirectoryPath(path) {
+		return nil, fmt.Errorf("invalid directory path: %s", path)
+	}
+	
+	// Clean and normalize the path
+	cleanPath := filepath.Clean(path)
+	
+	// Ensure the clean path doesn't escape the current working directory
+	if strings.Contains(cleanPath, "..") {
+		return nil, fmt.Errorf("path traversal not allowed: %s", path)
+	}
+	
 	// Parse all Go files in the directory
-	pkgs, err := parser.ParseDir(p.fileSet, path, nil, parser.ParseComments)
+	pkgs, err := parser.ParseDir(p.fileSet, cleanPath, nil, parser.ParseComments)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse directory %s: %w", path, err)
+		return nil, fmt.Errorf("failed to parse directory %s: %w", cleanPath, err)
 	}
 
 	// We expect only one package per directory
@@ -121,7 +134,7 @@ func (p *Parser) ParseDirectory(path string) (*models.PackageMetadata, error) {
 	// Create package metadata
 	metadata := &models.PackageMetadata{
 		PackageName:   packageName,
-		PackagePath:   path,
+		PackagePath:   cleanPath,
 		SourceImports: make(map[string][]models.Import),
 	}
 	
@@ -201,7 +214,19 @@ func (p *Parser) detectModuleInfo(metadata *models.PackageMetadata) error {
 
 // findModuleInfo searches for go.mod file and extracts module information
 func (p *Parser) findModuleInfo(startPath string) (moduleRoot, modulePath string, err error) {
-	currentDir := startPath
+	// Validate and sanitize the input path
+	if !isValidDirectoryPath(startPath) {
+		return "", "", fmt.Errorf("invalid start path: %s", startPath)
+	}
+	
+	// Clean and normalize the path
+	currentDir := filepath.Clean(startPath)
+	
+	// Ensure the clean path doesn't contain path traversal attempts
+	if strings.Contains(currentDir, "..") {
+		return "", "", fmt.Errorf("path traversal not allowed in start path: %s", startPath)
+	}
+	
 	if !filepath.IsAbs(currentDir) {
 		currentDir, err = filepath.Abs(currentDir)
 		if err != nil {
@@ -210,9 +235,16 @@ func (p *Parser) findModuleInfo(startPath string) (moduleRoot, modulePath string
 	}
 	
 	for {
+		// Safely construct the go.mod path
 		goModPath := filepath.Join(currentDir, "go.mod")
+		
+		// Additional validation to ensure we're not accessing unexpected files
+		if !strings.HasSuffix(goModPath, "go.mod") {
+			return "", "", fmt.Errorf("invalid go.mod path construction")
+		}
+		
 		if _, err := os.Stat(goModPath); err == nil {
-			// Found go.mod file
+			// Found go.mod file - validate it's actually a go.mod file
 			modulePath, err := p.parseGoModFile(goModPath)
 			if err != nil {
 				return "", "", fmt.Errorf("failed to parse go.mod: %w", err)
@@ -234,7 +266,25 @@ func (p *Parser) findModuleInfo(startPath string) (moduleRoot, modulePath string
 
 // parseGoModFile parses the module name from a go.mod file
 func (p *Parser) parseGoModFile(path string) (string, error) {
-	file, err := os.Open(path)
+	// Validate that this is actually a go.mod file
+	if !isValidGoModPath(path) {
+		return "", fmt.Errorf("invalid go.mod file path: %s", path)
+	}
+	
+	// Clean the path to prevent path traversal
+	cleanPath := filepath.Clean(path)
+	
+	// Ensure the clean path doesn't contain path traversal attempts
+	if strings.Contains(cleanPath, "..") {
+		return "", fmt.Errorf("path traversal not allowed in go.mod path: %s", path)
+	}
+	
+	// Ensure it's actually a go.mod file
+	if !strings.HasSuffix(cleanPath, "go.mod") {
+		return "", fmt.Errorf("file is not a go.mod file: %s", path)
+	}
+	
+	file, err := os.Open(cleanPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to open go.mod file: %w", err)
 	}
@@ -260,16 +310,49 @@ func (p *Parser) parseGoModFile(path string) (string, error) {
 
 // calculatePackageImportPath calculates the full import path for a package
 func (p *Parser) calculatePackageImportPath(moduleRoot, modulePath, packagePath string) (string, error) {
+	// Validate input paths
+	if !isValidDirectoryPath(packagePath) {
+		return "", fmt.Errorf("invalid package path: %s", packagePath)
+	}
+	
+	if !isValidDirectoryPath(moduleRoot) {
+		return "", fmt.Errorf("invalid module root: %s", moduleRoot)
+	}
+	
+	// Clean and normalize paths
+	cleanPackagePath := filepath.Clean(packagePath)
+	cleanModuleRoot := filepath.Clean(moduleRoot)
+	
+	// Ensure paths don't contain traversal attempts
+	if strings.Contains(cleanPackagePath, "..") {
+		return "", fmt.Errorf("path traversal not allowed in package path: %s", packagePath)
+	}
+	
+	if strings.Contains(cleanModuleRoot, "..") {
+		return "", fmt.Errorf("path traversal not allowed in module root: %s", moduleRoot)
+	}
+	
 	// Convert package path to absolute path
-	absPackagePath, err := filepath.Abs(packagePath)
+	absPackagePath, err := filepath.Abs(cleanPackagePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve package path: %w", err)
 	}
 	
+	// Convert module root to absolute path for comparison
+	absModuleRoot, err := filepath.Abs(cleanModuleRoot)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve module root: %w", err)
+	}
+	
 	// Calculate relative path from module root
-	relPath, err := filepath.Rel(moduleRoot, absPackagePath)
+	relPath, err := filepath.Rel(absModuleRoot, absPackagePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to calculate relative path: %w", err)
+	}
+	
+	// Ensure the relative path doesn't escape the module root
+	if strings.HasPrefix(relPath, "..") {
+		return "", fmt.Errorf("package path is outside module root")
 	}
 	
 	// Convert file path separators to forward slashes for import paths
@@ -2395,4 +2478,54 @@ func (p *Parser) getTypeString(expr ast.Expr) string {
 	default:
 		return "unknown"
 	}
+}
+
+// Security validation functions
+
+// isValidDirectoryPath validates that a directory path is safe for filesystem operations
+func isValidDirectoryPath(path string) bool {
+	// Check for empty path
+	if path == "" {
+		return false
+	}
+	
+	// Check for null bytes (path injection)
+	if strings.Contains(path, "\x00") {
+		return false
+	}
+	
+	// Check for dangerous characters that are never valid in filesystem paths
+	// Note: We're being more permissive here to allow normal Go project paths
+	// The main security check is the path traversal check after filepath.Clean()
+	if strings.ContainsAny(path, "\x00<>|") {
+		return false
+	}
+	
+	return true
+}
+
+// isValidGoModPath validates that a path is safe for opening go.mod files
+func isValidGoModPath(path string) bool {
+	// Check for empty path
+	if path == "" {
+		return false
+	}
+	
+	// Check for null bytes
+	if strings.Contains(path, "\x00") {
+		return false
+	}
+	
+	// Check for dangerous characters
+	if strings.ContainsAny(path, "\x00<>|") {
+		return false
+	}
+	
+	// Must end with go.mod (but allow paths that will become go.mod after cleaning)
+	cleanPath := filepath.Clean(path)
+	if !strings.HasSuffix(cleanPath, "go.mod") {
+		return false
+	}
+	
+	return true
 }

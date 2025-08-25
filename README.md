@@ -531,7 +531,31 @@ axon ./internal/...
 
 # Generate with custom module name
 axon -module=github.com/your-org/your-app ./internal/...
+
+# Clean all generated autogen_module.go files
+axon --clean ./...
+
+# Clean specific directories
+axon --clean ./internal/controllers ./internal/services
+
+# Enable verbose output
+axon --verbose ./internal/...
+
+# Clean with verbose output
+axon --clean --verbose ./...
 ```
+
+### CLI Options
+
+- `--clean`: Delete all `autogen_module.go` files from specified directories
+- `--verbose`: Enable detailed output and error reporting  
+- `--module`: Specify custom module name for imports (defaults to go.mod module)
+- `--help`: Show help information
+
+The `--clean` flag is useful for:
+- Cleaning up before regeneration
+- Troubleshooting generation issues
+- Removing generated files when switching branches
 
 ## Contributing
 

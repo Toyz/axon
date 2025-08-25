@@ -268,8 +268,18 @@ func NewPackageResolver(projectRoot string) (*PackageResolver, error) {
 		PackageMap: make(map[string]string),
 	}
 	
+	// Validate and sanitize the project root path
+	cleanProjectRoot := filepath.Clean(projectRoot)
+	if !filepath.IsAbs(cleanProjectRoot) {
+		var err error
+		cleanProjectRoot, err = filepath.Abs(cleanProjectRoot)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve absolute path: %w", err)
+		}
+	}
+	
 	// Find go.mod file to determine module root and path
-	moduleRoot, modulePath, err := findModuleInfo(projectRoot)
+	moduleRoot, modulePath, err := findModuleInfo(cleanProjectRoot)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find module info: %w", err)
 	}
@@ -597,15 +607,20 @@ func (pr *PackageResolver) ResolvePackagePath(packageDir string) (string, error)
 
 // findModuleInfo finds the go.mod file and extracts module information
 func findModuleInfo(startDir string) (moduleRoot, modulePath string, err error) {
-	dir := startDir
+	// Validate and clean the start directory
+	dir := filepath.Clean(startDir)
+	if !filepath.IsAbs(dir) {
+		return "", "", fmt.Errorf("start directory must be absolute path")
+	}
 	
 	for {
-		goModPath := filepath.Join(dir, "go.mod")
+		// Safely construct the go.mod path using only the filename
+		goModPath := filepath.Join(dir, filepath.Base("go.mod"))
 		if _, err := os.Stat(goModPath); err == nil {
 			// Found go.mod, extract module path
 			modulePath, err := extractModulePath(goModPath)
 			if err != nil {
-				return "", "", fmt.Errorf("failed to extract module path from %s: %w", goModPath, err)
+				return "", "", fmt.Errorf("failed to extract module path from %s: %w", filepath.Base(goModPath), err)
 			}
 			return dir, modulePath, nil
 		}
@@ -618,12 +633,23 @@ func findModuleInfo(startDir string) (moduleRoot, modulePath string, err error) 
 		dir = parent
 	}
 	
-	return "", "", fmt.Errorf("go.mod not found in %s or any parent directory", startDir)
+	return "", "", fmt.Errorf("go.mod not found in %s or any parent directory", filepath.Base(startDir))
 }
 
 // extractModulePath extracts the module path from a go.mod file
 func extractModulePath(goModPath string) (string, error) {
-	content, err := os.ReadFile(goModPath)
+	// Validate the file path and ensure it's only the go.mod filename
+	cleanPath := filepath.Clean(goModPath)
+	if filepath.Base(cleanPath) != "go.mod" {
+		return "", fmt.Errorf("invalid file: must be go.mod")
+	}
+	
+	// Validate that the path doesn't contain directory traversal attempts
+	if strings.Contains(cleanPath, "..") {
+		return "", fmt.Errorf("invalid path: directory traversal not allowed")
+	}
+	
+	content, err := os.ReadFile(cleanPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to read go.mod: %w", err)
 	}
@@ -645,10 +671,26 @@ func extractModulePath(goModPath string) (string, error) {
 
 // ExtractImportsFromFile extracts imports from a Go source file
 func ExtractImportsFromFile(filename string) ([]Import, error) {
+	// Validate and sanitize the filename
+	cleanFilename := filepath.Clean(filename)
+	
+	// Validate that the path doesn't contain directory traversal attempts
+	if strings.Contains(cleanFilename, "..") {
+		return nil, fmt.Errorf("invalid filename: directory traversal not allowed")
+	}
+	
+	// Validate that it's a Go file
+	if filepath.Ext(cleanFilename) != ".go" {
+		return nil, fmt.Errorf("invalid file: must be a .go file")
+	}
+	
+	// Use only the base filename for error reporting to avoid path disclosure
+	baseFilename := filepath.Base(cleanFilename)
+	
 	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
+	file, err := parser.ParseFile(fset, cleanFilename, nil, parser.ParseComments)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse file %s: %w", filename, err)
+		return nil, fmt.Errorf("failed to parse file %s: %w", baseFilename, err)
 	}
 	
 	var imports []Import
