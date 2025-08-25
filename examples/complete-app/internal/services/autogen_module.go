@@ -17,32 +17,6 @@ type CrawlerServiceInterface interface {
 	Stop(ctx context.Context) (error)
 }
 
-// NewSessionServiceFactory creates a factory function for SessionService (Transient mode)
-func NewSessionServiceFactory(DatabaseService *DatabaseService) func() *SessionService {
-	return func() *SessionService {
-		return &SessionService{
-			DatabaseService: DatabaseService,
-		}
-	}
-}
-
-func NewUserService(Config *config.Config) *UserService {
-	return &UserService{
-		Config: Config,
-	}
-}
-
-func initUserServiceLifecycle(lc fx.Lifecycle, service *UserService) {
-	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			return service.Start(ctx)
-		},
-		OnStop: func(ctx context.Context) error {
-			return service.Stop(ctx)
-		},
-	})
-}
-
 func NewCrawlerService() *CrawlerService {
 	return &CrawlerService{
 
@@ -83,18 +57,44 @@ func initDatabaseServiceLifecycle(lc fx.Lifecycle, service *DatabaseService) {
 	})
 }
 
+// NewSessionServiceFactory creates a factory function for SessionService (Transient mode)
+func NewSessionServiceFactory(DatabaseService *DatabaseService) func() *SessionService {
+	return func() *SessionService {
+		return &SessionService{
+			DatabaseService: DatabaseService,
+		}
+	}
+}
+
+func NewUserService(Config *config.Config) *UserService {
+	return &UserService{
+		Config: Config,
+	}
+}
+
+func initUserServiceLifecycle(lc fx.Lifecycle, service *UserService) {
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			return service.Start(ctx)
+		},
+		OnStop: func(ctx context.Context) error {
+			return service.Stop(ctx)
+		},
+	})
+}
+
 func NewCrawlerServiceInterface(impl *CrawlerService) CrawlerServiceInterface {
 	return impl
 }
 
 // AutogenModule provides all core services in this package
 var AutogenModule = fx.Module("services",
-	fx.Provide(NewSessionServiceFactory),
-	fx.Provide(NewUserService),
-	fx.Invoke(initUserServiceLifecycle),
 	fx.Provide(NewCrawlerService),
 	fx.Invoke(initCrawlerServiceLifecycle),
 	fx.Provide(NewDatabaseService),
 	fx.Invoke(initDatabaseServiceLifecycle),
+	fx.Provide(NewSessionServiceFactory),
+	fx.Provide(NewUserService),
+	fx.Invoke(initUserServiceLifecycle),
 	fx.Provide(NewCrawlerServiceInterface),
 )
