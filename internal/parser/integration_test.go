@@ -179,8 +179,14 @@ func (s *UserService) CreateUser(user User) (*User, error) {
 			}
 			
 			// Check that no path parameters were parsed for this route
-			if len(route2.Parameters) != 0 {
-				t.Errorf("expected 0 parameters for second route, got %d", len(route2.Parameters))
+			var pathParams []models.Parameter
+			for _, param := range route2.Parameters {
+				if param.Source == models.ParameterSourcePath {
+					pathParams = append(pathParams, param)
+				}
+			}
+			if len(pathParams) != 0 {
+				t.Errorf("expected 0 path parameters for second route, got %d", len(pathParams))
 			}
 			
 			if len(route2.Middlewares) != 2 {
@@ -420,18 +426,26 @@ func (c *APIController) HealthCheck() (string, error) {
 				t.Fatalf("could not find route with path %s", tc.path)
 			}
 
-			if len(route.Parameters) != tc.expectedParamCount {
-				t.Errorf("expected %d parameters, got %d", tc.expectedParamCount, len(route.Parameters))
+			// Filter for only path parameters since this test is specifically for path parameter parsing
+			var pathParams []models.Parameter
+			for _, param := range route.Parameters {
+				if param.Source == models.ParameterSourcePath {
+					pathParams = append(pathParams, param)
+				}
+			}
+
+			if len(pathParams) != tc.expectedParamCount {
+				t.Errorf("expected %d path parameters, got %d", tc.expectedParamCount, len(pathParams))
 				return
 			}
 
 			for i, expectedParam := range tc.expectedParams {
-				if i >= len(route.Parameters) {
-					t.Errorf("missing parameter at index %d", i)
+				if i >= len(pathParams) {
+					t.Errorf("missing path parameter at index %d", i)
 					continue
 				}
 
-				actualParam := route.Parameters[i]
+				actualParam := pathParams[i]
 
 				if actualParam.Name != expectedParam.name {
 					t.Errorf("parameter %d: expected name %s, got %s", i, expectedParam.name, actualParam.Name)

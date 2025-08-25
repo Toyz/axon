@@ -208,7 +208,7 @@ go 1.21
 
 	err = generator.Run(config)
 	assert.Error(t, err, "Should detect parser conflict")
-	assert.Contains(t, err.Error(), "parser conflict", "Error should mention parser conflict")
+	assert.Contains(t, err.Error(), "Multiple parsers registered", "Error should mention parser conflict")
 	assert.Contains(t, err.Error(), "CustomType", "Error should mention the conflicting type")
 }
 

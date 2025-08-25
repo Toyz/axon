@@ -749,7 +749,7 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 			}
 			
 			// Check for Init parameter (e.g., -Init=Background)
-			if initMode, exists := annotation.Parameters["Init"]; exists {
+			if initMode, exists := annotation.Parameters[FlagInit]; exists {
 				service.HasLifecycle = true
 				
 				// Debug output

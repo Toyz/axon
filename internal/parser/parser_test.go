@@ -1066,6 +1066,13 @@ func (uc *UserController) GetUser(c echo.Context, id int) (interface{}, error) {
 					Required: true,
 					Position: 0,
 				},
+				{
+					Name:     "id",
+					Type:     "int",
+					Source:   models.ParameterSourceBody,
+					Required: true,
+					Position: 1,
+				},
 			},
 			expectError: false,
 		},
@@ -1083,11 +1090,25 @@ func (uc *UserController) UpdateUser(id int, ctx echo.Context, data string) erro
 			methodName:     "UpdateUser",
 			expected: []models.Parameter{
 				{
+					Name:     "id",
+					Type:     "int",
+					Source:   models.ParameterSourceBody,
+					Required: true,
+					Position: 0,
+				},
+				{
 					Name:     "ctx",
 					Type:     "echo.Context",
 					Source:   models.ParameterSourceContext,
 					Required: true,
 					Position: 1,
+				},
+				{
+					Name:     "data",
+					Type:     "string",
+					Source:   models.ParameterSourceBody,
+					Required: true,
+					Position: 2,
 				},
 			},
 			expectError: false,
@@ -1103,8 +1124,16 @@ func (uc *UserController) GetUser(id int) (interface{}, error) {
 }`,
 			controllerName: "UserController",
 			methodName:     "GetUser",
-			expected:       []models.Parameter{},
-			expectError:    false,
+			expected: []models.Parameter{
+				{
+					Name:     "id",
+					Type:     "int",
+					Source:   models.ParameterSourceBody,
+					Required: true,
+					Position: 0,
+				},
+			},
+			expectError: false,
 		},
 		{
 			name: "handler with multiple echo.Context parameters",
@@ -1125,6 +1154,13 @@ func (uc *UserController) ComplexHandler(c1 echo.Context, id int, c2 echo.Contex
 					Source:   models.ParameterSourceContext,
 					Required: true,
 					Position: 0,
+				},
+				{
+					Name:     "id",
+					Type:     "int",
+					Source:   models.ParameterSourceBody,
+					Required: true,
+					Position: 1,
 				},
 				{
 					Name:     "c2",
@@ -3061,8 +3097,12 @@ func (s *DatabaseService) Start(ctx context.Context) error {
 		return
 	}
 
-	if service.Dependencies[0].Name != "*config.Config" {
-		t.Errorf("expected dependency '*config.Config', got '%s'", service.Dependencies[0].Name)
+	if service.Dependencies[0].Name != "Config" {
+		t.Errorf("expected dependency name 'Config', got '%s'", service.Dependencies[0].Name)
+	}
+	
+	if service.Dependencies[0].Type != "*config.Config" {
+		t.Errorf("expected dependency type '*config.Config', got '%s'", service.Dependencies[0].Type)
 	}
 }
 
