@@ -801,7 +801,7 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 			
 			// Check for mode flag (default to Singleton)
 			service.Mode = LifecycleModeSingleton // Default mode
-			if modeFlag, exists := annotation.Parameters["Mode"]; exists {
+			if modeFlag, exists := annotation.Parameters["-Mode"]; exists {
 				if modeFlag == LifecycleModeTransient || modeFlag == LifecycleModeSingleton {
 					service.Mode = modeFlag
 				} else {
