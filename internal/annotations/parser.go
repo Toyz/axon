@@ -111,7 +111,7 @@ func (p *parser) normalizeCommentPrefix(comment string, location SourceLocation)
 
 func (p *parser) simpleTokenize(input string) []AnnotationToken {
 	var tokens []AnnotationToken
-	parts := strings.Fields(input)
+	parts := p.splitRespectingQuotes(input)
 	
 	for _, part := range parts {
 		if strings.HasPrefix(part, "-") {
@@ -128,6 +128,155 @@ func (p *parser) simpleTokenize(input string) []AnnotationToken {
 	}
 	
 	return tokens
+}
+
+// splitRespectingQuotes splits input on whitespace but respects quoted strings and flag values
+func (p *parser) splitRespectingQuotes(input string) []string {
+	var parts []string
+	var current strings.Builder
+	var inQuotes bool
+	var quoteChar rune
+	var inFlagValue bool
+	
+	for i, r := range input {
+		switch {
+		case !inQuotes && !inFlagValue && unicode.IsSpace(r):
+			// Outside quotes and flag values, hit whitespace - end current token
+			if current.Len() > 0 {
+				parts = append(parts, current.String())
+				current.Reset()
+			}
+		case !inQuotes && !inFlagValue && r == '-' && (i == 0 || unicode.IsSpace(rune(input[i-1]))):
+			// Start of a flag (dash at beginning or after whitespace)
+			if current.Len() > 0 {
+				parts = append(parts, current.String())
+				current.Reset()
+			}
+			current.WriteRune(r)
+		case !inQuotes && r == '=' && strings.HasPrefix(current.String(), "-"):
+			// Start of flag value
+			inFlagValue = true
+			current.WriteRune(r)
+		case inFlagValue && !inQuotes && unicode.IsSpace(r):
+			// In flag value, hit space - check if this ends the flag value
+			// Look ahead to see if next non-space character starts a new flag
+			nextFlagStart := false
+			for j := i + 1; j < len(input); j++ {
+				if !unicode.IsSpace(rune(input[j])) {
+					if input[j] == '-' {
+						nextFlagStart = true
+					}
+					break
+				}
+			}
+			if nextFlagStart {
+				// This space ends the flag value
+				inFlagValue = false
+				parts = append(parts, current.String())
+				current.Reset()
+			} else {
+				// This space is part of the flag value
+				current.WriteRune(r)
+			}
+		case !inQuotes && (r == '"' || r == '\''):
+			// Start of quoted string
+			inQuotes = true
+			quoteChar = r
+			current.WriteRune(r)
+		case inQuotes && r == quoteChar:
+			// Check if this quote is escaped by looking at the previous character
+			isEscaped := false
+			if i > 0 && input[i-1] == '\\' {
+				// Count consecutive backslashes to determine if this quote is actually escaped
+				backslashCount := 0
+				for j := i - 1; j >= 0 && input[j] == '\\'; j-- {
+					backslashCount++
+				}
+				// If odd number of backslashes, the quote is escaped
+				isEscaped = (backslashCount%2 == 1)
+			}
+			
+			if isEscaped {
+				// This is an escaped quote, already handled by escape sequence processing
+				// Don't add it again, just continue
+			} else {
+				// End of quoted string
+				inQuotes = false
+				current.WriteRune(r)
+			}
+		case inQuotes && r == '\\' && i+1 < len(input):
+			// Escape sequence in quoted string
+			current.WriteRune(r)
+			i++ // Skip next character
+			if i < len(input) {
+				current.WriteRune(rune(input[i]))
+			}
+		default:
+			// Regular character
+			current.WriteRune(r)
+		}
+	}
+	
+	// Add final token if any
+	if current.Len() > 0 {
+		parts = append(parts, current.String())
+	}
+	
+	return parts
+}
+
+// splitCommaSeparatedValues splits comma-separated values respecting quotes
+func (p *parser) splitCommaSeparatedValues(input string) []string {
+	var values []string
+	var current strings.Builder
+	var inQuotes bool
+	var quoteChar rune
+	var lastWasComma bool
+	
+	runes := []rune(input)
+	for i := 0; i < len(runes); i++ {
+		r := runes[i]
+		
+		switch {
+		case !inQuotes && r == ',':
+			// Outside quotes and hit comma - end current value
+			value := strings.TrimSpace(current.String())
+			values = append(values, p.stripQuotes(value))
+			current.Reset()
+			lastWasComma = true
+		case !inQuotes && (r == '"' || r == '\''):
+			// Start of quoted string
+			inQuotes = true
+			quoteChar = r
+			current.WriteRune(r)
+			lastWasComma = false
+		case inQuotes && r == quoteChar:
+			// End of quoted string
+			inQuotes = false
+			current.WriteRune(r)
+			lastWasComma = false
+		case inQuotes && r == '\\' && i+1 < len(runes):
+			// Escape sequence in quoted string
+			current.WriteRune(r)
+			i++ // Skip next character
+			if i < len(runes) {
+				current.WriteRune(runes[i])
+			}
+			lastWasComma = false
+		default:
+			// Regular character
+			current.WriteRune(r)
+			lastWasComma = false
+		}
+	}
+	
+	// Add final value - always add if we have content or if last character was comma
+	if current.Len() > 0 || lastWasComma {
+		value := strings.TrimSpace(current.String())
+		values = append(values, p.stripQuotes(value))
+	}
+	
+	return values
 }
 
 func (p *parser) parseTokens(tokens []AnnotationToken, location SourceLocation) (*ParsedAnnotation, error) {
@@ -180,6 +329,10 @@ func (p *parser) parseTokens(tokens []AnnotationToken, location SourceLocation) 
 		}
 	} else if annotation.Type == MiddlewareAnnotation {
 		if len(positionalParams) >= 1 {
+			annotation.Parameters["Name"] = positionalParams[0]
+		}
+	} else if annotation.Type == RouteParserAnnotation {
+		if len(positionalParams) >= 1 {
 			annotation.Parameters["name"] = positionalParams[0]
 		}
 	}
@@ -207,18 +360,51 @@ func (p *parser) processFlagToken(token AnnotationToken, annotation *ParsedAnnot
 		paramName := parts[0]
 		paramValue := parts[1]
 		
-		// Strip quotes from parameter value
-		paramValue = p.stripQuotes(paramValue)
-		
-		// Handle comma-separated values
-		if strings.Contains(paramValue, ",") {
-			values := strings.Split(paramValue, ",")
-			for i, v := range values {
-				values[i] = strings.TrimSpace(p.stripQuotes(v))
+		// Check if the value is quoted
+		isQuoted := false
+		if len(paramValue) >= 2 {
+			if (paramValue[0] == '"' && paramValue[len(paramValue)-1] == '"') ||
+			   (paramValue[0] == '\'' && paramValue[len(paramValue)-1] == '\'') {
+				isQuoted = true
 			}
+		}
+		
+		// Check if the parameter expects a slice type from the schema
+		expectsSlice := false
+		if p.registry != nil {
+			if schema, err := p.registry.GetSchema(annotation.Type); err == nil {
+				if paramSpec, exists := schema.Parameters[paramName]; exists {
+					expectsSlice = paramSpec.Type == StringSliceType
+				}
+			}
+		}
+		
+		if isQuoted {
+			// Quoted value - check if it should be treated as comma-separated
+			unquotedValue := p.stripQuotes(paramValue)
+			if expectsSlice && strings.Contains(unquotedValue, ",") {
+				// Check if this looks like multiple quoted values: "val1","val2"
+				// If the unquoted value contains quotes, it's likely multiple quoted values
+				if strings.Contains(unquotedValue, "\"") || strings.Contains(unquotedValue, "'") {
+					// Parse the original paramValue (with outer quotes) as comma-separated
+					values := p.splitCommaSeparatedValues(paramValue)
+					annotation.Parameters[paramName] = values
+				} else {
+					// Single quoted value with commas inside - split the unquoted content
+					values := p.splitCommaSeparatedValues(unquotedValue)
+					annotation.Parameters[paramName] = values
+				}
+			} else {
+				// Treat as single string
+				annotation.Parameters[paramName] = unquotedValue
+			}
+		} else if strings.Contains(paramValue, ",") {
+			// Unquoted value with commas - treat as comma-separated list
+			values := p.splitCommaSeparatedValues(paramValue)
 			annotation.Parameters[paramName] = values
 		} else {
-			annotation.Parameters[paramName] = paramValue
+			// Single unquoted value
+			annotation.Parameters[paramName] = p.stripQuotes(paramValue)
 		}
 		return nil
 	}
@@ -229,8 +415,7 @@ func (p *parser) processFlagToken(token AnnotationToken, annotation *ParsedAnnot
 	// Special handling for backward compatibility with old parser
 	// Certain flags should remain as flags even if they have schema definitions
 	legacyFlags := map[string]bool{
-		"Init":   true,
-		"Manual": true,
+		"Init": true,
 	}
 	
 	if legacyFlags[paramName] {
@@ -248,8 +433,22 @@ func (p *parser) processFlagToken(token AnnotationToken, annotation *ParsedAnnot
 					annotation.Parameters[paramName] = true
 					return nil
 				}
-				// For non-boolean parameters, use schema default: -Init becomes Init: "Same"
-				annotation.Parameters[paramName] = paramSpec.DefaultValue
+				// For non-boolean parameters, use schema default or appropriate zero value
+				if paramSpec.DefaultValue != nil {
+					annotation.Parameters[paramName] = paramSpec.DefaultValue
+				} else {
+					// Use appropriate zero value for the type
+					switch paramSpec.Type {
+					case StringType:
+						annotation.Parameters[paramName] = ""
+					case IntType:
+						annotation.Parameters[paramName] = 0
+					case StringSliceType:
+						annotation.Parameters[paramName] = []string{}
+					default:
+						annotation.Parameters[paramName] = ""
+					}
+				}
 				return nil
 			}
 		}
@@ -265,7 +464,44 @@ func (p *parser) stripQuotes(s string) string {
 	s = strings.TrimSpace(s)
 	if len(s) >= 2 {
 		if (s[0] == '"' && s[len(s)-1] == '"') || (s[0] == '\'' && s[len(s)-1] == '\'') {
-			return s[1 : len(s)-1]
+			unquoted := s[1 : len(s)-1]
+			
+			// Process escape sequences manually for more robust handling
+			result := make([]rune, 0, len(unquoted))
+			runes := []rune(unquoted)
+			
+			for i := 0; i < len(runes); i++ {
+				if runes[i] == '\\' && i+1 < len(runes) {
+					// Handle escape sequence
+					switch runes[i+1] {
+					case '"':
+						result = append(result, '"')
+						i++ // Skip the escaped character
+					case '\'':
+						result = append(result, '\'')
+						i++ // Skip the escaped character
+					case '\\':
+						result = append(result, '\\')
+						i++ // Skip the escaped character
+					case 'n':
+						result = append(result, '\n')
+						i++ // Skip the escaped character
+					case 't':
+						result = append(result, '\t')
+						i++ // Skip the escaped character
+					case 'r':
+						result = append(result, '\r')
+						i++ // Skip the escaped character
+					default:
+						// Unknown escape sequence, keep the backslash
+						result = append(result, runes[i])
+					}
+				} else {
+					result = append(result, runes[i])
+				}
+			}
+			
+			return string(result)
 		}
 	}
 	return s

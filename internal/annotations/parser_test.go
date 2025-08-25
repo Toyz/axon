@@ -279,11 +279,11 @@ func TestParameterParsingEdgeCases(t *testing.T) {
 		},
 		{
 			name:  "comma separated with quoted values",
-			input: `//axon::route GET /users -Middleware="Auth Service","Logging Service"`,
+			input: `//axon::route GET /users -Middleware="AuthMiddleware","LoggingMiddleware"`,
 			expectedParams: map[string]interface{}{
 				"method":     "GET",
 				"path":       "/users",
-				"Middleware": []string{"Auth Service", "Logging Service"},
+				"Middleware": []string{"AuthMiddleware", "LoggingMiddleware"},
 			},
 		},
 		{

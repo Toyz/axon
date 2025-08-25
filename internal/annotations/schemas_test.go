@@ -338,18 +338,22 @@ func TestRegisterBuiltinSchemas(t *testing.T) {
 func TestGetBuiltinSchemas(t *testing.T) {
 	schemas := GetBuiltinSchemas()
 
-	expectedCount := 5
+	expectedCount := 9
 	if len(schemas) != expectedCount {
 		t.Errorf("expected %d builtin schemas, got %d", expectedCount, len(schemas))
 	}
 
 	// Verify all expected types are present
 	expectedTypes := map[AnnotationType]bool{
-		CoreAnnotation:       false,
-		RouteAnnotation:      false,
-		ControllerAnnotation: false,
-		MiddlewareAnnotation: false,
-		InterfaceAnnotation:  false,
+		CoreAnnotation:        false,
+		RouteAnnotation:       false,
+		ControllerAnnotation:  false,
+		MiddlewareAnnotation:  false,
+		InterfaceAnnotation:   false,
+		InjectAnnotation:      false,
+		InitAnnotation:        false,
+		LoggerAnnotation:      false,
+		RouteParserAnnotation: false,
 	}
 
 	for _, schema := range schemas {

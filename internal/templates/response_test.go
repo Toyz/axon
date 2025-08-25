@@ -70,7 +70,8 @@ func TestGenerateResponseHandling(t *testing.T) {
 					HasError: true,
 				},
 				Parameters: []models.Parameter{
-					{Name: "id", Type: "int", Source: models.ParameterSourcePath},
+					{Name: "c", Type: "echo.Context", Source: models.ParameterSourceContext, Position: 0},
+					{Name: "id", Type: "int", Source: models.ParameterSourcePath, Position: 1},
 				},
 				Flags: []string{"-PassContext"},
 			},
@@ -129,7 +130,8 @@ func TestGenerateHandlerCall(t *testing.T) {
 			route: models.RouteMetadata{
 				HandlerName: "GetUser",
 				Parameters: []models.Parameter{
-					{Name: "id", Type: "int", Source: models.ParameterSourcePath},
+					{Name: "c", Type: "echo.Context", Source: models.ParameterSourceContext, Position: 0},
+					{Name: "id", Type: "int", Source: models.ParameterSourcePath, Position: 1},
 				},
 				Flags: []string{"-PassContext"},
 			},
@@ -521,15 +523,16 @@ func TestGenerateHandlerCall_WithContextParameters(t *testing.T) {
 				HandlerName: "UserController.UpdateUser",
 				Parameters: []models.Parameter{
 					{
-						Name:     "id",
-						Type:     "int",
-						Source:   models.ParameterSourcePath,
-						Required: true,
-					},
-					{
 						Name:     "ctx",
 						Type:     "echo.Context",
 						Source:   models.ParameterSourceContext,
+						Required: true,
+						Position: 0,
+					},
+					{
+						Name:     "id",
+						Type:     "int",
+						Source:   models.ParameterSourcePath,
 						Required: true,
 						Position: 1,
 					},
@@ -538,6 +541,7 @@ func TestGenerateHandlerCall_WithContextParameters(t *testing.T) {
 						Type:     "string",
 						Source:   models.ParameterSourcePath,
 						Required: true,
+						Position: 2,
 					},
 				},
 			},
@@ -551,10 +555,18 @@ func TestGenerateHandlerCall_WithContextParameters(t *testing.T) {
 				Flags:       []string{"-PassContext"},
 				Parameters: []models.Parameter{
 					{
+						Name:     "c",
+						Type:     "echo.Context",
+						Source:   models.ParameterSourceContext,
+						Required: true,
+						Position: 0,
+					},
+					{
 						Name:     "id",
 						Type:     "int",
 						Source:   models.ParameterSourcePath,
 						Required: true,
+						Position: 1,
 					},
 				},
 			},

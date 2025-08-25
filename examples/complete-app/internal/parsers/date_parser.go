@@ -14,7 +14,7 @@ type DateRange struct {
 	End   time.Time
 }
 
-//axon::route_parser name=DateRange
+//axon::route_parser DateRange
 func ParseDateRange(c echo.Context, paramValue string) (DateRange, error) {
 	parts := strings.Split(paramValue, "_")
 	if len(parts) != 2 {

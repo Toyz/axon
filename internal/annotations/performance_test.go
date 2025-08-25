@@ -3,6 +3,7 @@ package annotations
 import (
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -342,9 +343,9 @@ func TestConcurrentParsingStress(t *testing.T) {
 				localSuccess++
 			}
 			
-			// Update global counters atomically would be better, but for test simplicity:
-			totalErrors += localErrors
-			totalSuccess += localSuccess
+			// Update global counters atomically
+			atomic.AddInt64(&totalErrors, localErrors)
+			atomic.AddInt64(&totalSuccess, localSuccess)
 		}(i)
 	}
 	

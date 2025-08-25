@@ -138,10 +138,10 @@ var MiddlewareAnnotationSchema = AnnotationSchema{
 	Type:        MiddlewareAnnotation,
 	Description: "Marks a struct as middleware for request processing",
 	Parameters: map[string]ParameterSpec{
-		"name": {
+		"Name": {
 			Type:        StringType,
-			Required:    true,
-			Description: "Name for the middleware",
+			Required:    false,
+			Description: "Name for the middleware (can be provided as positional parameter)",
 		},
 		"Priority": {
 			Type:         IntType,
@@ -273,14 +273,15 @@ var RouteParserAnnotationSchema = AnnotationSchema{
 	Parameters: map[string]ParameterSpec{
 		"name": {
 			Type:        StringType,
-			Required:    true,
-			Description: "Type name that this parser handles",
+			Required:    false, // Not required as named parameter since it's provided positionally
+			Description: "Type name that this parser handles (provided as positional parameter)",
 		},
 	},
 	Examples: []string{
-		"//axon::route_parser name=UUID",
-		"//axon::route_parser name=CustomID", 
-		"//axon::route_parser name=time.Time",
+		"//axon::route_parser UUID",
+		"//axon::route_parser CustomID", 
+		"//axon::route_parser time.Time",
+		"//axon::route_parser MyCustomType",
 	},
 }
 

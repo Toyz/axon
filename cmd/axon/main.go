@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/toyz/axon/internal/cli"
-	"github.com/toyz/axon/internal/parser"
 )
 
 func main() {
@@ -23,7 +22,7 @@ func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options] <directory-paths...>\n\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "Axon Framework Code Generator\n")
-		fmt.Fprintf(os.Stderr, "Recursively scans directories for Go files with %s annotations and generates FX modules.\n\n", parser.AnnotationPrefix)
+		fmt.Fprintf(os.Stderr, "Recursively scans directories for Go files with axon:: annotations and generates FX modules.\n\n")
 		fmt.Fprintf(os.Stderr, "Options:\n")
 		flag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, "\nArguments:\n")

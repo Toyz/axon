@@ -55,49 +55,28 @@ func generateHandlerCall(route models.RouteMetadata, controllerName string) stri
 	
 	var orderedParams []paramWithPosition
 	
-	// Handle legacy -PassContext flag first (for backward compatibility)
-	hasPassContextFlagSet := hasPassContextFlag(route.Flags)
-	
-	// Check if we have context parameters from signature analysis
-	hasContextFromSignature := false
-	for _, param := range route.Parameters {
-		if param.Source == models.ParameterSourceContext {
-			hasContextFromSignature = true
-			break
-		}
-	}
-	
-	// If PassContext flag is present but no context from signature, add context at position 0
-	if hasPassContextFlagSet && !hasContextFromSignature {
-		orderedParams = append(orderedParams, paramWithPosition{
-			name:     "c",
-			position: 0,
-			source:   models.ParameterSourceContext,
-		})
-	}
-	
-	// Add all parameters from the route
+	// Add all parameters from the route based on method signature
 	for _, param := range route.Parameters {
 		switch param.Source {
 		case models.ParameterSourceContext:
-			// Use the actual parameter name from the signature, but pass 'c' from wrapper
+			// Always pass context if method expects it
 			orderedParams = append(orderedParams, paramWithPosition{
 				name:     "c", // Always use 'c' in the wrapper function
 				position: param.Position,
 				source:   param.Source,
 			})
 		case models.ParameterSourcePath:
-			// For path parameters, we need to assign positions after context parameters
-			// We'll handle this in a second pass
+			// For path parameters, only pass if method signature includes them
+			// This is determined by the method signature analysis
 			orderedParams = append(orderedParams, paramWithPosition{
 				name:     param.Name,
-				position: -1, // Will be assigned later
+				position: param.Position,
 				source:   param.Source,
 			})
 		case models.ParameterSourceBody:
 			orderedParams = append(orderedParams, paramWithPosition{
 				name:     "body", // Always use 'body' for body parameters in wrapper
-				position: -1, // Will be assigned later
+				position: param.Position,
 				source:   param.Source,
 			})
 		}

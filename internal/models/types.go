@@ -1,18 +1,21 @@
 package models
 
-// AnnotationType represents the type of annotation found in source code
-type AnnotationType int
+import "github.com/toyz/axon/internal/annotations"
 
+// AnnotationType is now an alias to the new annotation type
+type AnnotationType = annotations.AnnotationType
+
+// Re-export the annotation type constants for backward compatibility
 const (
-	AnnotationTypeController AnnotationType = iota
-	AnnotationTypeRoute
-	AnnotationTypeMiddleware
-	AnnotationTypeCore
-	AnnotationTypeInterface
-	AnnotationTypeInject
-	AnnotationTypeInit
-	AnnotationTypeLogger
-	AnnotationTypeRouteParser
+	AnnotationTypeController  = annotations.ControllerAnnotation
+	AnnotationTypeRoute       = annotations.RouteAnnotation
+	AnnotationTypeMiddleware  = annotations.MiddlewareAnnotation
+	AnnotationTypeCore        = annotations.CoreAnnotation
+	AnnotationTypeInterface   = annotations.InterfaceAnnotation
+	AnnotationTypeInject      = annotations.InjectAnnotation
+	AnnotationTypeInit        = annotations.InitAnnotation
+	AnnotationTypeLogger      = annotations.LoggerAnnotation
+	AnnotationTypeRouteParser = annotations.RouteParserAnnotation
 )
 
 // ParameterSource represents where a parameter comes from

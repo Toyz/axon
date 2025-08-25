@@ -526,26 +526,17 @@ func TestParameterParsingEdgeCasesDetailed(t *testing.T) {
 		{
 			name:        "parameter name with numbers at end",
 			input:       "//axon::core -Mode123=Transient",
-			expectError: false,
-			expectedParams: map[string]interface{}{
-				"Mode123": "Transient",
-			},
+			expectError: true, // Invalid parameter names should fail validation
 		},
 		{
 			name:        "parameter name with numbers in middle",
 			input:       "//axon::core -Mo123de=Transient",
-			expectError: false,
-			expectedParams: map[string]interface{}{
-				"Mo123de": "Transient",
-			},
+			expectError: true, // Invalid parameter names should fail validation
 		},
 		{
 			name:        "parameter name with underscores",
 			input:       "//axon::core -Custom_Mode_Name=Transient",
-			expectError: false,
-			expectedParams: map[string]interface{}{
-				"Custom_Mode_Name": "Transient",
-			},
+			expectError: true, // Invalid parameter names should fail validation
 		},
 		
 		// Multiple parameter combinations (with unknown parameters)

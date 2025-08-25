@@ -294,124 +294,17 @@ func (p *Parser) ExtractAnnotations(file *ast.File, fileName string) ([]models.A
 
 
 // convertNewToOldAnnotation converts a new ParsedAnnotation to the old models.Annotation format
-func (p *Parser) convertNewToOldAnnotation(newAnnotation *annotations.ParsedAnnotation, target string) (models.Annotation, error) {
-	// Convert annotation type
-	oldType, err := p.convertAnnotationType(newAnnotation.Type)
-	if err != nil {
-		return models.Annotation{}, err
-	}
-	
-	// First, identify boolean parameters that should be treated as flags
-	var booleanFlags []string
-	filteredParameters := make(map[string]interface{})
-	
-	for key, value := range newAnnotation.Parameters {
-		// Skip parameters that are default values for optional parameters
-		if p.isDefaultValue(key, value, newAnnotation.Type) {
-			continue
-		}
-		
-		// Check if this is a boolean parameter that should be treated as a flag
-		if boolVal, ok := value.(bool); ok && boolVal {
-			// This is a boolean parameter set to true - treat as flag in old format
-			booleanFlags = append(booleanFlags, "-"+key)
-		} else {
-			// Keep this parameter
-			filteredParameters[key] = value
-		}
-	}
-	
-	// Convert remaining parameters to old format
-	oldParameters := make(map[string]string)
-	for key, value := range filteredParameters {
-		// Convert value to string, handling slices specially
-		var strValue string
-		if slice, ok := value.([]string); ok {
-			// Skip empty slices (default values)
-			if len(slice) == 0 {
-				continue
-			}
-			strValue = strings.Join(slice, ",")
-		} else {
-			strValue = fmt.Sprintf("%v", value)
-		}
-		
-		// Map parameters to old format based on annotation type
-		switch newAnnotation.Type {
-		case annotations.RouteAnnotation:
-			// Route parameters: method and path stay as-is, flags get dash prefix
-			if key == "method" || key == "path" {
-				oldParameters[key] = strValue
-			} else {
-				oldParameters["-"+key] = strValue
-			}
-		case annotations.MiddlewareAnnotation:
-			// Middleware name parameter stays as-is
-			if key == "name" {
-				oldParameters[key] = strValue
-			} else {
-				oldParameters["-"+key] = strValue
-			}
-		case annotations.RouteParserAnnotation:
-			// Route parser name parameter stays as-is
-			if key == "name" {
-				oldParameters[key] = strValue
-			} else {
-				oldParameters["-"+key] = strValue
-			}
-		default:
-			// For other annotation types, all parameters get dash prefix
-			oldParameters["-"+key] = strValue
-		}
-	}
-	
-	// Convert flags - add dash prefix if not present
-	var oldFlags []string
-	for _, flag := range newAnnotation.Flags {
-		if !strings.HasPrefix(flag, "-") {
-			flag = "-" + flag
-		}
-		oldFlags = append(oldFlags, flag)
-	}
-	
-	// Add boolean flags
-	oldFlags = append(oldFlags, booleanFlags...)
-	
+// createAnnotation creates a models.Annotation from a new ParsedAnnotation
+func (p *Parser) createAnnotation(newAnnotation *annotations.ParsedAnnotation, target string) models.Annotation {
 	return models.Annotation{
-		Type:       oldType,
-		Target:     target,
-		Parameters: oldParameters,
-		Flags:      oldFlags,
-		Line:       newAnnotation.Location.Line,
-		FileName:   newAnnotation.Location.File,
-	}, nil
+		ParsedAnnotation: newAnnotation,
+		Dependencies:     []models.Dependency{}, // Will be populated later
+		FileName:         newAnnotation.Location.File,
+		Line:             newAnnotation.Location.Line,
+	}
 }
 
-// convertAnnotationType converts new AnnotationType to old models.AnnotationType
-func (p *Parser) convertAnnotationType(newType annotations.AnnotationType) (models.AnnotationType, error) {
-	switch newType {
-	case annotations.CoreAnnotation:
-		return models.AnnotationTypeCore, nil
-	case annotations.RouteAnnotation:
-		return models.AnnotationTypeRoute, nil
-	case annotations.ControllerAnnotation:
-		return models.AnnotationTypeController, nil
-	case annotations.MiddlewareAnnotation:
-		return models.AnnotationTypeMiddleware, nil
-	case annotations.InterfaceAnnotation:
-		return models.AnnotationTypeInterface, nil
-	case annotations.InjectAnnotation:
-		return models.AnnotationTypeInject, nil
-	case annotations.InitAnnotation:
-		return models.AnnotationTypeInit, nil
-	case annotations.LoggerAnnotation:
-		return models.AnnotationTypeLogger, nil
-	case annotations.RouteParserAnnotation:
-		return models.AnnotationTypeRouteParser, nil
-	default:
-		return 0, fmt.Errorf("unknown annotation type: %v", newType)
-	}
-}
+
 
 // SetSkipParserValidation controls whether custom parser validation is skipped
 func (p *Parser) SetSkipParserValidation(skip bool) {
@@ -429,31 +322,7 @@ func (p *Parser) ValidateCustomParsersWithRegistry(metadata *models.PackageMetad
 	return nil
 }
 
-// parseAnnotationType converts string annotation type to AnnotationType enum (for backward compatibility with tests)
-func (p *Parser) parseAnnotationType(typeStr string) (models.AnnotationType, error) {
-	switch typeStr {
-	case AnnotationTypeController:
-		return models.AnnotationTypeController, nil
-	case AnnotationTypeRoute:
-		return models.AnnotationTypeRoute, nil
-	case AnnotationTypeMiddleware:
-		return models.AnnotationTypeMiddleware, nil
-	case AnnotationTypeCore:
-		return models.AnnotationTypeCore, nil
-	case AnnotationTypeInterface:
-		return models.AnnotationTypeInterface, nil
-	case AnnotationTypeInject:
-		return models.AnnotationTypeInject, nil
-	case AnnotationTypeInit:
-		return models.AnnotationTypeInit, nil
-	case AnnotationTypeLogger:
-		return models.AnnotationTypeLogger, nil
-	case AnnotationTypeRouteParser:
-		return models.AnnotationTypeRouteParser, nil
-	default:
-		return 0, fmt.Errorf("unknown annotation type: %s", typeStr)
-	}
-}
+
 
 // processAnnotations builds metadata structures from parsed annotations
 func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *models.PackageMetadata, fileMap map[string]*ast.File) error {
@@ -471,7 +340,7 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 		if annotation.Type == models.AnnotationTypeMiddleware {
 			// Register middleware in the registry for validation
 			middleware := &models.MiddlewareMetadata{
-				Name:         annotation.Parameters[ParamName],
+				Name:         annotation.GetString("Name"),
 				PackagePath:  metadata.PackagePath,
 				StructName:   annotation.Target,
 				Dependencies: annotation.Dependencies,
@@ -529,8 +398,8 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 			// Routes will be associated with controllers in a later processing step
 			// For now, we'll store them temporarily
 			route := models.RouteMetadata{
-				Method:      annotation.Parameters[ParamMethod],
-				Path:        annotation.Parameters[ParamPath],
+				Method:      annotation.GetString("method"),
+				Path:        annotation.GetString("path"),
 				HandlerName: annotation.Target, // Keep full target for now, will be processed later
 			}
 			
@@ -576,14 +445,9 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				route.ReturnType = models.ReturnTypeInfo{Type: returnTypeEnum}
 			}
 			
-			// Parse middleware flags and validate
-			if middlewareFlag, exists := annotation.Parameters[FlagMiddleware]; exists {
-				middlewareNames := strings.Split(middlewareFlag, ",")
-				// Trim whitespace from middleware names
-				for i, name := range middlewareNames {
-					middlewareNames[i] = strings.TrimSpace(name)
-				}
-				
+			// Parse middleware and validate
+			middlewareNames := annotation.GetStringSlice("Middleware")
+			if len(middlewareNames) > 0 {
 				// Validate that all middleware names exist in the registry (skip during discovery phase)
 				if !p.skipMiddlewareValidation {
 					err := p.middlewareRegistry.Validate(middlewareNames)
@@ -603,7 +467,7 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 
 		case models.AnnotationTypeMiddleware:
 			middleware := models.MiddlewareMetadata{
-				Name:         annotation.Parameters[ParamName],
+				Name:         annotation.GetString("Name"),
 				PackagePath:  metadata.PackagePath,
 				StructName:   annotation.Target,
 				Dependencies: annotation.Dependencies,
@@ -617,49 +481,20 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				Dependencies: annotation.Dependencies,
 			}
 			
-			// Check for lifecycle flag or parameter
+			// Check for Init flag (not parameter, since parameters include defaults)
+			hasInitFlag := false
 			for _, flag := range annotation.Flags {
-				if flag == FlagInit {
-					service.HasLifecycle = true
-					// Default start mode is "Same" (synchronous)
-					service.StartMode = "Same"
-					
-					// Detect Start and Stop methods when lifecycle is enabled
-					file := fileMap[annotation.FileName]
-					if file != nil {
-						hasStart, hasStop := p.extractLifecycleMethods(file, annotation.Target)
-						service.HasStart = hasStart
-						service.HasStop = hasStop
-						
-						// Validate that Start method exists when -Init flag is used
-						if !hasStart {
-							return fmt.Errorf("service %s has -Init flag but missing Start(context.Context) error method", annotation.Target)
-						}
-					} else {
-						// If file is not available (e.g., in unit tests), skip method detection
-						// This allows unit tests to work without providing full file context
-						// In real usage, files will always be available
-						service.HasStart = true  // Assume valid for unit tests
-						service.HasStop = false  // Default to no Stop method
-					}
+				if flag == "-Init" {
+					hasInitFlag = true
+					break
 				}
 			}
 			
-			// Check for Init parameter (e.g., -Init=Background)
-			if initMode, exists := annotation.Parameters[FlagInit]; exists {
+			if hasInitFlag {
+				// Enable lifecycle when -Init flag is explicitly present
 				service.HasLifecycle = true
-				
-				// Validate init mode
-				if initMode == "Background" || initMode == "Same" || initMode == "" {
-					if initMode == "" {
-						service.StartMode = "Same" // Default when just -Init is used
-					} else {
-						service.StartMode = initMode
-					}
-	
-				} else {
-					return fmt.Errorf("service %s has invalid -Init value '%s': must be 'Background' or 'Same'", annotation.Target, initMode)
-				}
+				initMode := annotation.GetString("Init", "Background")
+				service.StartMode = initMode
 				
 				// Detect Start and Stop methods when lifecycle is enabled
 				file := fileMap[annotation.FileName]
@@ -668,39 +503,34 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 					service.HasStart = hasStart
 					service.HasStop = hasStop
 					
-					// Validate that Start method exists when -Init parameter is used
+					// Validate that Start method exists when Init is used
 					if !hasStart {
-						return fmt.Errorf("service %s has -Init parameter but missing Start(context.Context) error method", annotation.Target)
+						return fmt.Errorf("service %s has Init parameter but missing Start(context.Context) error method", annotation.Target)
 					}
 				} else {
 					// If file is not available (e.g., in unit tests), skip method detection
 					service.HasStart = true  // Assume valid for unit tests
 					service.HasStop = false  // Default to no Stop method
 				}
+			} else {
+				// Default Init mode - no lifecycle required
+				service.HasLifecycle = false
+				service.StartMode = "Same"
 			}
 			
-			// Check for manual flags
-			if manualModule, exists := annotation.Parameters[FlagManual]; exists {
+			// Check for Manual parameter
+			manualModule := annotation.GetString("Manual", "")
+			if manualModule != "" {
 				service.IsManual = true
 				service.ModuleName = manualModule
-			} else {
-				for _, flag := range annotation.Flags {
-					if flag == FlagManual {
-						service.IsManual = true
-						service.ModuleName = DefaultModuleName
-						break
-					}
-				}
 			}
 			
-			// Check for mode flag (default to Singleton)
-			service.Mode = LifecycleModeSingleton // Default mode
-			if modeFlag, exists := annotation.Parameters["-Mode"]; exists {
-				if modeFlag == LifecycleModeTransient || modeFlag == LifecycleModeSingleton {
-					service.Mode = modeFlag
-				} else {
-					return fmt.Errorf("service %s has invalid mode '%s': must be 'Singleton' or 'Transient'", annotation.Target, modeFlag)
-				}
+			// Check for Mode parameter (default to Singleton)
+			mode := annotation.GetString("Mode", LifecycleModeSingleton)
+			if mode == LifecycleModeTransient || mode == LifecycleModeSingleton {
+				service.Mode = mode
+			} else {
+				return fmt.Errorf("service %s has invalid mode '%s': must be 'Singleton' or 'Transient'", annotation.Target, mode)
 			}
 			
 			metadata.CoreServices = append(metadata.CoreServices, service)
@@ -730,48 +560,51 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				Dependencies: annotation.Dependencies,
 			}
 			
-			// Check for lifecycle flag
+			// Check for Init flag (not parameter, since parameters include defaults)
+			hasInitFlag := false
 			for _, flag := range annotation.Flags {
-				if flag == FlagInit {
-					logger.HasLifecycle = true
-					// Detect Start and Stop methods when lifecycle is enabled
-					file := fileMap[annotation.FileName]
-					if file != nil {
-						hasStart, hasStop := p.extractLifecycleMethods(file, annotation.Target)
-						logger.HasStart = hasStart
-						logger.HasStop = hasStop
-						
-						// Validate that Start method exists when -Init flag is used
-						if !hasStart {
-							return fmt.Errorf("logger %s has -Init flag but missing Start(context.Context) error method", annotation.Target)
-						}
-					} else {
-						// If file is not available (e.g., in unit tests), skip method detection
-						logger.HasStart = true  // Assume valid for unit tests
-						logger.HasStop = false  // Default to no Stop method
-					}
+				if flag == "-Init" {
+					hasInitFlag = true
+					break
 				}
 			}
 			
-			// Check for manual flags
-			if manualModule, exists := annotation.Parameters[FlagManual]; exists {
+			if hasInitFlag {
+				// Enable lifecycle when -Init flag is explicitly present
+				logger.HasLifecycle = true
+				// Detect Start and Stop methods when lifecycle is enabled
+				file := fileMap[annotation.FileName]
+				if file != nil {
+					hasStart, hasStop := p.extractLifecycleMethods(file, annotation.Target)
+					logger.HasStart = hasStart
+					logger.HasStop = hasStop
+					
+					// Validate that Start method exists when Init is used
+					if !hasStart {
+						return fmt.Errorf("logger %s has Init parameter but missing Start(context.Context) error method", annotation.Target)
+					}
+				} else {
+					// If file is not available (e.g., in unit tests), skip method detection
+					logger.HasStart = true  // Assume valid for unit tests
+					logger.HasStop = false  // Default to no Stop method
+				}
+			} else {
+				// Default Init mode - no lifecycle required
+				logger.HasLifecycle = false
+			}
+			
+			// Check for Manual parameter
+			manualModule := annotation.GetString("Manual", "")
+			if manualModule != "" {
 				logger.IsManual = true
 				logger.ModuleName = manualModule
-			} else {
-				for _, flag := range annotation.Flags {
-					if flag == FlagManual {
-						logger.IsManual = true
-						logger.ModuleName = DefaultModuleName
-						break
-					}
-				}
 			}
 			
 			metadata.Loggers = append(metadata.Loggers, logger)
 
 		case models.AnnotationTypeRouteParser:
 			// Route parser annotations should be on function declarations
-			typeName := annotation.Parameters[ParamName]
+			typeName := annotation.GetString("name")
 			
 			// Validate that this is actually on a function and has correct signature
 			file := fileMap[annotation.FileName]
@@ -1096,11 +929,12 @@ func (p *Parser) getFuncTypeString(funcType *ast.FuncType) string {
 func (p *Parser) parsePathParameters(path string) ([]models.Parameter, error) {
 	var parameters []models.Parameter
 	
-	// Find all path parameters in the format {name:type}
-	paramRegex := `\{([^:}]+):([^}]+)\}`
-	matches := regexp.MustCompile(paramRegex).FindAllStringSubmatch(path, -1)
+	// Find all path parameters in both formats: {name:type} and {name}
+	// First, find typed parameters {name:type}
+	typedParamRegex := `\{([^:}]+):([^}]+)\}`
+	typedMatches := regexp.MustCompile(typedParamRegex).FindAllStringSubmatch(path, -1)
 	
-	for _, match := range matches {
+	for _, match := range typedMatches {
 		if len(match) != 3 {
 			continue
 		}
@@ -1137,17 +971,9 @@ func (p *Parser) parsePathParameters(path string) ([]models.Parameter, error) {
 				parserFunc = "axon.ParseFloat32"
 			case "uuid.UUID":
 				parserFunc = "axon.ParseUUID"
-			case "ProductCode":
-				// Custom type with its own parser
-				parserFunc = "parsers.ParseProductCode"
-				isCustomType = false
-			case "DateRange":
-				// Custom type with its own parser
-				parserFunc = "parsers.ParseDateRange"
-				isCustomType = false
 			default:
-				// Other custom types use string parsing
-				parserFunc = "axon.ParseString"
+				// For custom types, leave ParserFunc empty so template can look up in registry
+				parserFunc = ""
 				isCustomType = true
 			}
 		}
@@ -1162,6 +988,51 @@ func (p *Parser) parsePathParameters(path string) ([]models.Parameter, error) {
 		}
 		
 		parameters = append(parameters, param)
+	}
+	
+	// Find untyped parameters {name} (but exclude ones already found as typed)
+	untypedParamRegex := `\{([^:}]+)\}`
+	untypedMatches := regexp.MustCompile(untypedParamRegex).FindAllStringSubmatch(path, -1)
+	
+	// Keep track of already processed parameter names to avoid duplicates
+	processedParams := make(map[string]bool)
+	for _, param := range parameters {
+		processedParams[param.Name] = true
+	}
+	
+	for _, match := range untypedMatches {
+		if len(match) != 2 {
+			continue
+		}
+		
+		paramName := match[1]
+		
+		// Skip if this parameter was already processed as a typed parameter
+		if processedParams[paramName] {
+			continue
+		}
+		
+		// Default to string type for untyped parameters
+		paramType := "string"
+		
+		// Validate parameter type (even though it's just string)
+		_, err := p.validateParameterType(paramType)
+		if err != nil {
+			return nil, fmt.Errorf("invalid parameter type '%s' for parameter '%s': %w", paramType, paramName, err)
+		}
+		
+		// Use string parser for untyped parameters
+		param := models.Parameter{
+			Name:         paramName,
+			Type:         paramType,
+			Source:       models.ParameterSourcePath,
+			Required:     true, // Path parameters are always required
+			IsCustomType: false,
+			ParserFunc:   "axon.ParseString",
+		}
+		
+		parameters = append(parameters, param)
+		processedParams[paramName] = true
 	}
 	
 	return parameters, nil
@@ -1299,26 +1170,48 @@ func (p *Parser) analyzeReturnType(file *ast.File, controllerName, methodName st
 
 // mergeParameters merges path parameters with signature parameters
 func (p *Parser) mergeParameters(pathParams, signatureParams []models.Parameter) []models.Parameter {
-	// Create a map of path parameters for quick lookup
+	// Create maps for quick lookup
 	pathParamMap := make(map[string]models.Parameter)
 	for _, param := range pathParams {
 		pathParamMap[param.Name] = param
 	}
 	
+	signatureParamMap := make(map[string]models.Parameter)
+	for _, param := range signatureParams {
+		signatureParamMap[param.Name] = param
+	}
+	
 	var merged []models.Parameter
 	
-	// Add all path parameters first
-	merged = append(merged, pathParams...)
-	
-	// Add signature parameters that are not path parameters and not context parameters
+	// Add context parameters from signature (always include these)
 	for _, sigParam := range signatureParams {
-		// Skip context parameters - they are handled specially in code generation
 		if sigParam.Source == models.ParameterSourceContext {
-			continue
-		}
-		
-		if _, exists := pathParamMap[sigParam.Name]; !exists {
 			merged = append(merged, sigParam)
+		}
+	}
+	
+	// Add path parameters ONLY if they exist in the method signature
+	for _, pathParam := range pathParams {
+		if sigParam, exists := signatureParamMap[pathParam.Name]; exists {
+			// Path parameter exists in method signature - use the signature parameter
+			// but with path parameter metadata (Required, Source, etc.)
+			mergedParam := sigParam
+			mergedParam.Source = models.ParameterSourcePath
+			mergedParam.Required = true
+			mergedParam.IsCustomType = pathParam.IsCustomType
+			mergedParam.ParserFunc = pathParam.ParserFunc
+			merged = append(merged, mergedParam)
+		}
+		// If path parameter doesn't exist in signature, don't include it
+		// The method will extract it from context manually
+	}
+	
+	// Add other signature parameters that are not path parameters and not context
+	for _, sigParam := range signatureParams {
+		if sigParam.Source != models.ParameterSourceContext {
+			if _, exists := pathParamMap[sigParam.Name]; !exists {
+				merged = append(merged, sigParam)
+			}
 		}
 	}
 	
@@ -1517,12 +1410,31 @@ func (p *Parser) extractParserSignature(file *ast.File, functionName string) ([]
 // Security validation functions
 func isValidDirectoryPath(path string) bool {
 	// Basic validation - reject obviously malicious paths
-	if strings.Contains(path, "..") {
+	if path == "" {
 		return false
 	}
+	
+	// Check for null bytes
+	if strings.Contains(path, "\x00") {
+		return false
+	}
+	
+	// Check for dangerous characters
+	dangerousChars := []string{"<", ">", "|", "\""}
+	for _, char := range dangerousChars {
+		if strings.Contains(path, char) {
+			return false
+		}
+	}
+	
+	// Allow path traversal here - it will be checked after filepath.Clean()
+	// This allows legitimate relative paths like "../malicious" to pass initial validation
+	
+	// Reject direct access to system directories
 	if strings.HasPrefix(path, "/etc") || strings.HasPrefix(path, "/proc") || strings.HasPrefix(path, "/sys") {
 		return false
 	}
+	
 	return true
 }
 
@@ -1551,8 +1463,11 @@ func (p *Parser) parseAnnotationCommentWithFile(comment, target string, pos toke
 		return models.Annotation{}, err
 	}
 	
-	// Convert new annotation to old format for backward compatibility
-	return p.convertNewToOldAnnotation(newAnnotation, target)
+	// Set the target field
+	newAnnotation.Target = target
+	
+	// Create annotation using the new approach
+	return p.createAnnotation(newAnnotation, target), nil
 }
 
 // parseParameterDefinition parses a parameter definition (for backward compatibility with tests)
@@ -1580,62 +1495,3 @@ func (p *Parser) parseParameterDefinition(paramDef string, isEchoSyntax bool) (m
 	}, nil
 }
 
-// isDefaultValue checks if a parameter value is a default value that should be omitted
-func (p *Parser) isDefaultValue(paramName string, value interface{}, annotationType annotations.AnnotationType) bool {
-	switch annotationType {
-	case annotations.RouteAnnotation:
-		// For route annotations, PassContext defaults to false, Middleware defaults to empty slice
-		if paramName == "PassContext" {
-			if boolVal, ok := value.(bool); ok && !boolVal {
-				return true // Skip false default
-			}
-		}
-		if paramName == "Middleware" {
-			if slice, ok := value.([]string); ok && len(slice) == 0 {
-				return true // Skip empty slice default
-			}
-		}
-	case annotations.CoreAnnotation:
-		// For core annotations, check default values
-		if paramName == "Mode" {
-			if strVal, ok := value.(string); ok && strVal == "Singleton" {
-				return true // Skip default mode
-			}
-		}
-		if paramName == "Init" {
-			if strVal, ok := value.(string); ok && strVal == "Same" {
-				return true // Skip default init mode
-			}
-		}
-	case annotations.MiddlewareAnnotation:
-		// For middleware annotations, skip default values
-		if paramName == "Priority" {
-			if intVal, ok := value.(int); ok && intVal == 0 {
-				return true // Skip default priority
-			}
-		}
-		if paramName == "Global" {
-			if boolVal, ok := value.(bool); ok && !boolVal {
-				return true // Skip false default
-			}
-		}
-		if paramName == "Routes" {
-			if slice, ok := value.([]string); ok && len(slice) == 0 {
-				return true // Skip empty slice default
-			}
-		}
-	case annotations.InterfaceAnnotation:
-		// For interface annotations, skip default values
-		if paramName == "Singleton" {
-			if boolVal, ok := value.(bool); ok && boolVal {
-				return true // Skip true default
-			}
-		}
-		if paramName == "Primary" {
-			if boolVal, ok := value.(bool); ok && !boolVal {
-				return true // Skip false default
-			}
-		}
-	}
-	return false
-}

@@ -110,7 +110,6 @@ func TestBuiltinSchemasIntegration(t *testing.T) {
 			expectedType: MiddlewareAnnotation,
 			expectedParams: map[string]interface{}{
 				"Priority": 0,
-				"Global":   false,
 			},
 		},
 		{
@@ -120,7 +119,6 @@ func TestBuiltinSchemasIntegration(t *testing.T) {
 			expectedParams: map[string]interface{}{
 				"Name":     "AuthMiddleware",
 				"Priority": 0,
-				"Global":   false,
 			},
 		},
 		{

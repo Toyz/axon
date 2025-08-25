@@ -114,7 +114,14 @@ func GenerateParameterBindingCode(parameters []models.Parameter, parserRegistry 
 			if param.ParserFunc != "" {
 				functionCall = param.ParserFunc
 			} else {
-				parser, exists := parserRegistry.GetParser(param.Type)
+				// Extract just the type name without package prefix for registry lookup
+				typeName := param.Type
+				if strings.Contains(typeName, ".") {
+					parts := strings.Split(typeName, ".")
+					typeName = parts[len(parts)-1] // Get the last part (type name)
+				}
+				
+				parser, exists := parserRegistry.GetParser(typeName)
 				if !exists {
 					return "", fmt.Errorf("unsupported parameter type: %s", param.Type)
 				}
