@@ -378,7 +378,6 @@ func (p *Parser) parseAnnotationComment(comment, target string, pos token.Pos) (
 	// Remove axon:: prefix
 	text = strings.TrimPrefix(text, AnnotationPrefix)
 	parts := strings.Fields(text)
-	fmt.Printf("[DEBUG] Parsing annotation for %s: text='%s', parts=%v\n", target, text, parts)
 	if len(parts) == 0 {
 		return models.Annotation{}, fmt.Errorf("empty annotation")
 	}
@@ -400,7 +399,6 @@ func (p *Parser) parseAnnotationComment(comment, target string, pos token.Pos) (
 	// Parse remaining parts as parameters and flags
 	for i := 1; i < len(parts); i++ {
 		part := parts[i]
-		fmt.Printf("[DEBUG] Processing annotation part for %s: '%s'\n", target, part)
 		if strings.HasPrefix(part, "-") {
 			// It's a flag
 			if strings.Contains(part, "=") {
@@ -672,7 +670,7 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				service.HasLifecycle = true
 				
 				// Debug output
-				fmt.Printf("[DEBUG] Service %s has -Init=%s, setting HasLifecycle=true\n", annotation.Target, initMode)
+
 				
 				// Validate init mode
 				if initMode == "Background" || initMode == "Same" || initMode == "" {
@@ -681,7 +679,7 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 					} else {
 						service.StartMode = initMode
 					}
-					fmt.Printf("[DEBUG] Service %s StartMode set to: %s\n", annotation.Target, service.StartMode)
+	
 				} else {
 					return fmt.Errorf("service %s has invalid -Init value '%s': must be 'Background' or 'Same'", annotation.Target, initMode)
 				}
