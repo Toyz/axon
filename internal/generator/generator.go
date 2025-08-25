@@ -305,8 +305,22 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 				
 				// Only analyze path parameters for parser imports
 				if param.Source == models.ParameterSourcePath {
-					// Check if this parameter uses a custom parser
-					if parser, exists := g.parserRegistry.GetParser(param.Type); exists {
+					// Check if ParserFunc references a custom parser package
+					if param.ParserFunc != "" && strings.Contains(param.ParserFunc, "parsers.") {
+						hasCustomParsers = true
+						// Add parsers package import (avoid duplicates)
+						importPath := g.resolvePackageImportPath(moduleName, metadata.PackagePath, "parsers")
+						found := false
+						for _, existing := range analysis.Local {
+							if existing.Path == importPath {
+								found = true
+								break
+							}
+						}
+						if !found {
+							analysis.Local = append(analysis.Local, ImportSpec{Path: importPath})
+						}
+					} else if parser, exists := g.parserRegistry.GetParser(param.Type); exists {
 						// Add parser import if it's not a built-in parser
 						if parser.PackagePath != "builtin" && parser.PackagePath != "" {
 							hasCustomParsers = true

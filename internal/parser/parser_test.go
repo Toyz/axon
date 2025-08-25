@@ -605,16 +605,17 @@ func TestParser_extractDependencies(t *testing.T) {
 		expected []string
 	}{
 		{
-			name: "struct with fx.In and dependencies",
+			name: "struct with axon::inject and dependencies",
 			source: `type UserController struct {
-				fx.In
+				//axon::inject
 				UserService UserServiceInterface
+				//axon::inject
 				Logger      *Logger
 			}`,
 			expected: []string{"UserServiceInterface", "*Logger"},
 		},
 		{
-			name: "struct with no fx.In",
+			name: "struct with no axon::inject",
 			source: `type UserController struct {
 				UserService UserServiceInterface
 				Logger      *Logger
@@ -622,19 +623,21 @@ func TestParser_extractDependencies(t *testing.T) {
 			expected: []string{},
 		},
 		{
-			name: "struct with embedded fx.In only",
+			name: "struct with embedded axon::inject only",
 			source: `type UserController struct {
-				fx.In
 			}`,
 			expected: []string{},
 		},
 		{
 			name: "struct with multiple dependencies",
 			source: `type UserController struct {
-				fx.In
+				//axon::inject
 				UserService    UserServiceInterface
+				//axon::inject
 				AuthService    AuthServiceInterface
+				//axon::inject
 				Config         *Config
+				//axon::inject
 				Database       DatabaseInterface
 			}`,
 			expected: []string{"UserServiceInterface", "AuthServiceInterface", "*Config", "DatabaseInterface"},
@@ -3057,13 +3060,12 @@ func TestParser_DatabaseServiceDependencies(t *testing.T) {
 
 import (
 	"context"
-	"go.uber.org/fx"
 	"github.com/toyz/axon/examples/complete-app/internal/config"
 )
 
 //axon::core -Init
 type DatabaseService struct {
-	fx.In
+	//axon::inject
 	Config *config.Config
 	connected bool
 }

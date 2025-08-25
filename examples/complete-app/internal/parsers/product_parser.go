@@ -33,7 +33,7 @@ func (pc ProductCode) String() string {
 	return string(pc)
 }
 
-//axon::route_parser ProductCode
+//axon::route_parser name=ProductCode
 func ParseProductCode(c echo.Context, paramValue string) (ProductCode, error) {
 	code := ProductCode(strings.ToUpper(paramValue))
 	if err := code.Validate(); err != nil {

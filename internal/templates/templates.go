@@ -107,24 +107,30 @@ func GenerateParameterBindingCode(parameters []models.Parameter, parserRegistry 
 	for _, param := range parameters {
 		switch param.Source {
 		case models.ParameterSourcePath:
-			// Generate parameter binding code for path parameters using parser registry
-			parser, exists := parserRegistry.GetParser(param.Type)
-			if !exists {
-				return "", fmt.Errorf("unsupported parameter type: %s", param.Type)
-			}
-			
-			// Generate parser function call
+			// Generate parameter binding code for path parameters
 			var functionCall string
-			if parser.PackagePath == "builtin" {
-				// Built-in parsers use axon package prefix
-				functionCall = fmt.Sprintf("axon.%s", parser.FunctionName)
-			} else if parser.PackagePath != "" {
-				// Custom parsers use package.FunctionName format
-				packageName := filepath.Base(parser.PackagePath)
-				functionCall = fmt.Sprintf("%s.%s", packageName, parser.FunctionName)
+			
+			// Use ParserFunc from parameter if available, otherwise look in registry
+			if param.ParserFunc != "" {
+				functionCall = param.ParserFunc
 			} else {
-				// For parsers in the same package, use direct function name
-				functionCall = parser.FunctionName
+				parser, exists := parserRegistry.GetParser(param.Type)
+				if !exists {
+					return "", fmt.Errorf("unsupported parameter type: %s", param.Type)
+				}
+				
+				// Generate parser function call
+				if parser.PackagePath == "builtin" {
+					// Built-in parsers use axon package prefix
+					functionCall = fmt.Sprintf("axon.%s", parser.FunctionName)
+				} else if parser.PackagePath != "" {
+					// Custom parsers use package.FunctionName format
+					packageName := filepath.Base(parser.PackagePath)
+					functionCall = fmt.Sprintf("%s.%s", packageName, parser.FunctionName)
+				} else {
+					// For parsers in the same package, use direct function name
+					functionCall = parser.FunctionName
+				}
 			}
 			
 			bindingCode.WriteString(fmt.Sprintf(`		%s, err := %s(c, c.Param("%s"))
