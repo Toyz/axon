@@ -86,7 +86,7 @@ func (p *parser) ParseAnnotation(comment string, location SourceLocation) (*Pars
 
 func (p *parser) normalizeCommentPrefix(comment string, location SourceLocation) (string, error) {
 	input := strings.TrimSpace(comment)
-	
+
 	if !strings.HasPrefix(input, "//") {
 		return "", ParseError{
 			Message:    "annotation must start with '//'",
@@ -97,7 +97,7 @@ func (p *parser) normalizeCommentPrefix(comment string, location SourceLocation)
 
 	withoutSlashes := input[2:]
 	withoutSlashes = strings.TrimLeftFunc(withoutSlashes, unicode.IsSpace)
-	
+
 	if !strings.HasPrefix(withoutSlashes, "axon::") {
 		return "", ParseError{
 			Message:    "annotation must contain 'axon::' prefix",
@@ -112,7 +112,7 @@ func (p *parser) normalizeCommentPrefix(comment string, location SourceLocation)
 func (p *parser) simpleTokenize(input string) []AnnotationToken {
 	var tokens []AnnotationToken
 	parts := p.splitRespectingQuotes(input)
-	
+
 	for _, part := range parts {
 		if strings.HasPrefix(part, "-") {
 			tokens = append(tokens, AnnotationToken{
@@ -126,7 +126,7 @@ func (p *parser) simpleTokenize(input string) []AnnotationToken {
 			})
 		}
 	}
-	
+
 	return tokens
 }
 
@@ -137,7 +137,7 @@ func (p *parser) splitRespectingQuotes(input string) []string {
 	var inQuotes bool
 	var quoteChar rune
 	var inFlagValue bool
-	
+
 	for i, r := range input {
 		switch {
 		case !inQuotes && !inFlagValue && unicode.IsSpace(r):
@@ -195,7 +195,7 @@ func (p *parser) splitRespectingQuotes(input string) []string {
 				// If odd number of backslashes, the quote is escaped
 				isEscaped = (backslashCount%2 == 1)
 			}
-			
+
 			if isEscaped {
 				// This is an escaped quote, already handled by escape sequence processing
 				// Don't add it again, just continue
@@ -216,12 +216,12 @@ func (p *parser) splitRespectingQuotes(input string) []string {
 			current.WriteRune(r)
 		}
 	}
-	
+
 	// Add final token if any
 	if current.Len() > 0 {
 		parts = append(parts, current.String())
 	}
-	
+
 	return parts
 }
 
@@ -232,11 +232,11 @@ func (p *parser) splitCommaSeparatedValues(input string) []string {
 	var inQuotes bool
 	var quoteChar rune
 	var lastWasComma bool
-	
+
 	runes := []rune(input)
 	for i := 0; i < len(runes); i++ {
 		r := runes[i]
-		
+
 		switch {
 		case !inQuotes && r == ',':
 			// Outside quotes and hit comma - end current value
@@ -269,13 +269,13 @@ func (p *parser) splitCommaSeparatedValues(input string) []string {
 			lastWasComma = false
 		}
 	}
-	
+
 	// Add final value - always add if we have content or if last character was comma
 	if current.Len() > 0 || lastWasComma {
 		value := strings.TrimSpace(current.String())
 		values = append(values, p.stripQuotes(value))
 	}
-	
+
 	return values
 }
 
@@ -308,7 +308,7 @@ func (p *parser) parseTokens(tokens []AnnotationToken, location SourceLocation) 
 	var positionalParams []string
 	for i := 1; i < len(tokens); i++ {
 		token := tokens[i]
-		
+
 		if token.Type == FlagToken {
 			err := p.processFlagToken(token, annotation, location)
 			if err != nil {
@@ -347,29 +347,24 @@ func (p *parser) parseTokens(tokens []AnnotationToken, location SourceLocation) 
 }
 
 func (p *parser) processFlagToken(token AnnotationToken, annotation *ParsedAnnotation, location SourceLocation) error {
-	flagValue := token.Value
-	
-	// Remove leading dash
-	if strings.HasPrefix(flagValue, "-") {
-		flagValue = flagValue[1:]
-	}
+	flagValue := strings.TrimPrefix(token.Value, "-")
+	paramName := ""
+	annotation.Flags = append(annotation.Flags, "-"+flagValue)
 
 	// Check if it has explicit value (-Mode=Transient)
 	if strings.Contains(flagValue, "=") {
 		parts := strings.SplitN(flagValue, "=", 2)
-		paramName := parts[0]
+		paramName = parts[0]
 		paramValue := parts[1]
-		
+
 		// Check if the value is quoted
 		isQuoted := false
 		if len(paramValue) >= 2 {
 			if (paramValue[0] == '"' && paramValue[len(paramValue)-1] == '"') ||
-			   (paramValue[0] == '\'' && paramValue[len(paramValue)-1] == '\'') {
+				(paramValue[0] == '\'' && paramValue[len(paramValue)-1] == '\'') {
 				isQuoted = true
 			}
-		}
-		
-		// Check if the parameter expects a slice type from the schema
+		} // Check if the parameter expects a slice type from the schema
 		expectsSlice := false
 		if p.registry != nil {
 			if schema, err := p.registry.GetSchema(annotation.Type); err == nil {
@@ -378,7 +373,7 @@ func (p *parser) processFlagToken(token AnnotationToken, annotation *ParsedAnnot
 				}
 			}
 		}
-		
+
 		if isQuoted {
 			// Quoted value - check if it should be treated as comma-separated
 			unquotedValue := p.stripQuotes(paramValue)
@@ -407,23 +402,12 @@ func (p *parser) processFlagToken(token AnnotationToken, annotation *ParsedAnnot
 			annotation.Parameters[paramName] = p.stripQuotes(paramValue)
 		}
 		return nil
+	} else {
+
+		// This is a flag without explicit value (-Init or -PassContext)
+		paramName = flagValue
 	}
 
-	// This is a flag without explicit value (-Init or -PassContext)
-	paramName := flagValue
-	
-	// Special handling for backward compatibility with old parser
-	// Certain flags should remain as flags even if they have schema definitions
-	legacyFlags := map[string]bool{
-		"Init": true,
-	}
-	
-	if legacyFlags[paramName] {
-		// Add to flags array for backward compatibility
-		annotation.Flags = append(annotation.Flags, "-"+paramName)
-		return nil
-	}
-	
 	if p.registry != nil {
 		schema, err := p.registry.GetSchema(annotation.Type)
 		if err == nil {
@@ -465,11 +449,11 @@ func (p *parser) stripQuotes(s string) string {
 	if len(s) >= 2 {
 		if (s[0] == '"' && s[len(s)-1] == '"') || (s[0] == '\'' && s[len(s)-1] == '\'') {
 			unquoted := s[1 : len(s)-1]
-			
+
 			// Process escape sequences manually for more robust handling
 			result := make([]rune, 0, len(unquoted))
 			runes := []rune(unquoted)
-			
+
 			for i := 0; i < len(runes); i++ {
 				if runes[i] == '\\' && i+1 < len(runes) {
 					// Handle escape sequence
@@ -500,7 +484,7 @@ func (p *parser) stripQuotes(s string) string {
 					result = append(result, runes[i])
 				}
 			}
-			
+
 			return string(result)
 		}
 	}

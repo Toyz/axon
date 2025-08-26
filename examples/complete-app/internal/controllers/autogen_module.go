@@ -17,8 +17,8 @@ import (
 	middleware "github.com/toyz/axon/examples/complete-app/internal/middleware"
 )
 
-type LoggingMiddleware = middleware.LoggingMiddleware
 type AuthMiddleware = middleware.AuthMiddleware
+type LoggingMiddleware = middleware.LoggingMiddleware
 
 // handleAxonResponse processes an axon.Response and applies headers, cookies, and content type
 func handleAxonResponse(c echo.Context, response *axon.Response) error {
@@ -71,6 +71,12 @@ func handleError(c echo.Context, err error) error {
 	return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 }
 
+func NewHealthController(databaseService *services.DatabaseService) *HealthController {
+	return &HealthController{
+		DatabaseService: databaseService,
+	}
+}
+
 func NewIndexController() *IndexController {
 	return &IndexController{
 
@@ -96,9 +102,25 @@ func NewUserController(userService *services.UserService) *UserController {
 	}
 }
 
-func NewHealthController(databaseService *services.DatabaseService) *HealthController {
-	return &HealthController{
-		DatabaseService: databaseService,
+func wrapHealthControllerGetHealth(handler *HealthController) echo.HandlerFunc {
+	return func(c echo.Context) error {
+
+		data, err := handler.GetHealth()
+		if err != nil {
+			return handleError(c, err)
+		}
+		return c.JSON(http.StatusOK, data)
+	}
+}
+
+func wrapHealthControllerGetReadiness(handler *HealthController) echo.HandlerFunc {
+	return func(c echo.Context) error {
+
+		data, err := handler.GetReadiness()
+		if err != nil {
+			return handleError(c, err)
+		}
+		return c.JSON(http.StatusOK, data)
 	}
 }
 
@@ -434,30 +456,36 @@ func wrapUserControllerDeleteUser(handler *UserController, authmiddleware *AuthM
 	return finalHandler
 }
 
-func wrapHealthControllerGetHealth(handler *HealthController) echo.HandlerFunc {
-	return func(c echo.Context) error {
-
-		data, err := handler.GetHealth()
-		if err != nil {
-			return handleError(c, err)
-		}
-		return c.JSON(http.StatusOK, data)
-	}
-}
-
-func wrapHealthControllerGetReadiness(handler *HealthController) echo.HandlerFunc {
-	return func(c echo.Context) error {
-
-		data, err := handler.GetReadiness()
-		if err != nil {
-			return handleError(c, err)
-		}
-		return c.JSON(http.StatusOK, data)
-	}
-}
-
 // RegisterRoutes registers all HTTP routes with the Echo instance
-func RegisterRoutes(e *echo.Echo, indexcontroller *IndexController, productcontroller *ProductController, sessioncontroller *SessionController, usercontroller *UserController, healthcontroller *HealthController, loggingmiddleware *LoggingMiddleware, authmiddleware *AuthMiddleware) {
+func RegisterRoutes(e *echo.Echo, healthcontroller *HealthController, indexcontroller *IndexController, productcontroller *ProductController, sessioncontroller *SessionController, usercontroller *UserController, loggingmiddleware *LoggingMiddleware, authmiddleware *AuthMiddleware) {
+	handler_healthcontrollergethealth := wrapHealthControllerGetHealth(healthcontroller)
+	e.GET("/health", handler_healthcontrollergethealth)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "GET",
+		Path:                "/health",
+		EchoPath:            "/health",
+		HandlerName:         "GetHealth",
+		ControllerName:      "HealthController",
+		PackageName:         "controllers",
+		Middlewares:         []string{},
+		MiddlewareInstances: []axon.MiddlewareInstance{},
+		ParameterTypes:      map[string]string{},
+		Handler:             handler_healthcontrollergethealth,
+	})
+	handler_healthcontrollergetreadiness := wrapHealthControllerGetReadiness(healthcontroller)
+	e.GET("/ready", handler_healthcontrollergetreadiness)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "GET",
+		Path:                "/ready",
+		EchoPath:            "/ready",
+		HandlerName:         "GetReadiness",
+		ControllerName:      "HealthController",
+		PackageName:         "controllers",
+		Middlewares:         []string{},
+		MiddlewareInstances: []axon.MiddlewareInstance{},
+		ParameterTypes:      map[string]string{},
+		Handler:             handler_healthcontrollergetreadiness,
+	})
 	handler_indexcontrollerindex := wrapIndexControllerIndex(indexcontroller)
 	e.GET("/", handler_indexcontrollerindex)
 	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
@@ -760,42 +788,14 @@ func RegisterRoutes(e *echo.Echo, indexcontroller *IndexController, productcontr
 		ParameterTypes:      map[string]string{"id": "int"},
 		Handler:             handler_usercontrollerdeleteuser,
 	})
-	handler_healthcontrollergethealth := wrapHealthControllerGetHealth(healthcontroller)
-	e.GET("/health", handler_healthcontrollergethealth)
-	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
-		Method:              "GET",
-		Path:                "/health",
-		EchoPath:            "/health",
-		HandlerName:         "GetHealth",
-		ControllerName:      "HealthController",
-		PackageName:         "controllers",
-		Middlewares:         []string{},
-		MiddlewareInstances: []axon.MiddlewareInstance{},
-		ParameterTypes:      map[string]string{},
-		Handler:             handler_healthcontrollergethealth,
-	})
-	handler_healthcontrollergetreadiness := wrapHealthControllerGetReadiness(healthcontroller)
-	e.GET("/ready", handler_healthcontrollergetreadiness)
-	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
-		Method:              "GET",
-		Path:                "/ready",
-		EchoPath:            "/ready",
-		HandlerName:         "GetReadiness",
-		ControllerName:      "HealthController",
-		PackageName:         "controllers",
-		Middlewares:         []string{},
-		MiddlewareInstances: []axon.MiddlewareInstance{},
-		ParameterTypes:      map[string]string{},
-		Handler:             handler_healthcontrollergetreadiness,
-	})
 }
 
 // AutogenModule provides all controllers and route registration in this package
 var AutogenModule = fx.Module("controllers",
+	fx.Provide(NewHealthController),
 	fx.Provide(NewIndexController),
 	fx.Provide(NewProductController),
 	fx.Provide(NewSessionController),
 	fx.Provide(NewUserController),
-	fx.Provide(NewHealthController),
 	fx.Invoke(RegisterRoutes),
 )

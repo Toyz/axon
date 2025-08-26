@@ -1,6 +1,9 @@
 package annotations
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // AnnotationType represents the type of annotation
 type AnnotationType int
@@ -84,6 +87,16 @@ type ParsedAnnotation struct {
 	Flags      []string               // Boolean flags
 	Location   SourceLocation         // Source location
 	Raw        string                 // Original annotation text
+}
+
+// HasFlag checks if a flag is present
+func (p *ParsedAnnotation) HasFlag(flag string) bool {
+	for _, f := range p.Flags {
+		if strings.Contains(f, "-"+flag) {
+			return true
+		}
+	}
+	return false
 }
 
 // GetString returns a string parameter value with optional default
@@ -236,11 +249,11 @@ type CustomValidator func(*ParsedAnnotation) error
 
 // AnnotationSchema defines the schema for an annotation type
 type AnnotationSchema struct {
-	Type        AnnotationType            // Annotation type enum
-	Description string                    // Human-readable description
-	Parameters  map[string]ParameterSpec  // Parameter specifications
-	Validators  []CustomValidator         // Custom validation functions
-	Examples    []string                  // Usage examples
+	Type        AnnotationType           // Annotation type enum
+	Description string                   // Human-readable description
+	Parameters  map[string]ParameterSpec // Parameter specifications
+	Validators  []CustomValidator        // Custom validation functions
+	Examples    []string                 // Usage examples
 }
 
 // Type conversion utilities
@@ -352,7 +365,7 @@ func parseCommaSeparated(s string) []string {
 	parts := make([]string, 0)
 	current := ""
 	inQuotes := false
-	
+
 	for i, char := range s {
 		switch char {
 		case '"', '\'':
@@ -368,13 +381,13 @@ func parseCommaSeparated(s string) []string {
 		default:
 			current += string(char)
 		}
-		
+
 		// Handle last part
 		if i == len(s)-1 && current != "" {
 			parts = append(parts, trimAndUnquote(current))
 		}
 	}
-	
+
 	return parts
 }
 
@@ -386,7 +399,7 @@ func trimAndUnquote(s string) string {
 	for len(s) > 0 && (s[len(s)-1] == ' ' || s[len(s)-1] == '\t') {
 		s = s[:len(s)-1]
 	}
-	
+
 	// Remove quotes if present
 	if len(s) >= 2 {
 		if (s[0] == '"' && s[len(s)-1] == '"') || (s[0] == '\'' && s[len(s)-1] == '\'') {

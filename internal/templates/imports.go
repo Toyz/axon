@@ -132,10 +132,10 @@ var (
 		{regexp.MustCompile(`\bjpeg\.Options\b`), "image/jpeg"},
 		{regexp.MustCompile(`\bpng\.Encoder\b`), "image/png"},
 		{regexp.MustCompile(`\bgif\.GIF\b`), "image/gif"},
-		
+
 		// Third-party common types (not stdlib but commonly used)
 		{regexp.MustCompile(`\buuid\.UUID\b`), "github.com/google/uuid"},
-		
+
 		// Package-level patterns (less specific, checked after specific types)
 		{regexp.MustCompile(`\bcontext\.`), "context"},
 		{regexp.MustCompile(`\btime\.`), "time"},
@@ -230,9 +230,9 @@ type Import struct {
 
 // ImportManager manages import detection and generation for templates
 type ImportManager struct {
-	sourceImports   map[string][]Import  // imports from source files (filename -> imports)
-	knownTypes      map[string]string    // type -> import path mapping
-	packageResolver *PackageResolver     // for dynamic package path resolution
+	sourceImports   map[string][]Import // imports from source files (filename -> imports)
+	knownTypes      map[string]string   // type -> import path mapping
+	packageResolver *PackageResolver    // for dynamic package path resolution
 }
 
 // PackageResolver resolves package paths dynamically based on project structure
@@ -267,7 +267,7 @@ func NewPackageResolver(projectRoot string) (*PackageResolver, error) {
 	resolver := &PackageResolver{
 		PackageMap: make(map[string]string),
 	}
-	
+
 	// Validate and sanitize the project root path
 	cleanProjectRoot := filepath.Clean(projectRoot)
 	if !filepath.IsAbs(cleanProjectRoot) {
@@ -277,16 +277,16 @@ func NewPackageResolver(projectRoot string) (*PackageResolver, error) {
 			return nil, fmt.Errorf("failed to resolve absolute path: %w", err)
 		}
 	}
-	
+
 	// Find go.mod file to determine module root and path
 	moduleRoot, modulePath, err := findModuleInfo(cleanProjectRoot)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find module info: %w", err)
 	}
-	
+
 	resolver.ModuleRoot = moduleRoot
 	resolver.ModulePath = modulePath
-	
+
 	return resolver, nil
 }
 
@@ -298,21 +298,21 @@ func (im *ImportManager) AddSourceImports(filename string, imports []Import) {
 // ExtractImportsFromAST extracts import statements from an AST file
 func (im *ImportManager) ExtractImportsFromAST(file *ast.File) []Import {
 	var imports []Import
-	
+
 	for _, imp := range file.Imports {
 		importPath := strings.Trim(imp.Path.Value, `"`)
 		alias := ""
-		
+
 		if imp.Name != nil {
 			alias = imp.Name.Name
 		}
-		
+
 		imports = append(imports, Import{
 			Path:  importPath,
 			Alias: alias,
 		})
 	}
-	
+
 	return imports
 }
 
@@ -320,26 +320,26 @@ func (im *ImportManager) ExtractImportsFromAST(file *ast.File) []Import {
 func (im *ImportManager) GetRequiredImports(generatedCode string) []Import {
 	var requiredImports []Import
 	importSet := make(map[string]Import) // use map to avoid duplicates
-	
+
 	// Add imports based on known type patterns in the code
 	typeImports := im.detectTypeImports(generatedCode)
 	for _, imp := range typeImports {
 		key := imp.Path + "|" + imp.Alias
 		importSet[key] = imp
 	}
-	
+
 	// Add framework imports if needed
 	frameworkImports := im.detectFrameworkImports(generatedCode)
 	for _, imp := range frameworkImports {
 		key := imp.Path + "|" + imp.Alias
 		importSet[key] = imp
 	}
-	
+
 	// Convert map back to slice
 	for _, imp := range importSet {
 		requiredImports = append(requiredImports, imp)
 	}
-	
+
 	return requiredImports
 }
 
@@ -347,33 +347,33 @@ func (im *ImportManager) GetRequiredImports(generatedCode string) []Import {
 func (im *ImportManager) detectTypeImports(code string) []Import {
 	var imports []Import
 	importSet := make(map[string]bool) // use set to avoid duplicates
-	
+
 	// Use pre-compiled regex patterns for performance
 	for _, tp := range typePatternRegexes {
 		if tp.regex.MatchString(code) {
 			importSet[tp.importPath] = true
 		}
 	}
-	
+
 	// Convert set back to slice
 	for importPath := range importSet {
 		imports = append(imports, Import{Path: importPath})
 	}
-	
+
 	return imports
 }
 
 // detectFrameworkImports detects framework-specific imports needed
 func (im *ImportManager) detectFrameworkImports(code string) []Import {
 	var imports []Import
-	
+
 	// Use pre-compiled regex patterns for performance
 	for regex, importPath := range frameworkPatternRegexes {
 		if regex.MatchString(code) {
 			imports = append(imports, Import{Path: importPath})
 		}
 	}
-	
+
 	return imports
 }
 
@@ -382,12 +382,12 @@ func (im *ImportManager) GenerateImportBlock(requiredImports []Import) string {
 	if len(requiredImports) == 0 {
 		return ""
 	}
-	
+
 	// Group imports by type
 	stdLib := []Import{}
 	thirdParty := []Import{}
 	local := []Import{}
-	
+
 	for _, imp := range requiredImports {
 		if im.isStandardLibrary(imp.Path) {
 			stdLib = append(stdLib, imp)
@@ -397,15 +397,15 @@ func (im *ImportManager) GenerateImportBlock(requiredImports []Import) string {
 			thirdParty = append(thirdParty, imp)
 		}
 	}
-	
+
 	// Sort each group
 	sort.Slice(stdLib, func(i, j int) bool { return stdLib[i].Path < stdLib[j].Path })
 	sort.Slice(thirdParty, func(i, j int) bool { return thirdParty[i].Path < thirdParty[j].Path })
 	sort.Slice(local, func(i, j int) bool { return local[i].Path < local[j].Path })
-	
+
 	var importBlock strings.Builder
 	importBlock.WriteString("import (\n")
-	
+
 	// Add standard library imports
 	for _, imp := range stdLib {
 		if imp.Alias != "" {
@@ -414,12 +414,12 @@ func (im *ImportManager) GenerateImportBlock(requiredImports []Import) string {
 			importBlock.WriteString(fmt.Sprintf("\t\"%s\"\n", imp.Path))
 		}
 	}
-	
+
 	// Add blank line between groups if needed
 	if len(stdLib) > 0 && (len(thirdParty) > 0 || len(local) > 0) {
 		importBlock.WriteString("\n")
 	}
-	
+
 	// Add third-party imports
 	for _, imp := range thirdParty {
 		if imp.Alias != "" {
@@ -428,12 +428,12 @@ func (im *ImportManager) GenerateImportBlock(requiredImports []Import) string {
 			importBlock.WriteString(fmt.Sprintf("\t\"%s\"\n", imp.Path))
 		}
 	}
-	
+
 	// Add blank line between groups if needed
 	if len(thirdParty) > 0 && len(local) > 0 {
 		importBlock.WriteString("\n")
 	}
-	
+
 	// Add local imports
 	for _, imp := range local {
 		if imp.Alias != "" {
@@ -442,7 +442,7 @@ func (im *ImportManager) GenerateImportBlock(requiredImports []Import) string {
 			importBlock.WriteString(fmt.Sprintf("\t\"%s\"\n", imp.Path))
 		}
 	}
-	
+
 	importBlock.WriteString(")")
 	return importBlock.String()
 }
@@ -450,13 +450,13 @@ func (im *ImportManager) GenerateImportBlock(requiredImports []Import) string {
 // FilterUnusedImports removes imports that aren't actually used in the code
 func (im *ImportManager) FilterUnusedImports(imports []Import, generatedCode string) []Import {
 	var usedImports []Import
-	
+
 	for _, imp := range imports {
 		if im.isImportUsed(imp, generatedCode) {
 			usedImports = append(usedImports, imp)
 		}
 	}
-	
+
 	return usedImports
 }
 
@@ -468,13 +468,13 @@ func (im *ImportManager) isImportUsed(imp Import, code string) bool {
 		// Extract package name from import path
 		parts := strings.Split(imp.Path, "/")
 		packageName = parts[len(parts)-1]
-		
+
 		// Handle special cases like "log/slog" -> "slog"
 		if strings.Contains(packageName, ".") {
 			packageName = strings.Split(packageName, ".")[0]
 		}
 	}
-	
+
 	// Use simple string matching for better performance instead of regex
 	// Look for package usage patterns: "packageName." and "*packageName."
 	quotedPackageName := regexp.QuoteMeta(packageName)
@@ -482,13 +482,13 @@ func (im *ImportManager) isImportUsed(imp Import, code string) bool {
 		quotedPackageName + ".",
 		"*" + quotedPackageName + ".",
 	}
-	
+
 	for _, pattern := range patterns {
 		if strings.Contains(code, pattern) {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -498,18 +498,18 @@ func (im *ImportManager) isStandardLibrary(importPath string) bool {
 	if !strings.Contains(importPath, ".") {
 		return true
 	}
-	
+
 	// Handle special standard library cases and extended standard library
 	stdLibPrefixes := []string{
 		"golang.org/x/",
 	}
-	
+
 	for _, prefix := range stdLibPrefixes {
 		if strings.HasPrefix(importPath, prefix) {
 			return true
 		}
 	}
-	
+
 	// Comprehensive list of all Go standard library packages
 	stdLibPackages := map[string]bool{
 		// Core packages
@@ -518,35 +518,35 @@ func (im *ImportManager) isStandardLibrary(importPath string) bool {
 		"compress/bzip2": true, "compress/flate": true, "compress/gzip": true, "compress/lzw": true, "compress/zlib": true,
 		"container/heap": true, "container/list": true, "container/ring": true,
 		"context": true,
-		"crypto": true, "crypto/aes": true, "crypto/cipher": true, "crypto/des": true, "crypto/dsa": true, "crypto/ecdsa": true, "crypto/ed25519": true, "crypto/elliptic": true, "crypto/hmac": true, "crypto/md5": true, "crypto/rand": true, "crypto/rc4": true, "crypto/rsa": true, "crypto/sha1": true, "crypto/sha256": true, "crypto/sha512": true, "crypto/subtle": true, "crypto/tls": true, "crypto/x509": true, "crypto/x509/pkix": true,
+		"crypto":  true, "crypto/aes": true, "crypto/cipher": true, "crypto/des": true, "crypto/dsa": true, "crypto/ecdsa": true, "crypto/ed25519": true, "crypto/elliptic": true, "crypto/hmac": true, "crypto/md5": true, "crypto/rand": true, "crypto/rc4": true, "crypto/rsa": true, "crypto/sha1": true, "crypto/sha256": true, "crypto/sha512": true, "crypto/subtle": true, "crypto/tls": true, "crypto/x509": true, "crypto/x509/pkix": true,
 		"database/sql": true, "database/sql/driver": true,
 		"debug/buildinfo": true, "debug/dwarf": true, "debug/elf": true, "debug/gosym": true, "debug/macho": true, "debug/pe": true, "debug/plan9obj": true,
-		"embed": true,
+		"embed":    true,
 		"encoding": true, "encoding/ascii85": true, "encoding/asn1": true, "encoding/base32": true, "encoding/base64": true, "encoding/binary": true, "encoding/csv": true, "encoding/gob": true, "encoding/hex": true, "encoding/json": true, "encoding/pem": true, "encoding/xml": true,
 		"errors": true,
 		"expvar": true,
-		"flag": true,
-		"fmt": true,
+		"flag":   true,
+		"fmt":    true,
 		"go/ast": true, "go/build": true, "go/build/constraint": true, "go/constant": true, "go/doc": true, "go/format": true, "go/importer": true, "go/parser": true, "go/printer": true, "go/scanner": true, "go/token": true, "go/types": true,
 		"hash": true, "hash/adler32": true, "hash/crc32": true, "hash/crc64": true, "hash/fnv": true, "hash/maphash": true,
 		"html": true, "html/template": true,
 		"image": true, "image/color": true, "image/color/palette": true, "image/draw": true, "image/gif": true, "image/jpeg": true, "image/png": true,
 		"index/suffixarray": true,
-		"io": true, "io/fs": true, "io/ioutil": true,
+		"io":                true, "io/fs": true, "io/ioutil": true,
 		"log": true, "log/slog": true, "log/syslog": true,
 		"math": true, "math/big": true, "math/bits": true, "math/cmplx": true, "math/rand": true,
 		"mime": true, "mime/multipart": true, "mime/quotedprintable": true,
 		"net": true, "net/http": true, "net/http/cgi": true, "net/http/cookiejar": true, "net/http/fcgi": true, "net/http/httptest": true, "net/http/httptrace": true, "net/http/httputil": true, "net/http/pprof": true, "net/mail": true, "net/netip": true, "net/rpc": true, "net/rpc/jsonrpc": true, "net/smtp": true, "net/textproto": true, "net/url": true,
 		"os": true, "os/exec": true, "os/signal": true, "os/user": true,
 		"path": true, "path/filepath": true,
-		"plugin": true,
+		"plugin":  true,
 		"reflect": true,
-		"regexp": true, "regexp/syntax": true,
+		"regexp":  true, "regexp/syntax": true,
 		"runtime": true, "runtime/cgo": true, "runtime/debug": true, "runtime/metrics": true, "runtime/pprof": true, "runtime/race": true, "runtime/trace": true,
-		"sort": true,
+		"sort":    true,
 		"strconv": true,
 		"strings": true,
-		"sync": true, "sync/atomic": true,
+		"sync":    true, "sync/atomic": true,
 		"syscall": true, "syscall/js": true,
 		"testing": true, "testing/fstest": true, "testing/iotest": true, "testing/quick": true,
 		"text/scanner": true, "text/tabwriter": true, "text/template": true, "text/template/parse": true,
@@ -554,7 +554,7 @@ func (im *ImportManager) isStandardLibrary(importPath string) bool {
 		"unicode": true, "unicode/utf16": true, "unicode/utf8": true,
 		"unsafe": true,
 	}
-	
+
 	return stdLibPackages[importPath]
 }
 
@@ -563,7 +563,7 @@ func (im *ImportManager) isLocalPackage(importPath string) bool {
 	if im.packageResolver == nil || im.packageResolver.ModulePath == "" {
 		return false
 	}
-	
+
 	return strings.HasPrefix(importPath, im.packageResolver.ModulePath)
 }
 
@@ -572,7 +572,7 @@ func (im *ImportManager) ResolveLocalPackage(packageName string) (string, error)
 	if im.packageResolver == nil {
 		return "", fmt.Errorf("no package resolver configured")
 	}
-	
+
 	return im.packageResolver.ResolvePackagePath(packageName)
 }
 
@@ -581,50 +581,51 @@ func (pr *PackageResolver) ResolvePackagePath(packageDir string) (string, error)
 	if pr.ModulePath == "" {
 		return "", fmt.Errorf("module path not set")
 	}
-	
+
 	// Check cache first
 	if cachedPath, exists := pr.PackageMap[packageDir]; exists {
 		return cachedPath, nil
 	}
-	
+
 	// Clean the package directory path
 	cleanDir := filepath.Clean(packageDir)
-	
+
 	// Remove leading "./" if present
 	cleanDir = strings.TrimPrefix(cleanDir, "./")
-	
+
 	// Construct full import path
 	fullPath := pr.ModulePath
 	if cleanDir != "." && cleanDir != "" {
 		fullPath = pr.ModulePath + "/" + cleanDir
 	}
-	
+
 	// Cache the result
 	pr.PackageMap[packageDir] = fullPath
-	
+
 	return fullPath, nil
 }
 
 // findModuleInfo finds the go.mod file and extracts module information
 func findModuleInfo(startDir string) (moduleRoot, modulePath string, err error) {
 	// Validate and clean the start directory
-	dir := filepath.Clean(startDir)
-	if !filepath.IsAbs(dir) {
-		return "", "", fmt.Errorf("start directory must be absolute path")
+	absDir, err := filepath.Abs(startDir)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to convert start directory to absolute path: %w", err)
 	}
-	
+	dir := absDir
+
 	for {
 		// Safely construct the go.mod path using only the filename
 		goModPath := filepath.Join(dir, filepath.Base("go.mod"))
 		if _, err := os.Stat(goModPath); err == nil {
 			// Found go.mod, extract module path
-			modulePath, err := extractModulePath(goModPath)
+			modulePath, err := extractModulePath(goModPath, dir)
 			if err != nil {
 				return "", "", fmt.Errorf("failed to extract module path from %s: %w", filepath.Base(goModPath), err)
 			}
 			return dir, modulePath, nil
 		}
-		
+
 		parent := filepath.Dir(dir)
 		if parent == dir {
 			// Reached root directory
@@ -632,28 +633,34 @@ func findModuleInfo(startDir string) (moduleRoot, modulePath string, err error) 
 		}
 		dir = parent
 	}
-	
+
 	return "", "", fmt.Errorf("go.mod not found in %s or any parent directory", filepath.Base(startDir))
 }
 
-// extractModulePath extracts the module path from a go.mod file
-func extractModulePath(goModPath string) (string, error) {
-	// Validate the file path and ensure it's only the go.mod filename
-	cleanPath := filepath.Clean(goModPath)
-	if filepath.Base(cleanPath) != "go.mod" {
-		return "", fmt.Errorf("invalid file: must be go.mod")
+// extractModulePath extracts the module path from a go.mod file, ensuring the file is within moduleRoot
+func extractModulePath(goModPath string, moduleRoot string) (string, error) {
+	// Clean and resolve absolute paths
+	cleanGoModPath, err := filepath.Abs(filepath.Clean(goModPath))
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve go.mod path: %w", err)
 	}
-	
-	// Validate that the path doesn't contain directory traversal attempts
-	if strings.Contains(cleanPath, "..") {
-		return "", fmt.Errorf("invalid path: directory traversal not allowed")
+
+	cleanModuleRoot, err := filepath.Abs(filepath.Clean(moduleRoot))
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve module root path: %w", err)
 	}
-	
-	content, err := os.ReadFile(cleanPath)
+
+	// Ensure the go.mod file is within the module root directory
+	rel, err := filepath.Rel(cleanModuleRoot, cleanGoModPath)
+	if err != nil || strings.HasPrefix(rel, "..") || filepath.Base(cleanGoModPath) != "go.mod" {
+		return "", fmt.Errorf("invalid go.mod path: must be within module root and named go.mod")
+	}
+
+	content, err := os.ReadFile(cleanGoModPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to read go.mod: %w", err)
 	}
-	
+
 	// Parse go.mod to extract module path
 	lines := strings.Split(string(content), "\n")
 	for _, line := range lines {
@@ -665,7 +672,7 @@ func extractModulePath(goModPath string) (string, error) {
 			}
 		}
 	}
-	
+
 	return "", fmt.Errorf("module declaration not found in go.mod")
 }
 
@@ -673,40 +680,46 @@ func extractModulePath(goModPath string) (string, error) {
 func ExtractImportsFromFile(filename string) ([]Import, error) {
 	// Validate and sanitize the filename
 	cleanFilename := filepath.Clean(filename)
-	
-	// Validate that the path doesn't contain directory traversal attempts
-	if strings.Contains(cleanFilename, "..") {
+
+	// Validate that the path is within the current working directory
+	wd, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get working directory: %w", err)
+	}
+
+	rel, err := filepath.Rel(wd, cleanFilename)
+	if err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
 		return nil, fmt.Errorf("invalid filename: directory traversal not allowed")
 	}
-	
+
 	// Validate that it's a Go file
 	if filepath.Ext(cleanFilename) != ".go" {
 		return nil, fmt.Errorf("invalid file: must be a .go file")
 	}
-	
+
 	// Use only the base filename for error reporting to avoid path disclosure
 	baseFilename := filepath.Base(cleanFilename)
-	
+
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, cleanFilename, nil, parser.ParseComments)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse file %s: %w", baseFilename, err)
 	}
-	
+
 	var imports []Import
 	for _, imp := range file.Imports {
 		importPath := strings.Trim(imp.Path.Value, `"`)
 		alias := ""
-		
+
 		if imp.Name != nil {
 			alias = imp.Name.Name
 		}
-		
+
 		imports = append(imports, Import{
 			Path:  importPath,
 			Alias: alias,
 		})
 	}
-	
+
 	return imports, nil
 }

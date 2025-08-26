@@ -1,10 +1,11 @@
 package parser
 
 import (
+	"strings"
 	"testing"
 )
 
-func TestIsValidDirectoryPath(t *testing.T) {
+func TestIsSecureDirectoryPath(t *testing.T) {
 	tests := []struct {
 		name     string
 		path     string
@@ -25,9 +26,9 @@ func TestIsValidDirectoryPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isValidDirectoryPath(tt.path)
+			result := isSecureDirectoryPath(tt.path)
 			if result != tt.expected {
-				t.Errorf("isValidDirectoryPath(%q) = %v, expected %v", tt.path, result, tt.expected)
+				t.Errorf("isSecureDirectoryPath(%q) = %v, expected %v", tt.path, result, tt.expected)
 			}
 		})
 	}
@@ -62,57 +63,41 @@ func TestIsValidGoModPath(t *testing.T) {
 
 func TestParseDirectorySecurityValidation(t *testing.T) {
 	parser := NewParser()
-	
+
 	// Test that path traversal is blocked after cleaning
 	_, err := parser.ParseDirectory("../../../etc")
 	if err == nil {
 		t.Error("expected error for path traversal, got none")
 	}
-	if err != nil && !contains(err.Error(), "path traversal not allowed") {
+	if err != nil && !strings.Contains(err.Error(), "path traversal not allowed") {
 		t.Errorf("expected path traversal error, got: %v", err)
 	}
-	
+
 	// Test that null byte injection is blocked
 	_, err = parser.ParseDirectory("valid\x00path")
 	if err == nil {
 		t.Error("expected error for null byte injection, got none")
 	}
-	if err != nil && !contains(err.Error(), "invalid directory path") {
+	if err != nil && !strings.Contains(err.Error(), "invalid directory path") {
 		t.Errorf("expected invalid directory path error, got: %v", err)
 	}
 }
 
 func TestParseGoModFileSecurityValidation(t *testing.T) {
 	parser := NewParser()
-	
+
 	// Test that path traversal is blocked
 	_, err := parser.parseGoModFile("../../../etc/passwd")
 	if err == nil {
 		t.Error("expected error for path traversal, got none")
 	}
-	
+
 	// Test that non-go.mod files are blocked
 	_, err = parser.parseGoModFile("./main.go")
 	if err == nil {
 		t.Error("expected error for non-go.mod file, got none")
 	}
-	if err != nil && !contains(err.Error(), "invalid go.mod file path") {
+	if err != nil && !strings.Contains(err.Error(), "invalid go.mod file path") {
 		t.Errorf("expected invalid go.mod file path error, got: %v", err)
 	}
-}
-
-// Helper function to check if a string contains a substring
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || 
-		(len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || 
-		containsSubstring(s, substr))))
-}
-
-func containsSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

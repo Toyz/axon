@@ -86,8 +86,7 @@ func New{{.StructName}}Factory({{range $i, $dep := .InjectedDeps}}{{if $i}}, {{e
 		OnStart: func(ctx context.Context) error {
 {{if eq .StartMode "Background"}}			go func() {
 				if err := service.Start(ctx); err != nil {
-					// Log error or handle as needed
-					// Note: Background start errors cannot be returned to FX
+					log.Printf("background start error in %s: %v", "{{.StructName}}", err)
 				}
 			}()
 			return nil

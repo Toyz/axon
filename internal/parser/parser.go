@@ -20,8 +20,8 @@ import (
 type Parser struct {
 	fileSet                  *token.FileSet
 	middlewareRegistry       registry.MiddlewareRegistry
-	skipParserValidation     bool // Skip custom parser validation during discovery phase
-	skipMiddlewareValidation bool // Skip middleware validation during discovery phase
+	skipParserValidation     bool               // Skip custom parser validation during discovery phase
+	skipMiddlewareValidation bool               // Skip middleware validation during discovery phase
 	reporter                 DiagnosticReporter // For debug logging and error reporting
 	annotationParser         annotations.ParserEngine
 	annotationRegistry       annotations.AnnotationRegistry
@@ -40,7 +40,7 @@ func NewParser() *Parser {
 	if err := annotations.RegisterBuiltinSchemas(annotationRegistry); err != nil {
 		panic(fmt.Sprintf("failed to register builtin annotation schemas: %v", err))
 	}
-	
+
 	return &Parser{
 		fileSet:            token.NewFileSet(),
 		middlewareRegistry: registry.NewMiddlewareRegistry(),
@@ -57,7 +57,7 @@ func NewParserWithReporter(reporter DiagnosticReporter) *Parser {
 	if err := annotations.RegisterBuiltinSchemas(annotationRegistry); err != nil {
 		panic(fmt.Sprintf("failed to register builtin annotation schemas: %v", err))
 	}
-	
+
 	return &Parser{
 		fileSet:            token.NewFileSet(),
 		middlewareRegistry: registry.NewMiddlewareRegistry(),
@@ -71,7 +71,7 @@ func NewParserWithReporter(reporter DiagnosticReporter) *Parser {
 type noOpReporter struct{}
 
 func (n *noOpReporter) Debug(format string, args ...interface{}) {}
-func (n *noOpReporter) DebugSection(section string) {}
+func (n *noOpReporter) DebugSection(section string)              {}
 
 // ParseSource parses source code from a string for testing purposes
 func (p *Parser) ParseSource(filename, source string) (*models.PackageMetadata, error) {
@@ -87,7 +87,7 @@ func (p *Parser) ParseSource(filename, source string) (*models.PackageMetadata, 
 		PackagePath:   "./",
 		SourceImports: make(map[string][]models.Import),
 	}
-	
+
 	// Extract imports from the file
 	imports := p.ExtractImports(file)
 	metadata.SourceImports[filename] = imports
@@ -115,18 +115,18 @@ func (p *Parser) ParseSource(filename, source string) (*models.PackageMetadata, 
 // ParseDirectory recursively scans the specified directory for .go files and extracts annotations
 func (p *Parser) ParseDirectory(path string) (*models.PackageMetadata, error) {
 	// Validate and sanitize the input path to prevent path traversal attacks
-	if !isValidDirectoryPath(path) {
+	if !isSecureDirectoryPath(path) {
 		return nil, fmt.Errorf("invalid directory path: %s", path)
 	}
-	
+
 	// Clean and normalize the path
 	cleanPath := filepath.Clean(path)
-	
+
 	// Ensure the clean path doesn't escape the current working directory
 	if strings.Contains(cleanPath, "..") {
 		return nil, fmt.Errorf("path traversal not allowed: %s", path)
 	}
-	
+
 	// Parse all Go files in the directory
 	pkgs, err := parser.ParseDir(p.fileSet, cleanPath, nil, parser.ParseComments)
 	if err != nil {
@@ -156,7 +156,7 @@ func (p *Parser) ParseDirectory(path string) (*models.PackageMetadata, error) {
 		PackagePath:   cleanPath,
 		SourceImports: make(map[string][]models.Import),
 	}
-	
+
 	// Detect module information
 	if err := p.detectModuleInfo(metadata); err != nil {
 		// Log warning but don't fail - module info is optional for some use cases
@@ -166,14 +166,14 @@ func (p *Parser) ParseDirectory(path string) (*models.PackageMetadata, error) {
 	// First pass: Extract all annotations and imports from all files
 	allAnnotations := []models.Annotation{}
 	fileMap := make(map[string]*ast.File)
-	
+
 	for fileName, file := range pkg.Files {
 		fileMap[fileName] = file
-		
+
 		// Extract imports from this file
 		imports := p.ExtractImports(file)
 		metadata.SourceImports[fileName] = imports
-		
+
 		// Extract annotations from this file
 		annotations, err := p.ExtractAnnotations(file, fileName)
 		if err != nil {
@@ -187,7 +187,7 @@ func (p *Parser) ParseDirectory(path string) (*models.PackageMetadata, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to process annotations: %w", err)
 	}
-	
+
 	// Third pass: Validate middleware Handle methods in their respective files
 	for fileName, file := range fileMap {
 		// Extract annotations for this specific file
@@ -195,7 +195,7 @@ func (p *Parser) ParseDirectory(path string) (*models.PackageMetadata, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to extract annotations from file %s: %w", fileName, err)
 		}
-		
+
 		// Validate middleware Handle methods only for middlewares defined in this file
 		for _, annotation := range fileAnnotations {
 			if annotation.Type == models.AnnotationTypeMiddleware {
@@ -213,20 +213,20 @@ func (p *Parser) ParseDirectory(path string) (*models.PackageMetadata, error) {
 // ExtractImports extracts import statements from a Go file
 func (p *Parser) ExtractImports(file *ast.File) []models.Import {
 	var imports []models.Import
-	
+
 	for _, importSpec := range file.Imports {
 		imp := models.Import{
 			Path: strings.Trim(importSpec.Path.Value, `"`), // Remove quotes
 		}
-		
+
 		// Check for import alias
 		if importSpec.Name != nil {
 			imp.Alias = importSpec.Name.Name
 		}
-		
+
 		imports = append(imports, imp)
 	}
-	
+
 	return imports
 }
 
@@ -248,10 +248,10 @@ func (p *Parser) ExtractAnnotations(file *ast.File, fileName string) ([]models.A
 								for _, comment := range node.Doc.List {
 									if annotation, err := p.parseAnnotationCommentWithFile(comment.Text, typeSpec.Name.Name, comment.Pos(), fileName); err == nil {
 										// Extract dependencies for controller, middleware, and core service annotations
-										if annotation.Type == models.AnnotationTypeController || 
-										   annotation.Type == models.AnnotationTypeMiddleware ||
-										   annotation.Type == models.AnnotationTypeCore ||
-										   annotation.Type == models.AnnotationTypeLogger {
+										if annotation.Type == models.AnnotationTypeController ||
+											annotation.Type == models.AnnotationTypeMiddleware ||
+											annotation.Type == models.AnnotationTypeCore ||
+											annotation.Type == models.AnnotationTypeLogger {
 											deps := p.extractDependencies(structType)
 											annotation.Dependencies = deps
 										}
@@ -291,8 +291,6 @@ func (p *Parser) ExtractAnnotations(file *ast.File, fileName string) ([]models.A
 	return annotations, nil
 }
 
-
-
 // convertNewToOldAnnotation converts a new ParsedAnnotation to the old models.Annotation format
 // createAnnotation creates a models.Annotation from a new ParsedAnnotation
 func (p *Parser) createAnnotation(newAnnotation *annotations.ParsedAnnotation, target string) models.Annotation {
@@ -303,8 +301,6 @@ func (p *Parser) createAnnotation(newAnnotation *annotations.ParsedAnnotation, t
 		Line:             newAnnotation.Location.Line,
 	}
 }
-
-
 
 // SetSkipParserValidation controls whether custom parser validation is skipped
 func (p *Parser) SetSkipParserValidation(skip bool) {
@@ -322,14 +318,12 @@ func (p *Parser) ValidateCustomParsersWithRegistry(metadata *models.PackageMetad
 	return nil
 }
 
-
-
 // processAnnotations builds metadata structures from parsed annotations
 func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *models.PackageMetadata, fileMap map[string]*ast.File) error {
 	// First pass: collect all controllers, interface annotations, and register middlewares
 	controllerNames := make(map[string]bool)
 	interfaceTargets := make(map[string]bool)
-	
+
 	for _, annotation := range annotations {
 		if annotation.Type == models.AnnotationTypeController {
 			controllerNames[annotation.Target] = true
@@ -345,14 +339,14 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				StructName:   annotation.Target,
 				Dependencies: annotation.Dependencies,
 			}
-			
+
 			err := p.middlewareRegistry.Register(middleware.Name, middleware)
 			if err != nil {
 				return fmt.Errorf("failed to register middleware '%s': %w", middleware.Name, err)
 			}
 		}
 	}
-	
+
 	// Second pass: process all annotations and validate routes
 	for _, annotation := range annotations {
 		switch annotation.Type {
@@ -363,7 +357,7 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				Dependencies: annotation.Dependencies,
 			}
 			metadata.Controllers = append(metadata.Controllers, controller)
-			
+
 			// If this controller also has an interface annotation, generate interface
 			if interfaceTargets[annotation.Target] {
 				// Extract methods from the struct
@@ -371,7 +365,7 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				if err != nil {
 					return fmt.Errorf("failed to extract methods for interface %s: %w", annotation.Target, err)
 				}
-				
+
 				iface := models.InterfaceMetadata{
 					Name:         annotation.Target + "Interface",
 					StructName:   annotation.Target,
@@ -388,13 +382,13 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 			if len(parts) != 2 {
 				return fmt.Errorf("invalid route target format: %s (expected ControllerName.MethodName)", annotation.Target)
 			}
-			
+
 			controllerName := parts[0]
 			methodName := parts[1]
 			if !controllerNames[controllerName] {
 				return fmt.Errorf("route %s is defined on struct %s which is not annotated with //axon::controller", annotation.Target, controllerName)
 			}
-			
+
 			// Routes will be associated with controllers in a later processing step
 			// For now, we'll store them temporarily
 			route := models.RouteMetadata{
@@ -402,13 +396,13 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				Path:        annotation.GetString("path"),
 				HandlerName: annotation.Target, // Keep full target for now, will be processed later
 			}
-			
+
 			// Parse path parameters from the route path
 			pathParams, err := p.parsePathParameters(route.Path)
 			if err != nil {
 				return fmt.Errorf("failed to parse path parameters for route %s: %w", annotation.Target, err)
 			}
-			
+
 			// Analyze handler method signature to detect all parameters
 			var allParams []models.Parameter
 			if file := fileMap[annotation.FileName]; file != nil {
@@ -416,23 +410,23 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				if err != nil {
 					return fmt.Errorf("failed to analyze handler signature for %s: %w", annotation.Target, err)
 				}
-				
+
 				// Merge path parameters with signature parameters
 				allParams = p.mergeParameters(pathParams, signatureParams)
 			} else {
 				// If no file available, just use path parameters
 				allParams = pathParams
 			}
-			
+
 			route.Parameters = allParams
-			
+
 			// Analyze return type
 			if file := fileMap[annotation.FileName]; file != nil {
 				returnType, err := p.analyzeReturnType(file, controllerName, methodName)
 				if err != nil {
 					return fmt.Errorf("failed to analyze return type for %s: %w", annotation.Target, err)
 				}
-				
+
 				// Map string return type to enum
 				var returnTypeEnum models.ReturnType
 				switch returnType {
@@ -441,10 +435,10 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				default:
 					returnTypeEnum = models.ReturnTypeDataError // Default assumption
 				}
-				
+
 				route.ReturnType = models.ReturnTypeInfo{Type: returnTypeEnum}
 			}
-			
+
 			// Parse middleware and validate
 			middlewareNames := annotation.GetStringSlice("Middleware")
 			if len(middlewareNames) > 0 {
@@ -455,13 +449,13 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 						return fmt.Errorf("route %s has invalid middleware reference: %w", annotation.Target, err)
 					}
 				}
-				
+
 				route.Middlewares = middlewareNames
 			}
-			
+
 			// Add flags
 			route.Flags = annotation.Flags
-			
+
 			// Find the controller this route belongs to and add it
 			p.addRouteToController(route, metadata)
 
@@ -480,51 +474,45 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				StructName:   annotation.Target,
 				Dependencies: annotation.Dependencies,
 			}
-			
+
 			// Check for Init flag (not parameter, since parameters include defaults)
-			hasInitFlag := false
-			for _, flag := range annotation.Flags {
-				if flag == "-Init" {
-					hasInitFlag = true
-					break
-				}
-			}
-			
+			hasInitFlag := annotation.HasFlag("Init")
+
 			if hasInitFlag {
 				// Enable lifecycle when -Init flag is explicitly present
 				service.HasLifecycle = true
-				initMode := annotation.GetString("Init", "Background")
+				initMode := annotation.GetString("Init", "Same")
 				service.StartMode = initMode
-				
+
 				// Detect Start and Stop methods when lifecycle is enabled
 				file := fileMap[annotation.FileName]
 				if file != nil {
 					hasStart, hasStop := p.extractLifecycleMethods(file, annotation.Target)
 					service.HasStart = hasStart
 					service.HasStop = hasStop
-					
+
 					// Validate that Start method exists when Init is used
 					if !hasStart {
 						return fmt.Errorf("service %s has Init parameter but missing Start(context.Context) error method", annotation.Target)
 					}
 				} else {
 					// If file is not available (e.g., in unit tests), skip method detection
-					service.HasStart = true  // Assume valid for unit tests
-					service.HasStop = false  // Default to no Stop method
+					service.HasStart = true // Assume valid for unit tests
+					service.HasStop = false // Default to no Stop method
 				}
 			} else {
 				// Default Init mode - no lifecycle required
 				service.HasLifecycle = false
 				service.StartMode = "Same"
 			}
-			
+
 			// Check for Manual parameter
 			manualModule := annotation.GetString("Manual", "")
 			if manualModule != "" {
 				service.IsManual = true
 				service.ModuleName = manualModule
 			}
-			
+
 			// Check for Mode parameter (default to Singleton)
 			mode := annotation.GetString("Mode", LifecycleModeSingleton)
 			if mode == LifecycleModeTransient || mode == LifecycleModeSingleton {
@@ -532,9 +520,9 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 			} else {
 				return fmt.Errorf("service %s has invalid mode '%s': must be 'Singleton' or 'Transient'", annotation.Target, mode)
 			}
-			
+
 			metadata.CoreServices = append(metadata.CoreServices, service)
-			
+
 			// If this core service also has an interface annotation, generate interface
 			if interfaceTargets[annotation.Target] {
 				// Extract methods from the struct
@@ -542,7 +530,7 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				if err != nil {
 					return fmt.Errorf("failed to extract methods for interface %s: %w", annotation.Target, err)
 				}
-				
+
 				iface := models.InterfaceMetadata{
 					Name:         annotation.Target + "Interface",
 					StructName:   annotation.Target,
@@ -559,7 +547,7 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				StructName:   annotation.Target,
 				Dependencies: annotation.Dependencies,
 			}
-			
+
 			// Check for Init flag (not parameter, since parameters include defaults)
 			hasInitFlag := false
 			for _, flag := range annotation.Flags {
@@ -568,7 +556,7 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 					break
 				}
 			}
-			
+
 			if hasInitFlag {
 				// Enable lifecycle when -Init flag is explicitly present
 				logger.HasLifecycle = true
@@ -578,34 +566,34 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 					hasStart, hasStop := p.extractLifecycleMethods(file, annotation.Target)
 					logger.HasStart = hasStart
 					logger.HasStop = hasStop
-					
+
 					// Validate that Start method exists when Init is used
 					if !hasStart {
 						return fmt.Errorf("logger %s has Init parameter but missing Start(context.Context) error method", annotation.Target)
 					}
 				} else {
 					// If file is not available (e.g., in unit tests), skip method detection
-					logger.HasStart = true  // Assume valid for unit tests
-					logger.HasStop = false  // Default to no Stop method
+					logger.HasStart = true // Assume valid for unit tests
+					logger.HasStop = false // Default to no Stop method
 				}
 			} else {
 				// Default Init mode - no lifecycle required
 				logger.HasLifecycle = false
 			}
-			
+
 			// Check for Manual parameter
 			manualModule := annotation.GetString("Manual", "")
 			if manualModule != "" {
 				logger.IsManual = true
 				logger.ModuleName = manualModule
 			}
-			
+
 			metadata.Loggers = append(metadata.Loggers, logger)
 
 		case models.AnnotationTypeRouteParser:
 			// Route parser annotations should be on function declarations
 			typeName := annotation.GetString("name")
-			
+
 			// Validate that this is actually on a function and has correct signature
 			file := fileMap[annotation.FileName]
 			if file != nil {
@@ -614,7 +602,7 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 					return fmt.Errorf("parser function validation failed for %s: %w", annotation.Target, err)
 				}
 			}
-			
+
 			parser := models.RouteParserMetadata{
 				TypeName:     typeName,
 				FunctionName: annotation.Target,
@@ -622,7 +610,7 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				FileName:     annotation.FileName,
 				Line:         annotation.Line,
 			}
-			
+
 			// Extract function signature information for validation
 			if file != nil {
 				paramTypes, returnTypes, err := p.extractParserSignature(file, annotation.Target)
@@ -632,11 +620,11 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				parser.ParameterTypes = paramTypes
 				parser.ReturnTypes = returnTypes
 			}
-			
+
 			metadata.RouteParsers = append(metadata.RouteParsers, parser)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -647,16 +635,16 @@ func (p *Parser) detectModuleInfo(metadata *models.PackageMetadata) error {
 	if err != nil {
 		return err
 	}
-	
+
 	metadata.ModuleRoot = moduleRoot
 	metadata.ModulePath = modulePath
-	
+
 	// Calculate package import path
 	packageImportPath, err := p.calculatePackageImportPath(moduleRoot, modulePath, metadata.PackagePath)
 	if err != nil {
 		return err
 	}
-	
+
 	metadata.PackageImportPath = packageImportPath
 	return nil
 }
@@ -664,34 +652,34 @@ func (p *Parser) detectModuleInfo(metadata *models.PackageMetadata) error {
 // findModuleInfo searches for go.mod file and extracts module information
 func (p *Parser) findModuleInfo(startPath string) (moduleRoot, modulePath string, err error) {
 	// Validate and sanitize the input path
-	if !isValidDirectoryPath(startPath) {
+	if !isSecureDirectoryPath(startPath) {
 		return "", "", fmt.Errorf("invalid start path: %s", startPath)
 	}
-	
+
 	// Clean and normalize the path
 	currentDir := filepath.Clean(startPath)
-	
+
 	// Ensure the clean path doesn't contain path traversal attempts
 	if strings.Contains(currentDir, "..") {
 		return "", "", fmt.Errorf("path traversal not allowed in start path: %s", startPath)
 	}
-	
+
 	if !filepath.IsAbs(currentDir) {
 		currentDir, err = filepath.Abs(currentDir)
 		if err != nil {
 			return "", "", fmt.Errorf("failed to get absolute path: %w", err)
 		}
 	}
-	
+
 	for {
 		// Safely construct the go.mod path
 		goModPath := filepath.Join(currentDir, "go.mod")
-		
+
 		// Additional validation to ensure we're not accessing unexpected files
 		if !strings.HasSuffix(goModPath, "go.mod") {
 			return "", "", fmt.Errorf("invalid go.mod path construction")
 		}
-		
+
 		if _, err := os.Stat(goModPath); err == nil {
 			// Found go.mod file - validate it's actually a go.mod file
 			modulePath, err := p.parseGoModFile(goModPath)
@@ -700,7 +688,7 @@ func (p *Parser) findModuleInfo(startPath string) (moduleRoot, modulePath string
 			}
 			return currentDir, modulePath, nil
 		}
-		
+
 		// Move to parent directory
 		parentDir := filepath.Dir(currentDir)
 		if parentDir == currentDir {
@@ -709,7 +697,7 @@ func (p *Parser) findModuleInfo(startPath string) (moduleRoot, modulePath string
 		}
 		currentDir = parentDir
 	}
-	
+
 	return "", "", fmt.Errorf("go.mod file not found")
 }
 
@@ -719,26 +707,26 @@ func (p *Parser) parseGoModFile(path string) (string, error) {
 	if !isValidGoModPath(path) {
 		return "", fmt.Errorf("invalid go.mod file path: %s", path)
 	}
-	
+
 	// Clean the path to prevent path traversal
 	cleanPath := filepath.Clean(path)
-	
+
 	// Ensure the clean path doesn't contain path traversal attempts
 	if strings.Contains(cleanPath, "..") {
 		return "", fmt.Errorf("path traversal not allowed in go.mod path: %s", path)
 	}
-	
+
 	// Ensure it's actually a go.mod file
 	if !strings.HasSuffix(cleanPath, "go.mod") {
 		return "", fmt.Errorf("file is not a go.mod file: %s", path)
 	}
-	
+
 	file, err := os.Open(cleanPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to open go.mod file: %w", err)
 	}
 	defer file.Close()
-	
+
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -749,82 +737,82 @@ func (p *Parser) parseGoModFile(path string) (string, error) {
 			}
 		}
 	}
-	
+
 	if err := scanner.Err(); err != nil {
 		return "", fmt.Errorf("failed to read go.mod file: %w", err)
 	}
-	
+
 	return "", fmt.Errorf("module declaration not found in go.mod")
 }
 
 // calculatePackageImportPath calculates the full import path for a package
 func (p *Parser) calculatePackageImportPath(moduleRoot, modulePath, packagePath string) (string, error) {
 	// Validate input paths
-	if !isValidDirectoryPath(packagePath) {
+	if !isSecureDirectoryPath(packagePath) {
 		return "", fmt.Errorf("invalid package path: %s", packagePath)
 	}
-	
-	if !isValidDirectoryPath(moduleRoot) {
+
+	if !isSecureDirectoryPath(moduleRoot) {
 		return "", fmt.Errorf("invalid module root: %s", moduleRoot)
 	}
-	
+
 	// Clean and normalize paths
 	cleanPackagePath := filepath.Clean(packagePath)
 	cleanModuleRoot := filepath.Clean(moduleRoot)
-	
+
 	// Ensure paths don't contain traversal attempts
 	if strings.Contains(cleanPackagePath, "..") {
 		return "", fmt.Errorf("path traversal not allowed in package path: %s", packagePath)
 	}
-	
+
 	if strings.Contains(cleanModuleRoot, "..") {
 		return "", fmt.Errorf("path traversal not allowed in module root: %s", moduleRoot)
 	}
-	
+
 	// Convert package path to absolute path
 	absPackagePath, err := filepath.Abs(cleanPackagePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve package path: %w", err)
 	}
-	
+
 	// Convert module root to absolute path for comparison
 	absModuleRoot, err := filepath.Abs(cleanModuleRoot)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve module root: %w", err)
 	}
-	
+
 	// Calculate relative path from module root
 	relPath, err := filepath.Rel(absModuleRoot, absPackagePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to calculate relative path: %w", err)
 	}
-	
+
 	// Ensure the relative path doesn't escape the module root
 	if strings.HasPrefix(relPath, "..") {
 		return "", fmt.Errorf("package path is outside module root")
 	}
-	
+
 	// Convert file path separators to forward slashes for import paths
 	importPath := filepath.ToSlash(relPath)
-	
+
 	// Build full import path
 	if importPath == "." {
 		return modulePath, nil
 	}
-	
+
 	return fmt.Sprintf("%s/%s", modulePath, importPath), nil
 }
 
 // extractDependencies extracts dependency information from a struct type by looking for //axon::inject annotations
 func (p *Parser) extractDependencies(structType *ast.StructType) []models.Dependency {
 	var dependencies []models.Dependency
-	
+
 	for _, field := range structType.Fields.List {
 		// Skip fields without names (embedded fields)
 		if len(field.Names) == 0 {
 			continue
 		}
-		
+
 		// Check if field has //axon::inject or //axon::init annotation
 		hasInjectAnnotation := false
 		hasInitAnnotation := false
@@ -838,25 +826,25 @@ func (p *Parser) extractDependencies(structType *ast.StructType) []models.Depend
 				}
 			}
 		}
-		
+
 		// Only include fields with //axon::inject or //axon::init annotation
 		if !hasInjectAnnotation && !hasInitAnnotation {
 			continue
 		}
-		
+
 		// Get the type string
 		typeStr := p.getTypeString(field.Type)
-		
+
 		// Create dependency
 		dep := models.Dependency{
 			Name:   field.Names[0].Name,
 			Type:   typeStr,
 			IsInit: hasInitAnnotation,
 		}
-		
+
 		dependencies = append(dependencies, dep)
 	}
-	
+
 	return dependencies
 }
 
@@ -887,7 +875,7 @@ func (p *Parser) getTypeString(expr ast.Expr) string {
 // getFuncTypeString converts a function type to its string representation
 func (p *Parser) getFuncTypeString(funcType *ast.FuncType) string {
 	result := "func("
-	
+
 	// Add parameters
 	if funcType.Params != nil {
 		var params []string
@@ -905,9 +893,9 @@ func (p *Parser) getFuncTypeString(funcType *ast.FuncType) string {
 		}
 		result += strings.Join(params, ", ")
 	}
-	
+
 	result += ")"
-	
+
 	// Add return types
 	if funcType.Results != nil && len(funcType.Results.List) > 0 {
 		result += " "
@@ -921,38 +909,38 @@ func (p *Parser) getFuncTypeString(funcType *ast.FuncType) string {
 			result += "(" + strings.Join(returns, ", ") + ")"
 		}
 	}
-	
+
 	return result
 }
 
 // parsePathParameters extracts path parameters from a route path
 func (p *Parser) parsePathParameters(path string) ([]models.Parameter, error) {
 	var parameters []models.Parameter
-	
+
 	// Find all path parameters in both formats: {name:type} and {name}
 	// First, find typed parameters {name:type}
 	typedParamRegex := `\{([^:}]+):([^}]+)\}`
 	typedMatches := regexp.MustCompile(typedParamRegex).FindAllStringSubmatch(path, -1)
-	
+
 	for _, match := range typedMatches {
 		if len(match) != 3 {
 			continue
 		}
-		
+
 		paramName := match[1]
 		paramType := match[2]
-		
+
 		// Validate parameter type
 		_, err := p.validateParameterType(paramType)
 		if err != nil {
 			return nil, fmt.Errorf("invalid parameter type '%s' for parameter '%s': %w", paramType, paramName, err)
 		}
-		
+
 		// Determine parser function and actual type
 		actualType := paramType
 		parserFunc := "axon.ParseString" // Default
 		isCustomType := false
-		
+
 		// Check if it's a built-in type (including aliases)
 		if actualType == "UUID" {
 			actualType = "uuid.UUID" // Resolve alias
@@ -977,7 +965,7 @@ func (p *Parser) parsePathParameters(path string) ([]models.Parameter, error) {
 				isCustomType = true
 			}
 		}
-		
+
 		param := models.Parameter{
 			Name:         paramName,
 			Type:         actualType, // Use resolved type
@@ -986,41 +974,41 @@ func (p *Parser) parsePathParameters(path string) ([]models.Parameter, error) {
 			IsCustomType: isCustomType,
 			ParserFunc:   parserFunc,
 		}
-		
+
 		parameters = append(parameters, param)
 	}
-	
+
 	// Find untyped parameters {name} (but exclude ones already found as typed)
 	untypedParamRegex := `\{([^:}]+)\}`
 	untypedMatches := regexp.MustCompile(untypedParamRegex).FindAllStringSubmatch(path, -1)
-	
+
 	// Keep track of already processed parameter names to avoid duplicates
 	processedParams := make(map[string]bool)
 	for _, param := range parameters {
 		processedParams[param.Name] = true
 	}
-	
+
 	for _, match := range untypedMatches {
 		if len(match) != 2 {
 			continue
 		}
-		
+
 		paramName := match[1]
-		
+
 		// Skip if this parameter was already processed as a typed parameter
 		if processedParams[paramName] {
 			continue
 		}
-		
+
 		// Default to string type for untyped parameters
 		paramType := "string"
-		
+
 		// Validate parameter type (even though it's just string)
 		_, err := p.validateParameterType(paramType)
 		if err != nil {
 			return nil, fmt.Errorf("invalid parameter type '%s' for parameter '%s': %w", paramType, paramName, err)
 		}
-		
+
 		// Use string parser for untyped parameters
 		param := models.Parameter{
 			Name:         paramName,
@@ -1030,11 +1018,11 @@ func (p *Parser) parsePathParameters(path string) ([]models.Parameter, error) {
 			IsCustomType: false,
 			ParserFunc:   "axon.ParseString",
 		}
-		
+
 		parameters = append(parameters, param)
 		processedParams[paramName] = true
 	}
-	
+
 	return parameters, nil
 }
 
@@ -1050,16 +1038,16 @@ func (p *Parser) validateParameterType(typeStr string) (string, error) {
 		"ProductCode": "string", // Custom types are treated as strings
 		"DateRange":   "string", // Custom types are treated as strings
 	}
-	
+
 	if validType, exists := validTypes[typeStr]; exists {
 		return validType, nil
 	}
-	
+
 	// Allow any custom type that looks like a valid Go identifier
 	if isValidGoIdentifier(typeStr) {
 		return "string", nil // Custom types are treated as strings for parameter parsing
 	}
-	
+
 	return "", fmt.Errorf("unsupported parameter type: %s", typeStr)
 }
 
@@ -1068,12 +1056,12 @@ func isValidGoIdentifier(s string) bool {
 	if s == "" {
 		return false
 	}
-	
+
 	// First character must be a letter or underscore
 	if !((s[0] >= 'a' && s[0] <= 'z') || (s[0] >= 'A' && s[0] <= 'Z') || s[0] == '_') {
 		return false
 	}
-	
+
 	// Remaining characters must be letters, digits, or underscores
 	for i := 1; i < len(s); i++ {
 		c := s[i]
@@ -1081,14 +1069,14 @@ func isValidGoIdentifier(s string) bool {
 			return false
 		}
 	}
-	
+
 	return true
 }
 
 // analyzeHandlerSignature analyzes a handler method signature to extract parameters
 func (p *Parser) analyzeHandlerSignature(file *ast.File, controllerName, methodName string) ([]models.Parameter, error) {
 	var parameters []models.Parameter
-	
+
 	// Find the method in the AST
 	ast.Inspect(file, func(n ast.Node) bool {
 		if funcDecl, ok := n.(*ast.FuncDecl); ok {
@@ -1106,12 +1094,12 @@ func (p *Parser) analyzeHandlerSignature(file *ast.File, controllerName, methodN
 										for _, name := range param.Names {
 											// Determine parameter source based on type and position
 											source := models.ParameterSourceBody // Default
-											
+
 											// Check if this is an echo.Context parameter
 											if paramType == "echo.Context" {
 												source = models.ParameterSourceContext
 											}
-											
+
 											p := models.Parameter{
 												Name:     name.Name,
 												Type:     paramType,
@@ -1131,14 +1119,14 @@ func (p *Parser) analyzeHandlerSignature(file *ast.File, controllerName, methodN
 		}
 		return true
 	})
-	
+
 	return parameters, nil
 }
 
 // analyzeReturnType analyzes a handler method's return type
 func (p *Parser) analyzeReturnType(file *ast.File, controllerName, methodName string) (string, error) {
 	var returnType string
-	
+
 	// Find the method in the AST
 	ast.Inspect(file, func(n ast.Node) bool {
 		if funcDecl, ok := n.(*ast.FuncDecl); ok {
@@ -1160,11 +1148,11 @@ func (p *Parser) analyzeReturnType(file *ast.File, controllerName, methodName st
 		}
 		return true
 	})
-	
+
 	if returnType == "" {
 		return "void", nil
 	}
-	
+
 	return returnType, nil
 }
 
@@ -1175,21 +1163,21 @@ func (p *Parser) mergeParameters(pathParams, signatureParams []models.Parameter)
 	for _, param := range pathParams {
 		pathParamMap[param.Name] = param
 	}
-	
+
 	signatureParamMap := make(map[string]models.Parameter)
 	for _, param := range signatureParams {
 		signatureParamMap[param.Name] = param
 	}
-	
+
 	var merged []models.Parameter
-	
+
 	// Add context parameters from signature (always include these)
 	for _, sigParam := range signatureParams {
 		if sigParam.Source == models.ParameterSourceContext {
 			merged = append(merged, sigParam)
 		}
 	}
-	
+
 	// Add path parameters ONLY if they exist in the method signature
 	for _, pathParam := range pathParams {
 		if sigParam, exists := signatureParamMap[pathParam.Name]; exists {
@@ -1205,7 +1193,7 @@ func (p *Parser) mergeParameters(pathParams, signatureParams []models.Parameter)
 		// If path parameter doesn't exist in signature, don't include it
 		// The method will extract it from context manually
 	}
-	
+
 	// Add other signature parameters that are not path parameters and not context
 	for _, sigParam := range signatureParams {
 		if sigParam.Source != models.ParameterSourceContext {
@@ -1214,7 +1202,7 @@ func (p *Parser) mergeParameters(pathParams, signatureParams []models.Parameter)
 			}
 		}
 	}
-	
+
 	return merged
 }
 
@@ -1225,13 +1213,13 @@ func (p *Parser) addRouteToController(route models.RouteMetadata, metadata *mode
 	if len(parts) != 2 {
 		return
 	}
-	
+
 	controllerName := parts[0]
 	methodName := parts[1]
-	
+
 	// Update the route to use just the method name for HandlerName
 	route.HandlerName = methodName
-	
+
 	// Find the controller and add the route
 	for i, controller := range metadata.Controllers {
 		if controller.Name == controllerName {
@@ -1263,18 +1251,18 @@ func (p *Parser) extractLifecycleMethods(file *ast.File, structName string) (has
 		}
 		return true
 	})
-	
+
 	return hasStart, hasStop
 }
 
 // extractPublicMethods extracts public methods from a struct
 func (p *Parser) extractPublicMethods(file *ast.File, structName string) ([]models.Method, error) {
 	var methods []models.Method
-	
+
 	if file == nil {
 		return methods, nil
 	}
-	
+
 	ast.Inspect(file, func(n ast.Node) bool {
 		if funcDecl, ok := n.(*ast.FuncDecl); ok {
 			// Check if this is a public method with a receiver
@@ -1286,7 +1274,7 @@ func (p *Parser) extractPublicMethods(file *ast.File, structName string) ([]mode
 						method := models.Method{
 							Name: funcDecl.Name.Name,
 						}
-						
+
 						// Extract parameters
 						if funcDecl.Type.Params != nil {
 							for _, param := range funcDecl.Type.Params.List {
@@ -1306,7 +1294,7 @@ func (p *Parser) extractPublicMethods(file *ast.File, structName string) ([]mode
 								}
 							}
 						}
-						
+
 						// Extract return types
 						if funcDecl.Type.Results != nil {
 							for _, result := range funcDecl.Type.Results.List {
@@ -1314,7 +1302,7 @@ func (p *Parser) extractPublicMethods(file *ast.File, structName string) ([]mode
 								method.Returns = append(method.Returns, returnType)
 							}
 						}
-						
+
 						methods = append(methods, method)
 					}
 				}
@@ -1322,14 +1310,14 @@ func (p *Parser) extractPublicMethods(file *ast.File, structName string) ([]mode
 		}
 		return true
 	})
-	
+
 	return methods, nil
 }
 
 // ValidateMiddlewareHandleMethod validates that a middleware has a proper Handle method
 func (p *Parser) ValidateMiddlewareHandleMethod(file *ast.File, middlewareName string) error {
 	hasHandleMethod := false
-	
+
 	ast.Inspect(file, func(n ast.Node) bool {
 		if funcDecl, ok := n.(*ast.FuncDecl); ok {
 			// Check if this is a Handle method with a receiver
@@ -1345,11 +1333,11 @@ func (p *Parser) ValidateMiddlewareHandleMethod(file *ast.File, middlewareName s
 		}
 		return true
 	})
-	
+
 	if !hasHandleMethod {
 		return fmt.Errorf("middleware %s is missing Handle method", middlewareName)
 	}
-	
+
 	return nil
 }
 
@@ -1357,7 +1345,7 @@ func (p *Parser) ValidateMiddlewareHandleMethod(file *ast.File, middlewareName s
 func (p *Parser) ValidateParserFunctionSignature(file *ast.File, functionName, typeName string) error {
 	// For now, just check that the function exists
 	functionExists := false
-	
+
 	ast.Inspect(file, func(n ast.Node) bool {
 		if funcDecl, ok := n.(*ast.FuncDecl); ok {
 			if funcDecl.Name.Name == functionName {
@@ -1367,18 +1355,18 @@ func (p *Parser) ValidateParserFunctionSignature(file *ast.File, functionName, t
 		}
 		return true
 	})
-	
+
 	if !functionExists {
 		return fmt.Errorf("parser function %s not found", functionName)
 	}
-	
+
 	return nil
 }
 
 // extractParserSignature extracts parameter and return types from a parser function
 func (p *Parser) extractParserSignature(file *ast.File, functionName string) ([]string, []string, error) {
 	var paramTypes, returnTypes []string
-	
+
 	ast.Inspect(file, func(n ast.Node) bool {
 		if funcDecl, ok := n.(*ast.FuncDecl); ok {
 			if funcDecl.Name.Name == functionName {
@@ -1389,7 +1377,7 @@ func (p *Parser) extractParserSignature(file *ast.File, functionName string) ([]
 						paramTypes = append(paramTypes, paramType)
 					}
 				}
-				
+
 				// Extract return types
 				if funcDecl.Type.Results != nil {
 					for _, result := range funcDecl.Type.Results.List {
@@ -1397,28 +1385,28 @@ func (p *Parser) extractParserSignature(file *ast.File, functionName string) ([]
 						returnTypes = append(returnTypes, returnType)
 					}
 				}
-				
+
 				return false // Stop searching
 			}
 		}
 		return true
 	})
-	
+
 	return paramTypes, returnTypes, nil
 }
 
 // Security validation functions
-func isValidDirectoryPath(path string) bool {
+func isSecureDirectoryPath(path string) bool {
 	// Basic validation - reject obviously malicious paths
 	if path == "" {
 		return false
 	}
-	
+
 	// Check for null bytes
 	if strings.Contains(path, "\x00") {
 		return false
 	}
-	
+
 	// Check for dangerous characters
 	dangerousChars := []string{"<", ">", "|", "\""}
 	for _, char := range dangerousChars {
@@ -1426,15 +1414,15 @@ func isValidDirectoryPath(path string) bool {
 			return false
 		}
 	}
-	
+
 	// Allow path traversal here - it will be checked after filepath.Clean()
 	// This allows legitimate relative paths like "../malicious" to pass initial validation
-	
+
 	// Reject direct access to system directories
 	if strings.HasPrefix(path, "/etc") || strings.HasPrefix(path, "/proc") || strings.HasPrefix(path, "/sys") {
 		return false
 	}
-	
+
 	return true
 }
 
@@ -1456,16 +1444,16 @@ func (p *Parser) parseAnnotationCommentWithFile(comment, target string, pos toke
 		Line:   p.fileSet.Position(pos).Line,
 		Column: p.fileSet.Position(pos).Column,
 	}
-	
+
 	// Parse with the new annotations parser
 	newAnnotation, err := p.annotationParser.ParseAnnotation(comment, location)
 	if err != nil {
 		return models.Annotation{}, err
 	}
-	
+
 	// Set the target field
 	newAnnotation.Target = target
-	
+
 	// Create annotation using the new approach
 	return p.createAnnotation(newAnnotation, target), nil
 }
@@ -1478,20 +1466,19 @@ func (p *Parser) parseParameterDefinition(paramDef string, isEchoSyntax bool) (m
 	if len(parts) != 2 {
 		return models.Parameter{}, fmt.Errorf("invalid parameter definition: %s", paramDef)
 	}
-	
+
 	name := strings.TrimSpace(parts[0])
 	typeStr := strings.TrimSpace(parts[1])
-	
+
 	// Validate type
 	validType, err := p.validateParameterType(typeStr)
 	if err != nil {
 		return models.Parameter{}, err
 	}
-	
+
 	return models.Parameter{
 		Name:   name,
 		Type:   validType,
 		Source: models.ParameterSourcePath,
 	}, nil
 }
-

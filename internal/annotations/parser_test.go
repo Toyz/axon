@@ -9,7 +9,7 @@ import (
 func TestParseAnnotationWithInit(t *testing.T) {
 	// Create a registry with test schemas
 	registry := NewRegistry()
-	
+
 	// Add core schema with Init parameter
 	coreSchema := AnnotationSchema{
 		Type: CoreAnnotation,
@@ -27,36 +27,36 @@ func TestParseAnnotationWithInit(t *testing.T) {
 		},
 	}
 	registry.Register(CoreAnnotation, coreSchema)
-	
+
 	parser := NewParser(registry)
 	location := SourceLocation{File: "test.go", Line: 10, Column: 1}
-	
+
 	// Test: -Init should use schema default "Same", NOT boolean true
 	annotation, err := parser.ParseAnnotation("//axon::core -Init", location)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	
+
 	if annotation.Type != CoreAnnotation {
 		t.Errorf("expected CoreAnnotation, got %v", annotation.Type)
 	}
-	
+
 	// Critical test: -Init should become Init: "Same" from schema
 	if annotation.Parameters["Init"] != "Same" {
 		t.Errorf("expected Init='Same' (from schema default), got %v", annotation.Parameters["Init"])
 	}
-	
+
 	// Verify it's NOT treated as boolean
 	if val, ok := annotation.Parameters["Init"].(bool); ok {
 		t.Errorf("Init should NOT be boolean, but got boolean value: %v", val)
 	}
-	
+
 	// Test explicit value still works
 	annotation2, err := parser.ParseAnnotation("//axon::core -Init=Background", location)
 	if err != nil {
 		t.Fatalf("unexpected error for explicit value: %v", err)
 	}
-	
+
 	if annotation2.Parameters["Init"] != "Background" {
 		t.Errorf("expected Init='Background', got %v", annotation2.Parameters["Init"])
 	}
@@ -70,7 +70,7 @@ func TestFlexibleCommentPrefix(t *testing.T) {
 	}
 	parser := NewParser(registry)
 	location := SourceLocation{File: "test.go", Line: 1, Column: 1}
-	
+
 	tests := []struct {
 		name  string
 		input string
@@ -80,7 +80,7 @@ func TestFlexibleCommentPrefix(t *testing.T) {
 		{"multiple spaces", "//  axon::core"},
 		{"tab after slashes", "//\taxon::core"},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			annotation, err := parser.ParseAnnotation(tt.input, location)
@@ -103,20 +103,20 @@ func TestRouteAnnotationPositionalParams(t *testing.T) {
 	}
 	parser := NewParser(registry)
 	location := SourceLocation{File: "test.go", Line: 1, Column: 1}
-	
+
 	annotation, err := parser.ParseAnnotation("//axon::route GET /users/{id:int}", location)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	
+
 	if annotation.Type != RouteAnnotation {
 		t.Errorf("expected RouteAnnotation, got %v", annotation.Type)
 	}
-	
+
 	if annotation.Parameters["method"] != "GET" {
 		t.Errorf("expected method=GET, got %v", annotation.Parameters["method"])
 	}
-	
+
 	if annotation.Parameters["path"] != "/users/{id:int}" {
 		t.Errorf("expected path=/users/{id:int}, got %v", annotation.Parameters["path"])
 	}
@@ -130,18 +130,18 @@ func TestCommaSeperatedValues(t *testing.T) {
 	}
 	parser := NewParser(registry)
 	location := SourceLocation{File: "test.go", Line: 1, Column: 1}
-	
+
 	annotation, err := parser.ParseAnnotation("//axon::route GET /users -Middleware=Auth,Logging", location)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	
+
 	middleware, ok := annotation.Parameters["Middleware"].([]string)
 	if !ok {
 		t.Errorf("expected Middleware to be []string, got %T", annotation.Parameters["Middleware"])
 		return
 	}
-	
+
 	if len(middleware) != 2 || middleware[0] != "Auth" || middleware[1] != "Logging" {
 		t.Errorf("expected Middleware=[Auth, Logging], got %v", middleware)
 	}
@@ -169,23 +169,23 @@ func TestTokenizerEdgeCases(t *testing.T) {
 		{"multiple spaces", "//  axon::core", false, ""},
 		{"tab after slashes", "//\taxon::core", false, ""},
 		{"mixed whitespace", "//\t  axon::core", false, ""},
-		
+
 		// Invalid comment prefixes
 		{"missing slashes", "axon::core", true, "annotation must start with '//'"},
 		{"single slash", "/axon::core", true, "annotation must start with '//'"},
 		{"wrong prefix", "//annotation::core", true, "annotation must contain 'axon::' prefix"},
 		{"missing colon", "//axon:core", true, "annotation must contain 'axon::' prefix"},
 		{"extra colons", "//axon:::core", true, "unknown annotation type"}, // Extra colon makes it ":core"
-		
+
 		// Edge cases with whitespace
 		{"leading whitespace", "  //axon::core", false, ""},
 		{"trailing whitespace", "//axon::core  ", false, ""},
 		{"whitespace around prefix", "  //  axon::  core  ", false, ""},
-		
+
 		// Empty and minimal cases
 		{"empty after prefix", "//axon::", true, "empty annotation"},
 		{"only whitespace after prefix", "//axon::   ", true, "empty annotation"},
-		
+
 		// Case sensitivity
 		{"uppercase axon", "//AXON::core", true, "annotation must contain 'axon::' prefix"},
 		{"mixed case axon", "//Axon::core", true, "annotation must contain 'axon::' prefix"},
@@ -194,7 +194,7 @@ func TestTokenizerEdgeCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := parser.ParseAnnotation(tt.input, location)
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Errorf("expected error but got none")
@@ -257,7 +257,7 @@ func TestParameterParsingEdgeCases(t *testing.T) {
 				"Manual": "",
 			},
 		},
-		
+
 		// Comma-separated values with various formats
 		{
 			name:  "comma separated without spaces",
@@ -295,7 +295,7 @@ func TestParameterParsingEdgeCases(t *testing.T) {
 				"Middleware": []string{"Auth"}, // Single values are converted to slices by validator
 			},
 		},
-		
+
 		// Boolean flags
 		{
 			name:  "boolean flag without value",
@@ -324,7 +324,7 @@ func TestParameterParsingEdgeCases(t *testing.T) {
 				"PassContext": false, // Will be converted to bool by validator
 			},
 		},
-		
+
 		// Mixed parameter types
 		{
 			name:  "mixed parameters",
@@ -335,7 +335,7 @@ func TestParameterParsingEdgeCases(t *testing.T) {
 				"Manual": "Custom Module",
 			},
 		},
-		
+
 		// Edge cases with parameter names (these should fail validation)
 		{
 			name:        "parameter with numbers",
@@ -347,7 +347,7 @@ func TestParameterParsingEdgeCases(t *testing.T) {
 			input:       "//axon::core -Custom_Mode=Transient",
 			expectError: true, // Unknown parameter should fail validation
 		},
-		
+
 		// Complex route patterns
 		{
 			name:  "route with path parameters",
@@ -370,19 +370,19 @@ func TestParameterParsingEdgeCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			annotation, err := parser.ParseAnnotation(tt.input, location)
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Errorf("expected error but got none")
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 				return
 			}
-			
+
 			// Check all expected parameters
 			for key, expectedValue := range tt.expectedParams {
 				actualValue, exists := annotation.Parameters[key]
@@ -390,7 +390,7 @@ func TestParameterParsingEdgeCases(t *testing.T) {
 					t.Errorf("expected parameter %s to exist", key)
 					continue
 				}
-				
+
 				// Handle slice comparison
 				if expectedSlice, ok := expectedValue.([]string); ok {
 					actualSlice, ok := actualValue.([]string)
@@ -422,11 +422,11 @@ func TestParserErrorHandling(t *testing.T) {
 	location := SourceLocation{File: "controller.go", Line: 25, Column: 3}
 
 	tests := []struct {
-		name                string
-		input               string
-		expectedErrorType   ErrorCode
-		expectedErrorMsg    string
-		expectedSuggestion  string
+		name               string
+		input              string
+		expectedErrorType  ErrorCode
+		expectedErrorMsg   string
+		expectedSuggestion string
 	}{
 		{
 			name:               "unknown annotation type",
@@ -461,22 +461,22 @@ func TestParserErrorHandling(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := parser.ParseAnnotation(tt.input, location)
-			
+
 			if err == nil {
 				t.Errorf("expected error but got none")
 				return
 			}
-			
+
 			// Check error message content
 			if !strings.Contains(err.Error(), tt.expectedErrorMsg) {
 				t.Errorf("expected error message to contain '%s', got '%s'", tt.expectedErrorMsg, err.Error())
 			}
-			
+
 			// Check suggestion content
 			if !strings.Contains(err.Error(), tt.expectedSuggestion) {
 				t.Errorf("expected error to contain suggestion '%s', got '%s'", tt.expectedSuggestion, err.Error())
 			}
-			
+
 			// Check location is included
 			if !strings.Contains(err.Error(), "controller.go:25:3") {
 				t.Errorf("expected error to contain location 'controller.go:25:3', got '%s'", err.Error())
@@ -528,7 +528,7 @@ func TestSchemaValidationComprehensive(t *testing.T) {
 			input:       `//axon::core -Manual="CustomModule"`,
 			expectError: false,
 		},
-		
+
 		// Invalid core annotations
 		{
 			name:        "invalid core mode",
@@ -544,7 +544,7 @@ func TestSchemaValidationComprehensive(t *testing.T) {
 			errorType:   ValidationErrorCode,
 			errorMsg:    "must be 'Same' or 'Background'",
 		},
-		
+
 		// Valid route annotations
 		{
 			name:        "valid route basic",
@@ -566,7 +566,7 @@ func TestSchemaValidationComprehensive(t *testing.T) {
 			input:       "//axon::route PUT /users/{id:int} -Middleware=Auth -PassContext",
 			expectError: false,
 		},
-		
+
 		// Invalid route annotations
 		{
 			name:        "invalid route method",
@@ -596,7 +596,7 @@ func TestSchemaValidationComprehensive(t *testing.T) {
 			errorType:   0, // This is caught by schema validation, not parameter validation
 			errorMsg:    "must start with '/'",
 		},
-		
+
 		// Valid controller annotations
 		{
 			name:        "valid controller basic",
@@ -608,7 +608,7 @@ func TestSchemaValidationComprehensive(t *testing.T) {
 			input:       "//axon::controller -Prefix=/api/v1",
 			expectError: false,
 		},
-		
+
 		// Valid middleware annotations
 		{
 			name:        "valid middleware basic",
@@ -620,7 +620,7 @@ func TestSchemaValidationComprehensive(t *testing.T) {
 			input:       "//axon::middleware -Routes=/api/*,/admin/*",
 			expectError: false,
 		},
-		
+
 		// Invalid middleware annotations
 		{
 			name:        "middleware with invalid route pattern",
@@ -636,7 +636,7 @@ func TestSchemaValidationComprehensive(t *testing.T) {
 			errorType:   0, // This is caught by schema validation
 			errorMsg:    "route pattern cannot be empty",
 		},
-		
+
 		// Valid interface annotations
 		{
 			name:        "valid interface basic",
@@ -653,13 +653,13 @@ func TestSchemaValidationComprehensive(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := parser.ParseAnnotation(tt.input, location)
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Errorf("expected error but got none")
 					return
 				}
-				
+
 				// Check error type if specified
 				if tt.errorType != 0 {
 					var annotationErr AnnotationError
@@ -679,7 +679,7 @@ func TestSchemaValidationComprehensive(t *testing.T) {
 						}
 					}
 				}
-				
+
 				// Check error message if specified
 				if tt.errorMsg != "" && !strings.Contains(err.Error(), tt.errorMsg) {
 					t.Errorf("expected error message to contain '%s', got '%s'", tt.errorMsg, err.Error())
@@ -692,4 +692,3 @@ func TestSchemaValidationComprehensive(t *testing.T) {
 		})
 	}
 }
-

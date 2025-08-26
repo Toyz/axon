@@ -7,10 +7,10 @@ import (
 func TestParsedAnnotation_GetString(t *testing.T) {
 	annotation := &ParsedAnnotation{
 		Parameters: map[string]interface{}{
-			"stringParam":  "test_value",
-			"intParam":     42,
-			"boolParam":    true,
-			"emptyString":  "",
+			"stringParam": "test_value",
+			"intParam":    42,
+			"boolParam":   true,
+			"emptyString": "",
 		},
 	}
 
@@ -232,11 +232,11 @@ func TestParsedAnnotation_GetInt(t *testing.T) {
 func TestParsedAnnotation_GetStringSlice(t *testing.T) {
 	annotation := &ParsedAnnotation{
 		Parameters: map[string]interface{}{
-			"stringSlice":      []string{"a", "b", "c"},
-			"emptySlice":       []string{},
-			"singleItemSlice":  []string{"single"},
-			"stringParam":      "test",
-			"intParam":         42,
+			"stringSlice":     []string{"a", "b", "c"},
+			"emptySlice":      []string{},
+			"singleItemSlice": []string{"single"},
+			"stringParam":     "test",
+			"intParam":        42,
 		},
 	}
 
@@ -305,7 +305,7 @@ func TestParsedAnnotation_GetStringSlice(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := annotation.GetStringSlice(tt.paramName, tt.defaultValue...)
-			
+
 			// Compare slices
 			if !stringSlicesEqual(result, tt.expected) {
 				t.Errorf("GetStringSlice(%q, %v) = %v, want %v", tt.paramName, tt.defaultValue, result, tt.expected)
@@ -525,13 +525,13 @@ func TestTypeConversionUtilities(t *testing.T) {
 func TestParsedAnnotation_ConversionGetters(t *testing.T) {
 	annotation := &ParsedAnnotation{
 		Parameters: map[string]interface{}{
-			"stringParam":     "test_value",
-			"intAsString":     "42",
-			"boolAsString":    "true",
-			"sliceAsString":   "a,b,c",
-			"intParam":        42,
-			"boolParam":       true,
-			"floatParam":      3.14,
+			"stringParam":   "test_value",
+			"intAsString":   "42",
+			"boolAsString":  "true",
+			"sliceAsString": "a,b,c",
+			"intParam":      42,
+			"boolParam":     true,
+			"floatParam":    3.14,
 		},
 	}
 
