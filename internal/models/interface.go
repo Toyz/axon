@@ -2,11 +2,11 @@ package models
 
 // InterfaceMetadata represents an interface to be generated from a struct
 type InterfaceMetadata struct {
-	Name           string   // name of the interface (StructNameInterface)
-	StructName     string   // name of the source struct
-	PackagePath    string   // package where struct is defined
-	Methods        []Method // public methods to include in interface
-	Dependencies   []Dependency // dependencies of the source struct
+	Name         string       // name of the interface (StructNameInterface)
+	StructName   string       // name of the source struct
+	PackagePath  string       // package where struct is defined
+	Methods      []Method     // public methods to include in interface
+	Dependencies []Dependency // dependencies of the source struct
 }
 
 // Method represents a method signature for interface generation

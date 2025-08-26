@@ -17,9 +17,9 @@ func TestSchemaValidatorIntegration(t *testing.T) {
 		Description: "Test core annotation schema",
 		Parameters: map[string]ParameterSpec{
 			"Mode": {
-				Type:         StringType,
-				Required:     true,
-				Description:  "Service lifecycle mode",
+				Type:        StringType,
+				Required:    true,
+				Description: "Service lifecycle mode",
 				Validator: func(v interface{}) error {
 					mode := v.(string)
 					if mode != "Singleton" && mode != "Transient" {
@@ -85,7 +85,7 @@ func TestSchemaValidatorIntegration(t *testing.T) {
 				Type: CoreAnnotation,
 				Parameters: map[string]interface{}{
 					"Mode": "Transient",
-					"Port": "9090", // String that needs to be converted to int
+					"Port": "9090",               // String that needs to be converted to int
 					"Tags": "auth,logging,cache", // String that needs to be converted to []string
 				},
 				Location: SourceLocation{File: "test.go", Line: 1, Column: 1},

@@ -29,12 +29,12 @@ func NewParserRegistry() *ParserRegistry {
 	registry := &ParserRegistry{
 		parsers: make(map[string]models.RouteParserMetadata),
 	}
-	
+
 	// Register built-in parsers from public API
 	for _, parser := range axon.BuiltinParsers {
 		registry.parsers[parser.TypeName] = parser
 	}
-	
+
 	return registry
 }
 
@@ -66,7 +66,7 @@ func (r *ParserRegistry) GetParser(typeName string) (models.RouteParserMetadata,
 	if parser, exists := r.parsers[typeName]; exists {
 		return parser, true
 	}
-	
+
 	// Try resolving alias and lookup again
 	resolvedType := axon.ResolveTypeAlias(typeName)
 	if resolvedType != typeName {
@@ -74,7 +74,7 @@ func (r *ParserRegistry) GetParser(typeName string) (models.RouteParserMetadata,
 			return parser, true
 		}
 	}
-	
+
 	return models.RouteParserMetadata{}, false
 }
 
@@ -105,7 +105,7 @@ func (r *ParserRegistry) Clear() {
 	defer r.mu.Unlock()
 
 	r.parsers = make(map[string]models.RouteParserMetadata)
-	
+
 	// Re-register built-in parsers
 	for _, parser := range axon.BuiltinParsers {
 		r.parsers[parser.TypeName] = parser
@@ -124,7 +124,7 @@ func (r *ParserRegistry) ClearCustomParsers() {
 			builtinParsers[parser.TypeName] = existing
 		}
 	}
-	
+
 	r.parsers = builtinParsers
 }
 

@@ -5,6 +5,7 @@ package services
 
 import (
 	"context"
+	"log"
 
 	"go.uber.org/fx"
 
@@ -19,8 +20,24 @@ type CrawlerServiceInterface interface {
 
 func NewCrawlerService() *CrawlerService {
 	return &CrawlerService{
-		
+
 	}
+}
+
+func initCrawlerServiceLifecycle(lc fx.Lifecycle, service *CrawlerService) {
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			go func() {
+				if err := service.Start(ctx); err != nil {
+					log.Printf("background start error in %s: %v", "CrawlerService", err)
+				}
+			}()
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			return service.Stop(ctx)
+		},
+	})
 }
 
 func NewDatabaseService(Config *config.Config) *DatabaseService {
@@ -73,6 +90,7 @@ func NewCrawlerServiceInterface(impl *CrawlerService) CrawlerServiceInterface {
 // AutogenModule provides all core services in this package
 var AutogenModule = fx.Module("services",
 	fx.Provide(NewCrawlerService),
+	fx.Invoke(initCrawlerServiceLifecycle),
 	fx.Provide(NewDatabaseService),
 	fx.Invoke(initDatabaseServiceLifecycle),
 	fx.Provide(NewSessionServiceFactory),

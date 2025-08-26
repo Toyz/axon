@@ -99,7 +99,7 @@ func GetBuiltinParser(typeName string) (models.RouteParserMetadata, bool) {
 	if actualType, isAlias := ParserAliases[typeName]; isAlias {
 		typeName = actualType
 	}
-	
+
 	parser, exists := BuiltinParsers[typeName]
 	return parser, exists
 }
@@ -110,7 +110,7 @@ func IsBuiltinType(typeName string) bool {
 	if actualType, isAlias := ParserAliases[typeName]; isAlias {
 		typeName = actualType
 	}
-	
+
 	_, exists := BuiltinParsers[typeName]
 	return exists
 }
@@ -126,16 +126,16 @@ func ResolveTypeAlias(typeName string) string {
 // GetAllBuiltinTypes returns all built-in type names including aliases
 func GetAllBuiltinTypes() []string {
 	types := make([]string, 0, len(BuiltinParsers)+len(ParserAliases))
-	
+
 	// Add actual types
 	for typeName := range BuiltinParsers {
 		types = append(types, typeName)
 	}
-	
+
 	// Add aliases
 	for alias := range ParserAliases {
 		types = append(types, alias)
 	}
-	
+
 	return types
 }

@@ -7,12 +7,12 @@ import (
 
 // GeneratorError represents an error that occurred during code generation
 type GeneratorError struct {
-	Type        ErrorType // type of error
-	File        string    // file where error occurred
-	Line        int       // line number where error occurred
-	Message     string    // error message
-	Cause       error     // underlying error cause
-	Suggestions []string  // helpful suggestions for fixing the error
+	Type        ErrorType              // type of error
+	File        string                 // file where error occurred
+	Line        int                    // line number where error occurred
+	Message     string                 // error message
+	Cause       error                  // underlying error cause
+	Suggestions []string               // helpful suggestions for fixing the error
 	Context     map[string]interface{} // additional context information
 }
 
@@ -45,9 +45,9 @@ func NewParserRegistrationError(typeName, fileName string, line int, existingFil
 			fmt.Sprintf("Check existing parser at %s:%d", existingFile, existingLine),
 		},
 		Context: map[string]interface{}{
-			"type_name":      typeName,
-			"existing_file":  existingFile,
-			"existing_line":  existingLine,
+			"type_name":     typeName,
+			"existing_file": existingFile,
+			"existing_line": existingLine,
 		},
 	}
 }
@@ -98,18 +98,18 @@ func NewParserNotFoundError(typeName, routeMethod, routePath, paramName, fileNam
 		fmt.Sprintf("Register a parser for type '%s' using //axon::route_parser %s", typeName, typeName),
 		"Check if the type name is spelled correctly",
 	}
-	
+
 	if len(availableParsers) > 0 {
 		suggestions = append(suggestions, fmt.Sprintf("Available parsers: %s", strings.Join(availableParsers, ", ")))
 	} else {
 		suggestions = append(suggestions, "No parsers are currently registered")
 	}
-	
+
 	return &GeneratorError{
-		Type:    ErrorTypeParserValidation,
-		File:    fileName,
-		Line:    line,
-		Message: fmt.Sprintf("No parser registered for custom type '%s' used in route %s %s (parameter '%s')", typeName, routeMethod, routePath, paramName),
+		Type:        ErrorTypeParserValidation,
+		File:        fileName,
+		Line:        line,
+		Message:     fmt.Sprintf("No parser registered for custom type '%s' used in route %s %s (parameter '%s')", typeName, routeMethod, routePath, paramName),
 		Suggestions: suggestions,
 		Context: map[string]interface{}{
 			"type_name":         typeName,
@@ -127,7 +127,7 @@ func NewParserConflictError(typeName string, conflicts []ParserConflict) *Genera
 	for _, conflict := range conflicts {
 		conflictDetails = append(conflictDetails, fmt.Sprintf("%s:%d", conflict.FileName, conflict.Line))
 	}
-	
+
 	return &GeneratorError{
 		Type:    ErrorTypeParserConflict,
 		Message: fmt.Sprintf("Multiple parsers registered for type '%s'", typeName),

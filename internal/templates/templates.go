@@ -26,12 +26,10 @@ type ParserRegistryInterface interface {
 
 // Template constants are now defined in template_defs.go for better organization
 
-
-
 // generateRouteRegistryCall generates the call to register the route with the global registry
 func generateRouteRegistryCall(route models.RouteMetadata, controllerName, handlerVar, echoPath string, paramTypes map[string]string) string {
 	var registryCall strings.Builder
-	
+
 	registryCall.WriteString("axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{\n")
 	registryCall.WriteString(fmt.Sprintf("\t\tMethod:         \"%s\",\n", route.Method))
 	registryCall.WriteString(fmt.Sprintf("\t\tPath:           \"%s\",\n", route.Path))
@@ -39,7 +37,7 @@ func generateRouteRegistryCall(route models.RouteMetadata, controllerName, handl
 	registryCall.WriteString(fmt.Sprintf("\t\tHandlerName:    \"%s\",\n", route.HandlerName))
 	registryCall.WriteString(fmt.Sprintf("\t\tControllerName: \"%s\",\n", controllerName))
 	registryCall.WriteString("\t\tPackageName:    \"PACKAGE_NAME\",\n") // Will be replaced by generator
-	
+
 	// Generate middlewares array
 	if len(route.Middlewares) > 0 {
 		registryCall.WriteString("\t\tMiddlewares:    []string{")
@@ -53,7 +51,7 @@ func generateRouteRegistryCall(route models.RouteMetadata, controllerName, handl
 	} else {
 		registryCall.WriteString("\t\tMiddlewares:    []string{},\n")
 	}
-	
+
 	// Generate parameter types map
 	if len(paramTypes) > 0 {
 		registryCall.WriteString("\t\tParameterTypes: map[string]string{")
@@ -69,21 +67,21 @@ func generateRouteRegistryCall(route models.RouteMetadata, controllerName, handl
 	} else {
 		registryCall.WriteString("\t\tParameterTypes: map[string]string{},\n")
 	}
-	
+
 	registryCall.WriteString(fmt.Sprintf("\t\tHandler:        %s,\n", handlerVar))
 	registryCall.WriteString("\t})")
-	
+
 	return registryCall.String()
 }
 
 // extractParameterTypes extracts parameter names and types from Axon route syntax
 func extractParameterTypes(axonPath string) map[string]string {
 	paramTypes := make(map[string]string)
-	
+
 	// Regex to match Axon parameter syntax: {param:type}
 	re := regexp.MustCompile(`\{([^:}]+):([^}]+)\}`)
 	matches := re.FindAllStringSubmatch(axonPath, -1)
-	
+
 	for _, match := range matches {
 		if len(match) == 3 {
 			paramName := match[1]
@@ -91,11 +89,9 @@ func extractParameterTypes(axonPath string) map[string]string {
 			paramTypes[paramName] = paramType
 		}
 	}
-	
+
 	return paramTypes
 }
-
-
 
 // Note: ParameterBindingData and GenerateParameterBinding were removed as they were unused.
 // Parameter binding is now handled directly by GenerateParameterBindingCode.
@@ -109,7 +105,7 @@ func GenerateParameterBindingCode(parameters []models.Parameter, parserRegistry 
 		case models.ParameterSourcePath:
 			// Generate parameter binding code for path parameters
 			var functionCall string
-			
+
 			// Use ParserFunc from parameter if available, otherwise look in registry
 			if param.ParserFunc != "" {
 				functionCall = param.ParserFunc
@@ -120,12 +116,12 @@ func GenerateParameterBindingCode(parameters []models.Parameter, parserRegistry 
 					parts := strings.Split(typeName, ".")
 					typeName = parts[len(parts)-1] // Get the last part (type name)
 				}
-				
+
 				parser, exists := parserRegistry.GetParser(typeName)
 				if !exists {
 					return "", fmt.Errorf("unsupported parameter type: %s", param.Type)
 				}
-				
+
 				// Generate parser function call
 				if parser.PackagePath == "builtin" {
 					// Built-in parsers use axon package prefix
@@ -139,7 +135,7 @@ func GenerateParameterBindingCode(parameters []models.Parameter, parserRegistry 
 					functionCall = parser.FunctionName
 				}
 			}
-			
+
 			bindingCode.WriteString(fmt.Sprintf(`		%s, err := %s(c, c.Param("%s"))
 		if err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid %s: %%v", err))
@@ -171,12 +167,12 @@ func getParameterSourceString(source models.ParameterSource) string {
 
 // CoreServiceProviderData represents data needed for core service provider generation
 type CoreServiceProviderData struct {
-	StructName    string
-	Dependencies  []DependencyData // All dependencies (for struct initialization)
-	InjectedDeps  []DependencyData // Only injected dependencies (for function parameters)
-	HasStart      bool
-	HasStop       bool
-	StartMode     string           // lifecycle start mode: "Same" (default) or "Background"
+	StructName   string
+	Dependencies []DependencyData // All dependencies (for struct initialization)
+	InjectedDeps []DependencyData // Only injected dependencies (for function parameters)
+	HasStart     bool
+	HasStop      bool
+	StartMode    string // lifecycle start mode: "Same" (default) or "Background"
 }
 
 // DependencyData represents a dependency for template generation
@@ -191,7 +187,7 @@ type DependencyData struct {
 func generateInitCode(fieldType string) string {
 	// Remove pointer prefix for analysis
 	baseType := strings.TrimPrefix(fieldType, "*")
-	
+
 	// Handle different types
 	if strings.HasPrefix(baseType, "map[") {
 		return fmt.Sprintf("make(%s)", fieldType)
@@ -210,11 +206,11 @@ func generateInitCode(fieldType string) string {
 
 // ImportAnalysis holds the results of analyzing what imports are needed
 type ImportAnalysis struct {
-	Dependencies   map[string]bool // package names that need to be imported
-	NeedsContext   bool           // whether context package is needed
-	NeedsLogger    bool           // whether logger packages are needed
-	StandardLib    []string       // standard library imports needed
-	ThirdParty     []string       // third-party imports needed
+	Dependencies map[string]bool // package names that need to be imported
+	NeedsContext bool            // whether context package is needed
+	NeedsLogger  bool            // whether logger packages are needed
+	StandardLib  []string        // standard library imports needed
+	ThirdParty   []string        // third-party imports needed
 }
 
 // analyzeRequiredImports analyzes metadata to determine what imports are needed
@@ -224,13 +220,13 @@ func analyzeRequiredImports(metadata *models.PackageMetadata) ImportAnalysis {
 		StandardLib:  []string{},
 		ThirdParty:   []string{},
 	}
-	
+
 	// Analyze core services
 	for _, service := range metadata.CoreServices {
 		if service.HasLifecycle {
 			analysis.NeedsContext = true
 		}
-		
+
 		// Analyze dependencies for imports
 		for _, dep := range service.Dependencies {
 			if packagePath := extractPackageFromType(dep.Type); packagePath != "" {
@@ -238,14 +234,14 @@ func analyzeRequiredImports(metadata *models.PackageMetadata) ImportAnalysis {
 			}
 		}
 	}
-	
+
 	// Analyze loggers
 	for _, logger := range metadata.Loggers {
 		if logger.HasLifecycle {
 			analysis.NeedsContext = true
 		}
 		analysis.NeedsLogger = true
-		
+
 		// Analyze dependencies for imports
 		for _, dep := range logger.Dependencies {
 			if packagePath := extractPackageFromType(dep.Type); packagePath != "" {
@@ -253,7 +249,7 @@ func analyzeRequiredImports(metadata *models.PackageMetadata) ImportAnalysis {
 			}
 		}
 	}
-	
+
 	// Analyze interfaces
 	for _, iface := range metadata.Interfaces {
 		for _, method := range iface.Methods {
@@ -271,7 +267,7 @@ func analyzeRequiredImports(metadata *models.PackageMetadata) ImportAnalysis {
 			}
 		}
 	}
-	
+
 	return analysis
 }
 
@@ -283,17 +279,17 @@ func analyzeRequiredImports(metadata *models.PackageMetadata) ImportAnalysis {
 func isConfigLikeType(typeName string) bool {
 	// Remove pointer prefix for analysis
 	baseType := strings.TrimPrefix(typeName, "*")
-	
+
 	// Check for common config patterns (more flexible than before)
 	lowerType := strings.ToLower(baseType)
 	configPatterns := []string{"config", "configuration", "settings", "options"}
-	
+
 	for _, pattern := range configPatterns {
 		if strings.Contains(lowerType, pattern) {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -301,27 +297,25 @@ func isConfigLikeType(typeName string) bool {
 func isLoggerType(typeName string) bool {
 	// Remove pointer prefix for analysis
 	baseType := strings.TrimPrefix(typeName, "*")
-	
+
 	// Check for common logger patterns
 	loggerPatterns := []string{
 		"slog.Logger",
-		"log.Logger", 
+		"log.Logger",
 		"Logger",
 		"log.Entry",
 		"logrus.Logger",
 		"zap.Logger",
 	}
-	
+
 	for _, pattern := range loggerPatterns {
 		if strings.Contains(baseType, pattern) {
 			return true
 		}
 	}
-	
+
 	return false
 }
-
-
 
 // isStandardLibraryPackage checks if a package name is from the Go standard library
 func isStandardLibraryPackage(packageName string) bool {
@@ -329,7 +323,7 @@ func isStandardLibraryPackage(packageName string) bool {
 	if strings.Contains(packageName, ".") {
 		return false
 	}
-	
+
 	// Common standard library packages (not exhaustive, but covers common cases)
 	commonStdLib := map[string]bool{
 		"fmt": true, "os": true, "io": true, "net": true, "http": true,
@@ -338,12 +332,12 @@ func isStandardLibraryPackage(packageName string) bool {
 		"sync": true, "crypto": true, "encoding": true, "path": true,
 		"sort": true, "math": true, "bytes": true, "bufio": true, "regexp": true,
 	}
-	
+
 	// Check if it's a known standard library package
 	if commonStdLib[packageName] {
 		return true
 	}
-	
+
 	// For unknown simple names, assume they are local packages that need import resolution
 	return false
 }
@@ -352,7 +346,7 @@ func isStandardLibraryPackage(packageName string) bool {
 func extractPackageFromType(typeStr string) string {
 	// Remove pointer prefix
 	typeStr = strings.TrimPrefix(typeStr, "*")
-	
+
 	// Handle complex types like maps, slices, channels
 	if strings.HasPrefix(typeStr, "map[") {
 		// For maps, extract package from the value type
@@ -383,12 +377,12 @@ func extractPackageFromType(typeStr string) string {
 		elementType := typeStr[5:]
 		return extractPackageFromType(elementType) // Recursive call for element type
 	}
-	
+
 	// For simple types, check if it contains a package qualifier
 	if dotIndex := strings.Index(typeStr, "."); dotIndex != -1 {
 		return typeStr[:dotIndex]
 	}
-	
+
 	return ""
 }
 
@@ -396,14 +390,14 @@ func extractPackageFromType(typeStr string) string {
 func extractParameterName(typeStr string) string {
 	// Remove pointer prefix
 	typeStr = strings.TrimPrefix(typeStr, "*")
-	
+
 	// If it contains a package qualifier, extract the type name
 	if dotIndex := strings.LastIndex(typeStr, "."); dotIndex != -1 {
 		typeName := typeStr[dotIndex+1:]
 		// Convert to camelCase for parameter name
 		return strings.ToLower(typeName[:1]) + typeName[1:]
 	}
-	
+
 	// If no package qualifier, use the type name directly
 	return strings.ToLower(typeStr[:1]) + typeStr[1:]
 }
@@ -418,7 +412,7 @@ func GenerateCoreServiceProvider(service models.CoreServiceMetadata) (string, er
 	// Convert Dependency models to DependencyData for templates
 	var dependencies []DependencyData
 	var injectedDeps []DependencyData
-	
+
 	for _, dep := range service.Dependencies {
 		depData := DependencyData{
 			Name:      dep.Name, // Keep original field name for parameter
@@ -427,7 +421,7 @@ func GenerateCoreServiceProvider(service models.CoreServiceMetadata) (string, er
 			IsInit:    dep.IsInit,
 		}
 		dependencies = append(dependencies, depData)
-		
+
 		// Only add to injected deps if it's not an init dependency
 		if !dep.IsInit {
 			injectedDeps = append(injectedDeps, depData)
@@ -505,15 +499,15 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 		packagePaths = make(PackagePathMap)
 	}
 	var moduleBuilder strings.Builder
-	
+
 	// Generate package declaration with DO NOT EDIT header
 	moduleBuilder.WriteString("// Code generated by Axon framework. DO NOT EDIT.\n")
 	moduleBuilder.WriteString("// This file was automatically generated and should not be modified manually.\n\n")
 	moduleBuilder.WriteString(fmt.Sprintf("package %s\n\n", metadata.PackageName))
-	
+
 	// Create ImportManager for proper import detection
 	importManager := NewImportManager()
-	
+
 	// Set up package resolver if module name is provided
 	if moduleName != "" {
 		resolver := &PackageResolver{
@@ -524,13 +518,13 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 	}
 	// Generate all code content first, then analyze imports
 	var contentBuilder strings.Builder
-	
+
 	// Generate fxLogger adapter if there are loggers
 	if len(metadata.Loggers) > 0 {
 		firstLogger := metadata.Loggers[0]
 		contentBuilder.WriteString(fmt.Sprintf("// fxLogger adapts %s to fxevent.Logger\n", firstLogger.StructName))
 		contentBuilder.WriteString(fmt.Sprintf("type fxLogger struct {\n\tlogger *%s\n}\n\n", firstLogger.StructName))
-		
+
 		// Implement fxevent.Logger interface
 		contentBuilder.WriteString("func (l *fxLogger) LogEvent(event fxevent.Event) {\n")
 		contentBuilder.WriteString("\tswitch e := event.(type) {\n")
@@ -593,80 +587,80 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 		contentBuilder.WriteString("\t}\n")
 		contentBuilder.WriteString("}\n\n")
 	}
-	
+
 	// Generate interfaces
 	for _, iface := range metadata.Interfaces {
 		interfaceCode, err := GenerateInterface(iface)
 		if err != nil {
 			return "", fmt.Errorf("failed to generate interface %s: %w", iface.Name, err)
 		}
-		
+
 		contentBuilder.WriteString(interfaceCode)
 		contentBuilder.WriteString("\n\n")
 	}
-	
+
 	// Generate provider functions for each core service
 	for _, service := range metadata.CoreServices {
 		if service.IsManual {
 			continue // Skip manual services
 		}
-		
+
 		provider, err := GenerateCoreServiceProvider(service)
 		if err != nil {
 			return "", fmt.Errorf("failed to generate provider for service %s: %w", service.Name, err)
 		}
-		
+
 		if provider != "" {
 			contentBuilder.WriteString(provider)
 			contentBuilder.WriteString("\n\n")
 		}
-		
+
 		// Generate invoke function for services with -Init flag
 		if service.HasLifecycle {
 			invokeFunc, err := GenerateInitInvokeFunction(service)
 			if err != nil {
 				return "", fmt.Errorf("failed to generate invoke function for service %s: %w", service.Name, err)
 			}
-			
+
 			if invokeFunc != "" {
 				contentBuilder.WriteString(invokeFunc)
 				contentBuilder.WriteString("\n\n")
 			}
 		}
 	}
-	
+
 	// Generate provider functions for each logger
 	for _, logger := range metadata.Loggers {
 		if logger.IsManual {
 			continue // Skip manual loggers
 		}
-		
+
 		provider, err := GenerateLoggerProvider(logger)
 		if err != nil {
 			return "", fmt.Errorf("failed to generate provider for logger %s: %w", logger.Name, err)
 		}
-		
+
 		if provider != "" {
 			contentBuilder.WriteString(provider)
 			contentBuilder.WriteString("\n\n")
 		}
 	}
-	
+
 	// Generate interface providers
 	for _, iface := range metadata.Interfaces {
 		providerCode, err := GenerateInterfaceProvider(iface)
 		if err != nil {
 			return "", fmt.Errorf("failed to generate interface provider %s: %w", iface.Name, err)
 		}
-		
+
 		contentBuilder.WriteString(providerCode)
 		contentBuilder.WriteString("\n\n")
 	}
-	
+
 	// Generate module variable
 	contentBuilder.WriteString("// AutogenModule provides all core services in this package\n")
 	contentBuilder.WriteString(fmt.Sprintf("var AutogenModule = fx.Module(\"%s\",\n", metadata.PackageName))
-	
+
 	// Add fx.WithLogger if there are loggers
 	if len(metadata.Loggers) > 0 {
 		// Use the first logger as the FX logger
@@ -675,7 +669,7 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 		contentBuilder.WriteString("\t\treturn &fxLogger{logger: logger}\n")
 		contentBuilder.WriteString("\t}),\n")
 	}
-	
+
 	for _, service := range metadata.CoreServices {
 		if service.IsManual {
 			// Reference manual module
@@ -688,14 +682,14 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 		} else {
 			// Singleton services (default) use fx.Provide to make them available for dependency injection
 			contentBuilder.WriteString(fmt.Sprintf("\tfx.Provide(New%s),\n", service.StructName))
-			
+
 			// Add fx.Invoke for services with -Init flag
 			if service.HasLifecycle {
 				contentBuilder.WriteString(fmt.Sprintf("\tfx.Invoke(init%sLifecycle),\n", service.StructName))
 			}
 		}
 	}
-	
+
 	// Add logger providers to the module
 	for _, logger := range metadata.Loggers {
 		if logger.IsManual {
@@ -708,20 +702,20 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 			contentBuilder.WriteString(fmt.Sprintf("\tfx.Provide(New%s),\n", logger.StructName))
 		}
 	}
-	
+
 	// Add interface providers to the module
 	for _, iface := range metadata.Interfaces {
 		contentBuilder.WriteString(fmt.Sprintf("\tfx.Provide(New%s),\n", iface.Name))
 	}
-	
+
 	contentBuilder.WriteString(")\n")
-	
+
 	// Get the generated content
 	generatedContent := contentBuilder.String()
-	
+
 	// Use ImportManager to detect required imports
 	requiredImports := importManager.GetRequiredImports(generatedContent)
-	
+
 	// Add local package imports from packagePaths
 	for packageName, packagePath := range packagePaths {
 		// Only add if the package is actually used in the generated content
@@ -729,20 +723,20 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 			requiredImports = append(requiredImports, Import{Path: packagePath})
 		}
 	}
-	
+
 	// Filter out unused imports
 	usedImports := importManager.FilterUnusedImports(requiredImports, generatedContent)
-	
+
 	// Generate import block
 	importBlock := importManager.GenerateImportBlock(usedImports)
-	
+
 	// Combine everything
 	if importBlock != "" {
 		moduleBuilder.WriteString(importBlock)
 		moduleBuilder.WriteString("\n\n")
 	}
 	moduleBuilder.WriteString(generatedContent)
-	
+
 	return moduleBuilder.String(), nil
 }
 
@@ -750,12 +744,12 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 func extractDependencyName(depType string) string {
 	// Remove pointer prefix
 	name := strings.TrimPrefix(depType, "*")
-	
+
 	// Handle package-qualified types (e.g., "pkg.Type" -> "type")
 	if dotIndex := strings.LastIndex(name, "."); dotIndex != -1 {
 		name = name[dotIndex+1:]
 	}
-	
+
 	// Keep the original case for field names - Go struct fields are exported (PascalCase)
 	return name
 }
@@ -797,40 +791,40 @@ func GenerateInterfaceWithImportManager(iface models.InterfaceMetadata, importMa
 				Type: param.Type,
 			})
 		}
-		
+
 		methods = append(methods, MethodData{
 			Name:       method.Name,
 			Parameters: params,
 			Returns:    method.Returns,
 		})
 	}
-	
+
 	data := InterfaceData{
 		Name:       iface.Name,
 		StructName: iface.StructName,
 		Methods:    methods,
 	}
-	
+
 	interfaceCode, err := executeTemplate("interface", InterfaceTemplate, data)
 	if err != nil {
 		return "", err
 	}
-	
+
 	// If ImportManager is provided, we can add import detection logic here
 	// For now, just return the interface code as the imports will be handled
 	// at the module level by the calling function
-	
+
 	return interfaceCode, nil
 }
 
 // LoggerProviderData represents data needed for logger provider generation
 type LoggerProviderData struct {
-	StructName    string
-	Dependencies  []DependencyData
-	InjectedDeps  []DependencyData
-	HasStart      bool
-	HasStop       bool
-	ConfigParam   string // Name of the config parameter
+	StructName   string
+	Dependencies []DependencyData
+	InjectedDeps []DependencyData
+	HasStart     bool
+	HasStop      bool
+	ConfigParam  string // Name of the config parameter
 }
 
 // GenerateLoggerProvider generates FX provider code for a logger
@@ -839,7 +833,7 @@ func GenerateLoggerProvider(logger models.LoggerMetadata) (string, error) {
 	var dependencies []DependencyData
 	var injectedDeps []DependencyData
 	var configParam string
-	
+
 	for _, dep := range logger.Dependencies {
 		depData := DependencyData{
 			Name:      strings.ToLower(dep.Name[:1]) + dep.Name[1:], // Convert to camelCase for parameter
@@ -848,11 +842,11 @@ func GenerateLoggerProvider(logger models.LoggerMetadata) (string, error) {
 			IsInit:    dep.IsInit,
 		}
 		dependencies = append(dependencies, depData)
-		
+
 		// Only add to injected deps if it's not an init dependency
 		if !dep.IsInit {
 			injectedDeps = append(injectedDeps, depData)
-			
+
 			// Check if this dependency can be used for logger configuration
 			if isConfigLikeType(dep.Type) {
 				configParam = depData.Name
@@ -933,7 +927,7 @@ func GenerateInterfaceProvider(iface models.InterfaceMetadata) (string, error) {
 		Name:       iface.Name,
 		StructName: iface.StructName,
 	}
-	
+
 	return executeTemplate("interface-provider", InterfaceProviderTemplate, data)
 }
 
@@ -943,18 +937,18 @@ func executeTemplate(name, templateStr string, data interface{}) (string, error)
 	funcMap := template.FuncMap{
 		"generateInitCode": generateInitCode,
 	}
-	
+
 	tmpl, err := template.New(name).Funcs(funcMap).Parse(templateStr)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template %s: %w", name, err)
 	}
-	
+
 	var buf bytes.Buffer
 	err = tmpl.Execute(&buf, data)
 	if err != nil {
 		return "", fmt.Errorf("failed to execute template %s: %w", name, err)
 	}
-	
+
 	return buf.String(), nil
 }
 

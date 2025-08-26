@@ -2,9 +2,9 @@ package models
 
 // Dependency represents a dependency with both field name and type
 type Dependency struct {
-	Name     string // field name in the struct
-	Type     string // type of the dependency
-	IsInit   bool   // whether this should be initialized (not injected)
+	Name   string // field name in the struct
+	Type   string // type of the dependency
+	IsInit bool   // whether this should be initialized (not injected)
 }
 
 // CoreServiceMetadata represents a core service
@@ -35,8 +35,8 @@ type LoggerMetadata struct {
 
 // ServiceMetadata represents service information for lifecycle management
 type ServiceMetadata struct {
-	Name         string   // name of the service
-	HasStart     bool     // whether service has Start method
-	HasStop      bool     // whether service has Stop method
+	Name         string       // name of the service
+	HasStart     bool         // whether service has Start method
+	HasStop      bool         // whether service has Stop method
 	Dependencies []Dependency // service dependencies
 }

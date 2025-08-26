@@ -13,14 +13,14 @@ import (
 
 // Generator coordinates the CLI generation process
 type Generator struct {
-	scanner        *DirectoryScanner
-	moduleResolver *ModuleResolver
-	parser         parser.AnnotationParser
-	codeGenerator  generator.CodeGenerator
-	globalParsers     map[string]models.RouteParserMetadata // Global parser registry for cross-package discovery
-	globalMiddleware  map[string]models.MiddlewareMetadata  // Global middleware registry for cross-package discovery
-	reporter          *DiagnosticReporter
-	summary           GenerationSummary
+	scanner          *DirectoryScanner
+	moduleResolver   *ModuleResolver
+	parser           parser.AnnotationParser
+	codeGenerator    generator.CodeGenerator
+	globalParsers    map[string]models.RouteParserMetadata // Global parser registry for cross-package discovery
+	globalMiddleware map[string]models.MiddlewareMetadata  // Global middleware registry for cross-package discovery
+	reporter         *DiagnosticReporter
+	summary          GenerationSummary
 }
 
 // NewGenerator creates a new CLI generator
@@ -28,10 +28,10 @@ func NewGenerator(verbose bool) *Generator {
 	moduleResolver := NewModuleResolver()
 	reporter := NewDiagnosticReporter(verbose)
 	return &Generator{
-		scanner:        NewDirectoryScanner(),
-		moduleResolver: moduleResolver,
-		parser:         parser.NewParserWithReporter(reporter),
-		codeGenerator:  generator.NewGeneratorWithResolver(moduleResolver),
+		scanner:          NewDirectoryScanner(),
+		moduleResolver:   moduleResolver,
+		parser:           parser.NewParserWithReporter(reporter),
+		codeGenerator:    generator.NewGeneratorWithResolver(moduleResolver),
 		globalParsers:    make(map[string]models.RouteParserMetadata),
 		globalMiddleware: make(map[string]models.MiddlewareMetadata),
 		reporter:         reporter,
@@ -42,10 +42,10 @@ func NewGenerator(verbose bool) *Generator {
 // Run executes the complete generation process
 func (g *Generator) Run(config Config) error {
 	startTime := time.Now()
-	
+
 	// Initialize summary
 	g.summary = GenerationSummary{GeneratedFiles: make([]string, 0)}
-	
+
 	if config.Verbose {
 		fmt.Printf("Starting code generation at %s\n", startTime.Format("15:04:05"))
 		fmt.Printf("Verbose mode enabled\n")
@@ -55,7 +55,7 @@ func (g *Generator) Run(config Config) error {
 		}
 		fmt.Printf("\n")
 	}
-	
+
 	// Resolve module name
 	if config.Verbose {
 		fmt.Printf("Resolving module name...\n")
@@ -80,7 +80,7 @@ func (g *Generator) Run(config Config) error {
 	if config.Verbose {
 		fmt.Printf("Resolved module name: %s\n", moduleName)
 	}
-	
+
 	// Scan directories for Go packages
 	if config.Verbose {
 		fmt.Printf("Scanning directories for Go packages...\n")
@@ -118,7 +118,7 @@ func (g *Generator) Run(config Config) error {
 
 	fmt.Printf("Found %d packages to process\n", len(packageDirs))
 	g.summary.PackagesProcessed = len(packageDirs)
-	
+
 	if config.Verbose {
 		fmt.Printf("Package directories:\n")
 		for i, dir := range packageDirs {
@@ -129,21 +129,21 @@ func (g *Generator) Run(config Config) error {
 
 	// First pass: Discover all parsers across packages
 	fmt.Printf("Discovering parsers across all packages...\n")
-	
+
 	if config.Verbose {
 		fmt.Printf("Phase 1: Parser discovery (validation disabled)\n")
 	}
-	
+
 	// Skip parser and middleware validation during discovery phase
 	g.parser.SetSkipParserValidation(true)
 	g.parser.SetSkipMiddlewareValidation(true)
-	
+
 	var allPackageMetadata []*models.PackageMetadata
 	for i, packageDir := range packageDirs {
 		if config.Verbose {
 			fmt.Printf("  Parsing package %d/%d: %s\n", i+1, len(packageDirs), packageDir)
 		}
-		
+
 		// Parse the package
 		metadata, err := g.parser.ParseDirectory(packageDir)
 		if err != nil {
@@ -151,7 +151,7 @@ func (g *Generator) Run(config Config) error {
 			if genErr, ok := err.(*models.GeneratorError); ok {
 				genErr.Context = map[string]interface{}{
 					"package_directory": packageDir,
-					"module_name":      moduleName,
+					"module_name":       moduleName,
 				}
 				return genErr
 			}
@@ -165,21 +165,21 @@ func (g *Generator) Run(config Config) error {
 				},
 				Context: map[string]interface{}{
 					"package_directory": packageDir,
-					"module_name":      moduleName,
+					"module_name":       moduleName,
 				},
 			}
 		}
 
 		// Store metadata for second pass
 		allPackageMetadata = append(allPackageMetadata, metadata)
-		
+
 		// Collect summary information
 		g.collectSummaryInfo(metadata)
-		
+
 		if config.Verbose {
-			fmt.Printf("    Found: %d controllers, %d services, %d middlewares, %d parsers\n", 
-				len(metadata.Controllers), 
-				len(metadata.CoreServices)+len(metadata.Loggers), 
+			fmt.Printf("    Found: %d controllers, %d services, %d middlewares, %d parsers\n",
+				len(metadata.Controllers),
+				len(metadata.CoreServices)+len(metadata.Loggers),
 				len(metadata.Middlewares),
 				len(metadata.RouteParsers))
 		}
@@ -189,14 +189,14 @@ func (g *Generator) Run(config Config) error {
 		if err != nil {
 			return err // This already returns a GeneratorError
 		}
-		
+
 		// Collect middleware from this package
 		err = g.collectMiddlewareFromPackage(metadata, moduleName, packageDir)
 		if err != nil {
 			return err // This already returns a GeneratorError
 		}
 	}
-	
+
 	// Re-enable parser and middleware validation for second pass
 	g.parser.SetSkipParserValidation(false)
 	g.parser.SetSkipMiddlewareValidation(false)
@@ -209,13 +209,13 @@ func (g *Generator) Run(config Config) error {
 
 	fmt.Printf("Discovered %d parsers across all packages\n", len(g.globalParsers))
 	g.summary.ParsersDiscovered = len(g.globalParsers)
-	
+
 	fmt.Printf("Discovered %d middleware across all packages\n", len(g.globalMiddleware))
 	g.summary.MiddlewaresFound = len(g.globalMiddleware)
 
 	// Validate custom parsers across all packages using global registry
 	fmt.Printf("Validating custom parsers across all packages...\n")
-	
+
 	if config.Verbose {
 		fmt.Printf("Phase 2: Parser validation (validation enabled)\n")
 	}
@@ -244,7 +244,7 @@ func (g *Generator) Run(config Config) error {
 
 	// Validate middleware references across all packages using global registry
 	fmt.Printf("Validating middleware references across all packages...\n")
-	
+
 	if config.Verbose {
 		fmt.Printf("Phase 2.5: Middleware validation\n")
 	}
@@ -259,7 +259,7 @@ func (g *Generator) Run(config Config) error {
 	if config.Verbose {
 		fmt.Printf("Phase 3: Code generation\n")
 	}
-	
+
 	// Build package path mappings for all discovered packages
 	packagePathMappings := make(map[string]string)
 	for i, metadata := range allPackageMetadata {
@@ -294,7 +294,7 @@ func (g *Generator) Run(config Config) error {
 		if err != nil {
 			return fmt.Errorf("failed to build package path for %s: %w", packageDir, err)
 		}
-		
+
 		// Keep the original directory path for file generation
 		metadata.PackagePath = packageDir
 
@@ -348,7 +348,7 @@ func (g *Generator) Run(config Config) error {
 	}
 
 	// Users control their own main.go files - we just generate the modules
-	
+
 	if config.Verbose {
 		duration := time.Since(startTime)
 		fmt.Printf("\nGeneration completed in %v\n", duration)
@@ -501,8 +501,8 @@ func (g *Generator) validateMiddlewareReferences(metadata *models.PackageMetadat
 							"Verify the middleware name matches exactly (case-sensitive)",
 						},
 						Context: map[string]interface{}{
-							"route":           fmt.Sprintf("%s.%s", controller.Name, route.HandlerName),
-							"middleware_name": middlewareName,
+							"route":                fmt.Sprintf("%s.%s", controller.Name, route.HandlerName),
+							"middleware_name":      middlewareName,
 							"available_middleware": g.getAvailableMiddlewareNames(),
 						},
 					}

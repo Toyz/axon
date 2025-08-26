@@ -10,8 +10,8 @@ type GeneratedModule struct {
 
 // Provider represents an FX provider function
 type Provider struct {
-	Name         string   // name of the provider function
-	StructName   string   // name of the struct being provided
+	Name         string       // name of the provider function
+	StructName   string       // name of the struct being provided
 	Dependencies []Dependency // dependencies required by provider
-	IsLifecycle  bool     // whether provider handles lifecycle
+	IsLifecycle  bool         // whether provider handles lifecycle
 }

@@ -12,13 +12,13 @@ func TestParserErrorReporter_ReportParserValidationError(t *testing.T) {
 	reporter := NewParserErrorReporter(parser)
 
 	tests := []struct {
-		name                 string
-		functionName         string
-		fileName             string
-		line                 int
-		issue                string
-		actualSignature      string
-		expectedInMessage    []string
+		name                  string
+		functionName          string
+		fileName              string
+		line                  int
+		issue                 string
+		actualSignature       string
+		expectedInMessage     []string
 		expectedInSuggestions []string
 	}{
 		{
@@ -128,7 +128,7 @@ func TestParserErrorReporter_ReportParserValidationError(t *testing.T) {
 			if len(genErr.Suggestions) == 0 {
 				t.Error("Expected suggestions, got none")
 			}
-			
+
 			// Check that suggestions contain expected content
 			allSuggestions := strings.Join(genErr.Suggestions, " ")
 			for _, expected := range tt.expectedInSuggestions {
@@ -154,13 +154,13 @@ func TestParserErrorReporter_ReportParserNotFoundError(t *testing.T) {
 	reporter := NewParserErrorReporter(parser)
 
 	tests := []struct {
-		name                 string
-		typeName             string
-		routeMethod          string
-		routePath            string
-		paramName            string
-		availableParsers     []string
-		expectedInMessage    []string
+		name                  string
+		typeName              string
+		routeMethod           string
+		routePath             string
+		paramName             string
+		availableParsers      []string
+		expectedInMessage     []string
 		expectedInSuggestions []string
 	}{
 		{
@@ -256,7 +256,7 @@ func TestParserErrorReporter_ReportParserNotFoundError(t *testing.T) {
 			if len(genErr.Suggestions) == 0 {
 				t.Error("Expected suggestions, got none")
 			}
-			
+
 			// Check that suggestions contain expected content
 			allSuggestions := strings.Join(genErr.Suggestions, " ")
 			for _, expected := range tt.expectedInSuggestions {
@@ -282,10 +282,10 @@ func TestParserErrorReporter_ReportParserImportError(t *testing.T) {
 	reporter := NewParserErrorReporter(parser)
 
 	tests := []struct {
-		name                 string
-		typeName             string
-		requiredImport       string
-		expectedInMessage    []string
+		name                  string
+		typeName              string
+		requiredImport        string
+		expectedInMessage     []string
 		expectedInSuggestions []string
 	}{
 		{
@@ -361,7 +361,7 @@ func TestParserErrorReporter_ReportParserImportError(t *testing.T) {
 			if len(genErr.Suggestions) == 0 {
 				t.Error("Expected suggestions, got none")
 			}
-			
+
 			// Check that suggestions contain expected content
 			allSuggestions := strings.Join(genErr.Suggestions, " ")
 			for _, expected := range tt.expectedInSuggestions {
@@ -437,13 +437,13 @@ func TestParserErrorReporter_ReportParserConflictError(t *testing.T) {
 	if len(genErr.Suggestions) == 0 {
 		t.Error("Expected suggestions, got none")
 	}
-	
+
 	allSuggestions := strings.Join(genErr.Suggestions, " ")
 	expectedInSuggestions := []string{
 		"parser1.go:10",
 		"parser2.go:20",
 	}
-	
+
 	for _, expected := range expectedInSuggestions {
 		if !strings.Contains(allSuggestions, expected) {
 			t.Errorf("Suggestions should contain '%s', got: %v", expected, genErr.Suggestions)

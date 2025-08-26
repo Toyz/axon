@@ -33,7 +33,7 @@ func TestTokenizerComprehensive(t *testing.T) {
 				"Init": "Same",      // Default value
 			},
 		},
-		
+
 		// Whitespace handling
 		{
 			name:         "extra spaces around parameters",
@@ -55,7 +55,7 @@ func TestTokenizerComprehensive(t *testing.T) {
 				"Init": "Background",
 			},
 		},
-		
+
 		// Quote handling
 		{
 			name:         "double quoted values",
@@ -101,7 +101,7 @@ func TestTokenizerComprehensive(t *testing.T) {
 				"Manual": "",
 			},
 		},
-		
+
 		// Comma-separated values
 		{
 			name:         "comma separated without spaces",
@@ -147,7 +147,7 @@ func TestTokenizerComprehensive(t *testing.T) {
 				"Middleware": []string{"Auth", "", "Logging"},
 			},
 		},
-		
+
 		// Boolean flags
 		{
 			name:         "boolean flag without value",
@@ -171,7 +171,7 @@ func TestTokenizerComprehensive(t *testing.T) {
 				"Manual": "",          // No default, so empty string
 			},
 		},
-		
+
 		// Complex parameter combinations
 		{
 			name:         "mixed parameter types",
@@ -185,7 +185,7 @@ func TestTokenizerComprehensive(t *testing.T) {
 				"PassContext": true,
 			},
 		},
-		
+
 		// Edge cases with parameter names (these should fail validation)
 		{
 			name:        "parameter names with numbers",
@@ -197,7 +197,7 @@ func TestTokenizerComprehensive(t *testing.T) {
 			input:       "//axon::core -Custom_Mode=Transient -Init_Type=Background",
 			expectError: true, // Unknown parameters should fail validation
 		},
-		
+
 		// Path parameter edge cases
 		{
 			name:         "complex path with multiple parameters",
@@ -229,7 +229,7 @@ func TestTokenizerComprehensive(t *testing.T) {
 				"path":   "/api/v1/files/{filename:string}/download?format={format}&compress={compress:bool}",
 			},
 		},
-		
+
 		// Unicode and special character handling
 		{
 			name:         "unicode in parameter values",
@@ -257,24 +257,24 @@ func TestTokenizerComprehensive(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			annotation, err := parser.ParseAnnotation(tt.input, location)
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Errorf("expected error but got none")
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 				return
 			}
-			
+
 			// Check annotation type
 			if annotation.Type != tt.expectedType {
 				t.Errorf("expected type %v, got %v", tt.expectedType, annotation.Type)
 			}
-			
+
 			// Check parameters
 			for key, expectedValue := range tt.expectedParams {
 				actualValue, exists := annotation.Parameters[key]
@@ -282,7 +282,7 @@ func TestTokenizerComprehensive(t *testing.T) {
 					t.Errorf("expected parameter %s to exist", key)
 					continue
 				}
-				
+
 				// Handle slice comparison
 				if expectedSlice, ok := expectedValue.([]string); ok {
 					actualSlice, ok := actualValue.([]string)
@@ -372,24 +372,24 @@ func TestTokenizerErrorCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := parser.ParseAnnotation(tt.input, location)
-			
+
 			if err == nil {
 				t.Errorf("expected error but got none")
 				return
 			}
-			
+
 			errorStr := err.Error()
-			
+
 			// Check error message
 			if !strings.Contains(errorStr, tt.expectedMsg) {
 				t.Errorf("expected error message to contain '%s', got '%s'", tt.expectedMsg, errorStr)
 			}
-			
+
 			// Check hint/suggestion
 			if !strings.Contains(errorStr, tt.expectedHint) {
 				t.Errorf("expected error to contain hint '%s', got '%s'", tt.expectedHint, errorStr)
 			}
-			
+
 			// Check location is included
 			if !strings.Contains(errorStr, "error_test.go:10:5") {
 				t.Errorf("expected error to contain location 'error_test.go:10:5', got '%s'", errorStr)
@@ -447,7 +447,7 @@ func TestParameterParsingEdgeCasesDetailed(t *testing.T) {
 				"Manual": `value "with" quotes`,
 			},
 		},
-		
+
 		// Boolean flag variations
 		{
 			name:        "boolean flag with explicit true",
@@ -479,7 +479,7 @@ func TestParameterParsingEdgeCasesDetailed(t *testing.T) {
 				"PassContext": true, // Will be converted to bool by validator (1 -> true)
 			},
 		},
-		
+
 		// Comma-separated value edge cases
 		{
 			name:        "comma separated with trailing comma",
@@ -521,7 +521,7 @@ func TestParameterParsingEdgeCasesDetailed(t *testing.T) {
 				"Middleware": []string{"", "", "", ""},
 			},
 		},
-		
+
 		// Parameter name edge cases
 		{
 			name:        "parameter name with numbers at end",
@@ -538,14 +538,14 @@ func TestParameterParsingEdgeCasesDetailed(t *testing.T) {
 			input:       "//axon::core -Custom_Mode_Name=Transient",
 			expectError: true, // Invalid parameter names should fail validation
 		},
-		
+
 		// Multiple parameter combinations (with unknown parameters)
 		{
 			name:        "many parameters mixed types",
 			input:       `//axon::core -Mode=Transient -Init=Background -Manual="Custom Module" -Debug -Count=42`,
 			expectError: true, // Unknown parameters Debug and Count should fail validation
 		},
-		
+
 		// Whitespace handling in parameters
 		{
 			name:        "parameter with leading/trailing spaces in value",
@@ -570,19 +570,19 @@ func TestParameterParsingEdgeCasesDetailed(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			annotation, err := parser.ParseAnnotation(tt.input, location)
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Errorf("expected error but got none")
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 				return
 			}
-			
+
 			// Check expected parameters
 			for key, expectedValue := range tt.expectedParams {
 				actualValue, exists := annotation.Parameters[key]
@@ -590,7 +590,7 @@ func TestParameterParsingEdgeCasesDetailed(t *testing.T) {
 					t.Errorf("expected parameter %s to exist", key)
 					continue
 				}
-				
+
 				// Handle slice comparison
 				if expectedSlice, ok := expectedValue.([]string); ok {
 					actualSlice, ok := actualValue.([]string)
@@ -610,4 +610,3 @@ func TestParameterParsingEdgeCasesDetailed(t *testing.T) {
 		})
 	}
 }
-

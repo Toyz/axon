@@ -305,12 +305,12 @@ func TestParseUUID(t *testing.T) {
 
 func TestBuiltinParsersMetadata(t *testing.T) {
 	expectedParsers := []string{"int", "string", "float64", "float32", "uuid.UUID"}
-	
+
 	for _, typeName := range expectedParsers {
 		t.Run("metadata_for_"+typeName, func(t *testing.T) {
 			parser, exists := BuiltinParsers[typeName]
 			require.True(t, exists, "Parser for type %s should exist", typeName)
-			
+
 			assert.Equal(t, typeName, parser.TypeName)
 			assert.NotEmpty(t, parser.FunctionName)
 			assert.Equal(t, "builtin", parser.PackagePath)
@@ -491,19 +491,19 @@ func TestResolveTypeAlias(t *testing.T) {
 
 func TestGetAllBuiltinTypes(t *testing.T) {
 	types := GetAllBuiltinTypes()
-	
+
 	// Should include all actual types
 	expectedTypes := []string{"int", "string", "float64", "float32", "uuid.UUID"}
 	for _, expectedType := range expectedTypes {
 		assert.Contains(t, types, expectedType, "Should contain type %s", expectedType)
 	}
-	
+
 	// Should include all aliases
 	expectedAliases := []string{"UUID", "float", "double"}
 	for _, expectedAlias := range expectedAliases {
 		assert.Contains(t, types, expectedAlias, "Should contain alias %s", expectedAlias)
 	}
-	
+
 	// Should have the right total count
 	expectedCount := len(BuiltinParsers) + len(ParserAliases)
 	assert.Len(t, types, expectedCount)
@@ -512,42 +512,42 @@ func TestGetAllBuiltinTypes(t *testing.T) {
 // Test with actual Echo context (integration-style test)
 func TestBuiltinParsersWithEchoContext(t *testing.T) {
 	e := echo.New()
-	
+
 	t.Run("ParseInt with context", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/test", nil)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
-		
+
 		result, err := ParseInt(c, "42")
 		assert.NoError(t, err)
 		assert.Equal(t, 42, result)
 	})
-	
+
 	t.Run("ParseString with context", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/test", nil)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
-		
+
 		result, err := ParseString(c, "test-string")
 		assert.NoError(t, err)
 		assert.Equal(t, "test-string", result)
 	})
-	
+
 	t.Run("ParseFloat64 with context", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/test", nil)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
-		
+
 		result, err := ParseFloat64(c, "123.45")
 		assert.NoError(t, err)
 		assert.Equal(t, 123.45, result)
 	})
-	
+
 	t.Run("ParseUUID with context", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/test", nil)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
-		
+
 		validUUID := "123e4567-e89b-12d3-a456-426614174000"
 		result, err := ParseUUID(c, validUUID)
 		assert.NoError(t, err)

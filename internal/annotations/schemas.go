@@ -279,7 +279,7 @@ var RouteParserAnnotationSchema = AnnotationSchema{
 	},
 	Examples: []string{
 		"//axon::route_parser UUID",
-		"//axon::route_parser CustomID", 
+		"//axon::route_parser CustomID",
 		"//axon::route_parser time.Time",
 		"//axon::route_parser MyCustomType",
 	},

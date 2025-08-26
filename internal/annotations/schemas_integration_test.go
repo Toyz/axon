@@ -91,9 +91,9 @@ func TestBuiltinSchemasIntegration(t *testing.T) {
 			},
 		},
 		{
-			name:         "controller annotation basic",
-			input:        "//axon::controller",
-			expectedType: ControllerAnnotation,
+			name:           "controller annotation basic",
+			input:          "//axon::controller",
+			expectedType:   ControllerAnnotation,
 			expectedParams: map[string]interface{}{},
 		},
 		{
@@ -286,11 +286,11 @@ func TestBuiltinSchemasTypeConversion(t *testing.T) {
 
 	// Test type conversions
 	tests := []struct {
-		name           string
-		input          string
-		paramName      string
-		expectedType   string
-		expectedValue  interface{}
+		name          string
+		input         string
+		paramName     string
+		expectedType  string
+		expectedValue interface{}
 	}{
 		{
 			name:          "boolean flag conversion",

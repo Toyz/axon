@@ -54,7 +54,7 @@ func (r *registry) Register(annotationType AnnotationType, schema AnnotationSche
 
 	// Validate that the schema type matches the annotation type
 	if schema.Type != annotationType {
-		return fmt.Errorf("schema type %s does not match annotation type %s", 
+		return fmt.Errorf("schema type %s does not match annotation type %s",
 			schema.Type.String(), annotationType.String())
 	}
 

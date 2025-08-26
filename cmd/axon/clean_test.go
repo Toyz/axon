@@ -27,7 +27,7 @@ func TestCleanAutogenFiles(t *testing.T) {
 	for _, dir := range dirs {
 		dirPath := filepath.Join(tempDir, dir)
 		require.NoError(t, os.MkdirAll(dirPath, 0755))
-		
+
 		autogenFile := filepath.Join(dirPath, "autogen_module.go")
 		require.NoError(t, os.WriteFile(autogenFile, []byte("package test\n// Generated file"), 0644))
 		autogenFiles = append(autogenFiles, autogenFile)
@@ -39,7 +39,7 @@ func TestCleanAutogenFiles(t *testing.T) {
 		filepath.Join(tempDir, "services", "user_service.go"),
 		filepath.Join(tempDir, "main.go"),
 	}
-	
+
 	for _, file := range nonAutogenFiles {
 		require.NoError(t, os.WriteFile(file, []byte("package test\n// Regular file"), 0644))
 	}
@@ -122,7 +122,7 @@ func TestFindAutogenFilesRecursive(t *testing.T) {
 		"controllers",
 		"services/user",
 		"middleware",
-		".hidden", // Should be skipped
+		".hidden",    // Should be skipped
 		"vendor/pkg", // Should be skipped
 	}
 
@@ -131,10 +131,10 @@ func TestFindAutogenFilesRecursive(t *testing.T) {
 		if dir == ".hidden" || dir == "vendor/pkg" {
 			continue // These should be skipped
 		}
-		
+
 		dirPath := filepath.Join(tempDir, dir)
 		require.NoError(t, os.MkdirAll(dirPath, 0755))
-		
+
 		autogenFile := filepath.Join(dirPath, "autogen_module.go")
 		require.NoError(t, os.WriteFile(autogenFile, []byte("package test"), 0644))
 		expectedFiles = append(expectedFiles, autogenFile)
@@ -153,7 +153,7 @@ func TestFindAutogenFilesRecursive(t *testing.T) {
 		files, err := findAutogenFilesRecursive(tempDir)
 		assert.NoError(t, err)
 		assert.Len(t, files, len(expectedFiles), "Should find exactly the expected number of autogen files")
-		
+
 		// Convert to relative paths for easier comparison
 		var relativeFiles []string
 		for _, file := range files {
@@ -161,18 +161,18 @@ func TestFindAutogenFilesRecursive(t *testing.T) {
 			require.NoError(t, err)
 			relativeFiles = append(relativeFiles, rel)
 		}
-		
+
 		// Check that we found the expected files
 		expectedRelative := []string{
 			"controllers/autogen_module.go",
-			"services/user/autogen_module.go", 
+			"services/user/autogen_module.go",
 			"middleware/autogen_module.go",
 		}
-		
+
 		for _, expected := range expectedRelative {
 			assert.Contains(t, relativeFiles, expected, "Should find autogen file: %s", expected)
 		}
-		
+
 		// Check that hidden and vendor files are not included
 		assert.NotContains(t, relativeFiles, ".hidden/autogen_module.go", "Should not find hidden autogen file")
 		assert.NotContains(t, relativeFiles, "vendor/pkg/autogen_module.go", "Should not find vendor autogen file")

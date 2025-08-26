@@ -178,7 +178,7 @@ func TestErrorCollector(t *testing.T) {
 
 func TestMultipleAnnotationErrors(t *testing.T) {
 	loc := SourceLocation{File: "test.go", Line: 1, Column: 1}
-	
+
 	syntaxErr := &SyntaxError{Msg: "syntax error", Loc: loc, Hint: "fix syntax"}
 	validationErr := &ValidationError{Parameter: "Mode", Expected: "valid", Actual: "invalid", Loc: loc, Hint: "fix validation"}
 	schemaErr := &SchemaError{Msg: "schema error", Loc: loc, Hint: "fix schema"}
@@ -201,7 +201,7 @@ func TestMultipleAnnotationErrors(t *testing.T) {
 	t.Run("Multiple errors", func(t *testing.T) {
 		mae := &MultipleAnnotationErrors{Errors: []AnnotationError{syntaxErr, validationErr, schemaErr}}
 		errorMsg := mae.Error()
-		
+
 		if !strings.Contains(errorMsg, "multiple annotation errors (3 total)") {
 			t.Errorf("Error message should contain count, got: %s", errorMsg)
 		}
@@ -218,17 +218,17 @@ func TestMultipleAnnotationErrors(t *testing.T) {
 
 	t.Run("GetByType", func(t *testing.T) {
 		mae := &MultipleAnnotationErrors{Errors: []AnnotationError{syntaxErr, validationErr, schemaErr}}
-		
+
 		syntaxErrors := mae.GetByType(SyntaxErrorCode)
 		if len(syntaxErrors) != 1 {
 			t.Errorf("Expected 1 syntax error, got %d", len(syntaxErrors))
 		}
-		
+
 		validationErrors := mae.GetByType(ValidationErrorCode)
 		if len(validationErrors) != 1 {
 			t.Errorf("Expected 1 validation error, got %d", len(validationErrors))
 		}
-		
+
 		registrationErrors := mae.GetByType(RegistrationErrorCode)
 		if len(registrationErrors) != 0 {
 			t.Errorf("Expected 0 registration errors, got %d", len(registrationErrors))
@@ -237,7 +237,7 @@ func TestMultipleAnnotationErrors(t *testing.T) {
 
 	t.Run("HasType", func(t *testing.T) {
 		mae := &MultipleAnnotationErrors{Errors: []AnnotationError{syntaxErr, validationErr}}
-		
+
 		if !mae.HasType(SyntaxErrorCode) {
 			t.Error("Should have syntax error")
 		}
@@ -252,7 +252,7 @@ func TestMultipleAnnotationErrors(t *testing.T) {
 	t.Run("Unwrap", func(t *testing.T) {
 		mae := &MultipleAnnotationErrors{Errors: []AnnotationError{syntaxErr, validationErr}}
 		unwrapped := mae.Unwrap()
-		
+
 		if len(unwrapped) != 2 {
 			t.Errorf("Expected 2 unwrapped errors, got %d", len(unwrapped))
 		}
@@ -260,7 +260,7 @@ func TestMultipleAnnotationErrors(t *testing.T) {
 
 	t.Run("Is", func(t *testing.T) {
 		mae := &MultipleAnnotationErrors{Errors: []AnnotationError{syntaxErr, validationErr}}
-		
+
 		if !mae.Is(syntaxErr) {
 			t.Error("Should find syntax error")
 		}
@@ -373,43 +373,43 @@ func TestSyntaxSuggestionGeneration(t *testing.T) {
 
 func TestValidationSuggestionGeneration(t *testing.T) {
 	tests := []struct {
-		name           string
-		parameter      string
-		expected       string
-		actual         string
-		annotationType AnnotationType
+		name                 string
+		parameter            string
+		expected             string
+		actual               string
+		annotationType       AnnotationType
 		expectedInSuggestion []string
 	}{
 		{
-			name:           "core Mode parameter",
-			parameter:      "Mode",
-			expected:       "Singleton or Transient",
-			actual:         "Invalid",
-			annotationType: CoreAnnotation,
+			name:                 "core Mode parameter",
+			parameter:            "Mode",
+			expected:             "Singleton or Transient",
+			actual:               "Invalid",
+			annotationType:       CoreAnnotation,
 			expectedInSuggestion: []string{"Singleton", "Transient", "-Mode=Transient"},
 		},
 		{
-			name:           "core Init parameter",
-			parameter:      "Init",
-			expected:       "Same or Background",
-			actual:         "Invalid",
-			annotationType: CoreAnnotation,
+			name:                 "core Init parameter",
+			parameter:            "Init",
+			expected:             "Same or Background",
+			actual:               "Invalid",
+			annotationType:       CoreAnnotation,
 			expectedInSuggestion: []string{"Same", "Background", "-Init=Background"},
 		},
 		{
-			name:           "route method parameter",
-			parameter:      "method",
-			expected:       "valid HTTP method",
-			actual:         "INVALID",
-			annotationType: RouteAnnotation,
+			name:                 "route method parameter",
+			parameter:            "method",
+			expected:             "valid HTTP method",
+			actual:               "INVALID",
+			annotationType:       RouteAnnotation,
 			expectedInSuggestion: []string{"GET", "POST", "PUT", "DELETE"},
 		},
 		{
-			name:           "route Middleware parameter",
-			parameter:      "Middleware",
-			expected:       "comma-separated names",
-			actual:         "Invalid",
-			annotationType: RouteAnnotation,
+			name:                 "route Middleware parameter",
+			parameter:            "Middleware",
+			expected:             "comma-separated names",
+			actual:               "Invalid",
+			annotationType:       RouteAnnotation,
 			expectedInSuggestion: []string{"comma-separated", "Auth,Logging"},
 		},
 	}
@@ -428,7 +428,7 @@ func TestValidationSuggestionGeneration(t *testing.T) {
 
 func TestErrorSummary(t *testing.T) {
 	loc := SourceLocation{File: "test.go", Line: 1, Column: 1}
-	
+
 	syntaxErr := &SyntaxError{Msg: "syntax error", Loc: loc, Hint: "fix"}
 	validationErr := &ValidationError{Parameter: "Mode", Expected: "valid", Actual: "invalid", Loc: loc, Hint: "fix"}
 	schemaErr := &SchemaError{Msg: "schema error", Loc: loc, Hint: "fix"}
@@ -447,7 +447,7 @@ func TestErrorSummary(t *testing.T) {
 	t.Run("Mixed errors summary", func(t *testing.T) {
 		errors := []AnnotationError{syntaxErr, validationErr, schemaErr, registrationErr}
 		summary := SummarizeErrors(errors)
-		
+
 		if summary.TotalCount != 4 {
 			t.Errorf("Expected total count 4, got %d", summary.TotalCount)
 		}

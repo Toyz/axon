@@ -555,11 +555,11 @@ func TestValidator_convertFromString(t *testing.T) {
 	validator := &validator{}
 
 	tests := []struct {
-		name         string
-		input        string
-		targetType   ParameterType
-		expected     interface{}
-		expectError  bool
+		name        string
+		input       string
+		targetType  ParameterType
+		expected    interface{}
+		expectError bool
 	}{
 		{"string to string", "hello", StringType, "hello", false},
 		{"string to bool true", "true", BoolType, true, false},
@@ -614,8 +614,7 @@ func TestValidator_convertFromString(t *testing.T) {
 		})
 	}
 }
-func 
-TestParsedAnnotation_TypeSafeGetters(t *testing.T) {
+func TestParsedAnnotation_TypeSafeGetters(t *testing.T) {
 	annotation := &ParsedAnnotation{
 		Type: CoreAnnotation,
 		Parameters: map[string]interface{}{

@@ -8,24 +8,24 @@ import (
 	"github.com/toyz/axon/pkg/axon"
 )
 
-func NewAuthMiddleware() *AuthMiddleware {
-	return &AuthMiddleware{
-		
-	}
-}
 func NewLoggingMiddleware() *LoggingMiddleware {
 	return &LoggingMiddleware{
 		
 	}
 }
-func RegisterMiddlewares(authmiddleware *AuthMiddleware, loggingmiddleware *LoggingMiddleware) {
-	axon.RegisterMiddleware("AuthMiddleware", authmiddleware.Handle, authmiddleware)
+func NewAuthMiddleware() *AuthMiddleware {
+	return &AuthMiddleware{
+		
+	}
+}
+func RegisterMiddlewares(loggingmiddleware *LoggingMiddleware, authmiddleware *AuthMiddleware) {
 	axon.RegisterMiddleware("LoggingMiddleware", loggingmiddleware.Handle, loggingmiddleware)
+	axon.RegisterMiddleware("AuthMiddleware", authmiddleware.Handle, authmiddleware)
 }
 
 // AutogenModule provides all middleware in this package
 var AutogenModule = fx.Module("middleware",
-	fx.Provide(NewAuthMiddleware),
 	fx.Provide(NewLoggingMiddleware),
+	fx.Provide(NewAuthMiddleware),
 	fx.Invoke(RegisterMiddlewares),
 )

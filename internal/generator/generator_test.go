@@ -18,12 +18,12 @@ func TestNewGenerator(t *testing.T) {
 
 func TestGenerateModule_NilMetadata(t *testing.T) {
 	generator := NewGenerator()
-	
+
 	_, err := generator.GenerateModule(nil)
 	if err == nil {
 		t.Fatal("expected error for nil metadata")
 	}
-	
+
 	if !strings.Contains(err.Error(), "metadata cannot be nil") {
 		t.Errorf("expected error message about nil metadata, got: %v", err)
 	}
@@ -31,31 +31,31 @@ func TestGenerateModule_NilMetadata(t *testing.T) {
 
 func TestGenerateModule_EmptyPackage(t *testing.T) {
 	generator := NewGenerator()
-	
+
 	metadata := &models.PackageMetadata{
 		PackageName: "empty",
 		PackagePath: "./empty",
 	}
-	
+
 	result, err := generator.GenerateModule(metadata)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	
+
 	if result.PackageName != "empty" {
 		t.Errorf("expected package name 'empty', got %s", result.PackageName)
 	}
-	
+
 	expectedPath := filepath.Join("./empty", "autogen_module.go")
 	if result.FilePath != expectedPath {
 		t.Errorf("expected file path %s, got %s", expectedPath, result.FilePath)
 	}
-	
+
 	// Check that it generates an empty module
 	if !strings.Contains(result.Content, "package empty") {
 		t.Errorf("expected package declaration, got: %s", result.Content)
 	}
-	
+
 	if !strings.Contains(result.Content, "var AutogenModule = fx.Module(\"empty\")") {
 		t.Errorf("expected empty module declaration, got: %s", result.Content)
 	}
@@ -63,7 +63,7 @@ func TestGenerateModule_EmptyPackage(t *testing.T) {
 
 func TestGenerateModule_CoreServices(t *testing.T) {
 	generator := NewGenerator()
-	
+
 	metadata := &models.PackageMetadata{
 		PackageName: "services",
 		PackagePath: "./services",
@@ -77,30 +77,30 @@ func TestGenerateModule_CoreServices(t *testing.T) {
 			},
 		},
 	}
-	
+
 	result, err := generator.GenerateModule(metadata)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	
+
 	// Check basic structure
 	if !strings.Contains(result.Content, "package services") {
 		t.Errorf("expected package declaration")
 	}
-	
+
 	if !strings.Contains(result.Content, "func NewUserService(") {
 		t.Errorf("expected provider function")
 	}
-	
+
 	if !strings.Contains(result.Content, "fx.Provide(NewUserService)") {
 		t.Errorf("expected provider in module")
 	}
-	
+
 	// Check providers
 	if len(result.Providers) != 1 {
 		t.Errorf("expected 1 provider, got %d", len(result.Providers))
 	}
-	
+
 	provider := result.Providers[0]
 	if provider.Name != "NewUserService" {
 		t.Errorf("expected provider name 'NewUserService', got %s", provider.Name)
@@ -109,7 +109,7 @@ func TestGenerateModule_CoreServices(t *testing.T) {
 
 func TestGenerateModule_Controllers(t *testing.T) {
 	generator := NewGenerator()
-	
+
 	metadata := &models.PackageMetadata{
 		PackageName: "controllers",
 		PackagePath: "./controllers",
@@ -138,17 +138,17 @@ func TestGenerateModule_Controllers(t *testing.T) {
 			},
 		},
 	}
-	
+
 	result, err := generator.GenerateModule(metadata)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	
+
 	// Check basic structure
 	if !strings.Contains(result.Content, "package controllers") {
 		t.Errorf("expected package declaration")
 	}
-	
+
 	// Check imports
 	expectedImports := []string{
 		"\"net/http\"",
@@ -157,37 +157,37 @@ func TestGenerateModule_Controllers(t *testing.T) {
 		"\"go.uber.org/fx\"",
 		"\"github.com/toyz/axon/pkg/axon\"",
 	}
-	
+
 	for _, imp := range expectedImports {
 		if !strings.Contains(result.Content, imp) {
 			t.Errorf("expected import %s", imp)
 		}
 	}
-	
+
 	// Check controller provider
 	if !strings.Contains(result.Content, "func NewUserController(") {
 		t.Errorf("expected controller provider function")
 	}
-	
+
 	// Check route wrapper
 	if !strings.Contains(result.Content, "func wrapUserControllerGetUser(") {
 		t.Errorf("expected route wrapper function")
 	}
-	
+
 	// Check route registration function
 	if !strings.Contains(result.Content, "func RegisterRoutes(") {
 		t.Errorf("expected route registration function")
 	}
-	
+
 	// Check module variable
 	if !strings.Contains(result.Content, "var AutogenModule = fx.Module(") {
 		t.Errorf("expected module variable")
 	}
-	
+
 	if !strings.Contains(result.Content, "fx.Provide(NewUserController)") {
 		t.Errorf("expected controller provider in module")
 	}
-	
+
 	if !strings.Contains(result.Content, "fx.Invoke(RegisterRoutes)") {
 		t.Errorf("expected route registration in module")
 	}
@@ -195,7 +195,7 @@ func TestGenerateModule_Controllers(t *testing.T) {
 
 func TestGenerateControllerProvider(t *testing.T) {
 	generator := NewGenerator()
-	
+
 	controller := models.ControllerMetadata{
 		Name:       "UserController",
 		StructName: "UserController",
@@ -204,26 +204,26 @@ func TestGenerateControllerProvider(t *testing.T) {
 			{Name: "Config", Type: "*Config"},
 		},
 	}
-	
+
 	result, err := generator.generateControllerProvider(controller)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	
+
 	// Check function signature
 	if !strings.Contains(result, "func NewUserController(") {
 		t.Errorf("expected function name")
 	}
-	
+
 	// Check dependencies
 	if !strings.Contains(result, "userService UserService") {
 		t.Errorf("expected UserService parameter")
 	}
-	
+
 	if !strings.Contains(result, "config *Config") {
 		t.Errorf("expected Config parameter")
 	}
-	
+
 	// Check return statement
 	if !strings.Contains(result, "return &UserController{") {
 		t.Errorf("expected return statement")
@@ -232,7 +232,7 @@ func TestGenerateControllerProvider(t *testing.T) {
 
 func TestCollectMiddlewareDependencies(t *testing.T) {
 	generator := NewGenerator()
-	
+
 	metadata := &models.PackageMetadata{
 		Controllers: []models.ControllerMetadata{
 			{
@@ -247,21 +247,21 @@ func TestCollectMiddlewareDependencies(t *testing.T) {
 			},
 		},
 	}
-	
+
 	result := generator.collectMiddlewareDependencies(metadata)
-	
+
 	// Should have unique middlewares
 	expectedCount := 3 // Auth, Logging, RateLimit
 	if len(result) != expectedCount {
 		t.Errorf("expected %d unique middlewares, got %d: %v", expectedCount, len(result), result)
 	}
-	
+
 	// Check that all expected middlewares are present
 	middlewareSet := make(map[string]bool)
 	for _, middleware := range result {
 		middlewareSet[middleware] = true
 	}
-	
+
 	expected := []string{"Auth", "Logging", "RateLimit"}
 	for _, middleware := range expected {
 		if !middlewareSet[middleware] {
@@ -272,7 +272,7 @@ func TestCollectMiddlewareDependencies(t *testing.T) {
 
 func TestExtractProviders(t *testing.T) {
 	generator := NewGenerator()
-	
+
 	metadata := &models.PackageMetadata{
 		Controllers: []models.ControllerMetadata{
 			{
@@ -290,10 +290,10 @@ func TestExtractProviders(t *testing.T) {
 				Dependencies: []models.Dependency{{Name: "UserRepository", Type: "UserRepository"}},
 			},
 			{
-				Name:         "ConfigService",
-				StructName:   "ConfigService",
-				IsManual:     true,
-				ModuleName:   "CustomModule",
+				Name:       "ConfigService",
+				StructName: "ConfigService",
+				IsManual:   true,
+				ModuleName: "CustomModule",
 			},
 		},
 		Interfaces: []models.InterfaceMetadata{
@@ -303,15 +303,15 @@ func TestExtractProviders(t *testing.T) {
 			},
 		},
 	}
-	
+
 	result := generator.extractProviders(metadata)
-	
+
 	// Should have 3 providers: controller, core service (not manual), interface
 	expectedCount := 3
 	if len(result) != expectedCount {
 		t.Errorf("expected %d providers, got %d", expectedCount, len(result))
 	}
-	
+
 	// Check controller provider
 	controllerProvider := findProvider(result, "NewUserController")
 	if controllerProvider == nil {
@@ -321,7 +321,7 @@ func TestExtractProviders(t *testing.T) {
 			t.Errorf("controller provider should not be lifecycle")
 		}
 	}
-	
+
 	// Check core service provider
 	serviceProvider := findProvider(result, "NewUserService")
 	if serviceProvider == nil {
@@ -331,13 +331,13 @@ func TestExtractProviders(t *testing.T) {
 			t.Errorf("service provider should be lifecycle")
 		}
 	}
-	
+
 	// Check interface provider
 	interfaceProvider := findProvider(result, "NewUserServiceInterface")
 	if interfaceProvider == nil {
 		t.Errorf("expected interface provider not found")
 	}
-	
+
 	// Manual service should not have a provider
 	manualProvider := findProvider(result, "NewConfigService")
 	if manualProvider != nil {
@@ -354,20 +354,18 @@ func findProvider(providers []models.Provider, name string) *models.Provider {
 	return nil
 }
 
-
-
 func TestGenerateRootModule(t *testing.T) {
 	generator := NewGenerator()
-	
+
 	// Create temporary directory for test
 	tempDir, err := os.MkdirTemp("", "generator_test")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
 	defer os.RemoveAll(tempDir)
-	
+
 	outputPath := filepath.Join(tempDir, "autogen_root_module.go")
-	
+
 	subModules := []models.ModuleReference{
 		{
 			PackageName: "controllers",
@@ -380,25 +378,25 @@ func TestGenerateRootModule(t *testing.T) {
 			ModuleName:  "AutogenModule",
 		},
 	}
-	
+
 	err = generator.GenerateRootModule("app", subModules, outputPath)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	
+
 	// Check that file was created
 	if _, err := os.Stat(outputPath); os.IsNotExist(err) {
 		t.Fatalf("root module file was not created")
 	}
-	
+
 	// Read and check content
 	content, err := os.ReadFile(outputPath)
 	if err != nil {
 		t.Fatalf("failed to read generated file: %v", err)
 	}
-	
+
 	contentStr := string(content)
-	
+
 	// Check basic structure
 	expectedContents := []string{
 		"package app",
@@ -410,7 +408,7 @@ func TestGenerateRootModule(t *testing.T) {
 		"controllers.AutogenModule,",
 		"services.AutogenModule,",
 	}
-	
+
 	for _, expected := range expectedContents {
 		if !strings.Contains(contentStr, expected) {
 			t.Errorf("expected content '%s' not found in generated root module", expected)
@@ -420,12 +418,12 @@ func TestGenerateRootModule(t *testing.T) {
 
 func TestGenerateRootModule_NoSubModules(t *testing.T) {
 	generator := NewGenerator()
-	
+
 	err := generator.GenerateRootModule("app", []models.ModuleReference{}, "root.go")
 	if err == nil {
 		t.Fatal("expected error for empty sub-modules")
 	}
-	
+
 	if !strings.Contains(err.Error(), "no sub-modules provided") {
 		t.Errorf("expected error message about no sub-modules, got: %v", err)
 	}

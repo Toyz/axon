@@ -18,10 +18,10 @@ type ResponseHandlerData struct {
 // GenerateResponseHandling generates response handling code based on handler return type
 func GenerateResponseHandling(route models.RouteMetadata, controllerName string) (string, error) {
 	handlerCall := generateHandlerCall(route, controllerName)
-	
+
 	// Check if err variable is already declared by parameter binding
 	errAlreadyDeclared := hasPathParameters(route.Parameters)
-	
+
 	switch route.ReturnType.Type {
 	case models.ReturnTypeDataError:
 		return generateDataErrorResponse(handlerCall, errAlreadyDeclared), nil
@@ -52,9 +52,9 @@ func generateHandlerCall(route models.RouteMetadata, controllerName string) stri
 		position int
 		source   models.ParameterSource
 	}
-	
+
 	var orderedParams []paramWithPosition
-	
+
 	// Add all parameters from the route based on method signature
 	for _, param := range route.Parameters {
 		switch param.Source {
@@ -81,7 +81,7 @@ func generateHandlerCall(route models.RouteMetadata, controllerName string) stri
 			})
 		}
 	}
-	
+
 	// Assign positions to path and body parameters
 	maxContextPosition := -1
 	for _, param := range orderedParams {
@@ -89,7 +89,7 @@ func generateHandlerCall(route models.RouteMetadata, controllerName string) stri
 			maxContextPosition = param.position
 		}
 	}
-	
+
 	nextPosition := maxContextPosition + 1
 	for i := range orderedParams {
 		if orderedParams[i].position == -1 {
@@ -97,7 +97,7 @@ func generateHandlerCall(route models.RouteMetadata, controllerName string) stri
 			nextPosition++
 		}
 	}
-	
+
 	// Sort parameters by position
 	for i := 0; i < len(orderedParams)-1; i++ {
 		for j := i + 1; j < len(orderedParams); j++ {
@@ -106,22 +106,22 @@ func generateHandlerCall(route models.RouteMetadata, controllerName string) stri
 			}
 		}
 	}
-	
+
 	// Extract parameter names in order
 	var params []string
 	for _, param := range orderedParams {
 		params = append(params, param.name)
 	}
-	
+
 	paramStr := strings.Join(params, ", ")
-	
+
 	// Extract method name from HandlerName (format: ControllerName.MethodName)
 	parts := strings.Split(route.HandlerName, ".")
 	methodName := route.HandlerName
 	if len(parts) == 2 {
 		methodName = parts[1]
 	}
-	
+
 	return fmt.Sprintf("handler.%s(%s)", methodName, paramStr)
 }
 
@@ -176,7 +176,7 @@ func generateErrorResponse(handlerCall string, errAlreadyDeclared bool) string {
 	} else {
 		assignment = "err :="
 	}
-	
+
 	return fmt.Sprintf(`		%s %s
 		if err != nil {
 			return err
@@ -192,25 +192,25 @@ func hasPassContextFlag(flags []string) bool {
 // GenerateRouteWrapper generates a complete route wrapper function
 func GenerateRouteWrapper(route models.RouteMetadata, controllerName string, parserRegistry ParserRegistryInterface) (string, error) {
 	wrapperName := fmt.Sprintf("wrap%s%s", controllerName, route.HandlerName)
-	
+
 	// Generate parameter binding code
 	paramBindingCode, err := GenerateParameterBindingCode(route.Parameters, parserRegistry)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate parameter binding: %w", err)
 	}
-	
+
 	// Generate body binding code if needed
 	bodyBindingCode := generateBodyBindingCode(route.Parameters)
-	
+
 	// Generate response handling code
 	responseHandlingCode, err := GenerateResponseHandling(route, controllerName)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate response handling: %w", err)
 	}
-	
+
 	// Generate middleware application code
 	middlewareCode := generateMiddlewareApplication(route.Middlewares)
-	
+
 	var template string
 	if len(route.Middlewares) > 0 {
 		// Template with middleware application
@@ -231,22 +231,22 @@ func GenerateRouteWrapper(route models.RouteMetadata, controllerName string, par
 	}
 }`
 	}
-	
+
 	if len(route.Middlewares) > 0 {
 		middlewareParams := generateMiddlewareParameters(route.Middlewares)
-		return fmt.Sprintf(template, 
-			wrapperName, 
-			controllerName, 
+		return fmt.Sprintf(template,
+			wrapperName,
+			controllerName,
 			middlewareParams,
-			paramBindingCode, 
+			paramBindingCode,
 			bodyBindingCode,
 			responseHandlingCode,
 			middlewareCode), nil
 	} else {
-		return fmt.Sprintf(template, 
-			wrapperName, 
-			controllerName, 
-			paramBindingCode, 
+		return fmt.Sprintf(template,
+			wrapperName,
+			controllerName,
+			paramBindingCode,
 			bodyBindingCode,
 			responseHandlingCode), nil
 	}
@@ -280,18 +280,18 @@ func generateMiddlewareApplication(middlewares []string) string {
 	if len(middlewares) == 0 {
 		return ""
 	}
-	
+
 	var code strings.Builder
 	code.WriteString("\n	// Apply middlewares in order\n")
 	code.WriteString("	finalHandler := baseHandler\n")
-	
+
 	// Apply middlewares in reverse order so they execute in the correct order
 	for i := len(middlewares) - 1; i >= 0; i-- {
 		middleware := middlewares[i]
 		middlewareVar := strings.ToLower(middleware)
 		code.WriteString(fmt.Sprintf("	finalHandler = %s.Handle(finalHandler)\n", middlewareVar))
 	}
-	
+
 	return code.String()
 }
 
@@ -299,21 +299,21 @@ func generateMiddlewareApplication(middlewares []string) string {
 func GenerateRouteRegistration(route models.RouteMetadata, controllerVar string, middlewares []string) (string, error) {
 	// Build the handler call
 	handlerCall := fmt.Sprintf("wrap%s%s(%s", controllerVar, route.HandlerName, controllerVar)
-	
+
 	// Add middleware parameters
 	for _, middleware := range middlewares {
 		handlerCall += fmt.Sprintf(", %s", strings.ToLower(middleware))
 	}
 	handlerCall += ")"
-	
+
 	// Convert Axon route syntax to Echo syntax
 	echoPath := convertAxonPathToEcho(route.Path)
-	
+
 	// Generate handler variable name
-	handlerVarName := fmt.Sprintf("handler_%s%s", 
-		strings.ToLower(controllerVar), 
+	handlerVarName := fmt.Sprintf("handler_%s%s",
+		strings.ToLower(controllerVar),
 		strings.ToLower(route.HandlerName))
-	
+
 	// Build parameter types map
 	paramTypesMap := "map[string]string{"
 	if len(route.Parameters) > 0 {
@@ -328,7 +328,7 @@ func GenerateRouteRegistration(route models.RouteMetadata, controllerVar string,
 		}
 	}
 	paramTypesMap += "}"
-	
+
 	// Build middlewares array
 	middlewaresArray := "[]string{"
 	if len(middlewares) > 0 {
@@ -339,7 +339,7 @@ func GenerateRouteRegistration(route models.RouteMetadata, controllerVar string,
 		middlewaresArray += strings.Join(middlewareNames, ", ")
 	}
 	middlewaresArray += "}"
-	
+
 	// Build middleware instances array
 	middlewareInstancesArray := "[]axon.MiddlewareInstance{"
 	if len(middlewares) > 0 {
@@ -356,7 +356,7 @@ func GenerateRouteRegistration(route models.RouteMetadata, controllerVar string,
 		middlewareInstancesArray += strings.Join(instanceEntries, ", ")
 	}
 	middlewareInstancesArray += "}"
-	
+
 	// Generate the complete registration code
 	template := `%s := %s
 	e.%s("%s", %s)
@@ -372,7 +372,7 @@ func GenerateRouteRegistration(route models.RouteMetadata, controllerVar string,
 		ParameterTypes:      %s,
 		Handler:             %s,
 	})`
-	
+
 	return fmt.Sprintf(template,
 		handlerVarName, handlerCall,
 		route.Method, echoPath, handlerVarName,
@@ -384,23 +384,23 @@ func GenerateRouteRegistration(route models.RouteMetadata, controllerVar string,
 // Axon: /users/{id:int} -> Echo: /users/:id
 func convertAxonPathToEcho(axonPath string) string {
 	result := axonPath
-	
+
 	// Replace Axon parameter syntax {param:type} with Echo syntax :param
 	for {
 		start := strings.Index(result, "{")
 		if start == -1 {
 			break
 		}
-		
+
 		end := strings.Index(result[start:], "}")
 		if end == -1 {
 			break
 		}
 		end += start
-		
+
 		// Extract parameter definition: {id:int} -> id:int
 		paramDef := result[start+1 : end]
-		
+
 		// Split by colon to get parameter name
 		parts := strings.Split(paramDef, ":")
 		if len(parts) > 0 {
@@ -412,6 +412,6 @@ func convertAxonPathToEcho(axonPath string) string {
 			break
 		}
 	}
-	
+
 	return result
 }

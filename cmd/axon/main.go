@@ -120,13 +120,13 @@ func cleanAutogenFiles(directories []string, verbose bool) error {
 			if baseDir == "" {
 				baseDir = "."
 			}
-			
+
 			files, err := findAutogenFilesRecursive(baseDir)
 			if err != nil {
 				errors = append(errors, fmt.Errorf("failed to scan directory %s: %w", baseDir, err))
 				continue
 			}
-			
+
 			for _, file := range files {
 				if err := os.Remove(file); err != nil {
 					errors = append(errors, fmt.Errorf("failed to delete %s: %w", file, err))
@@ -179,18 +179,18 @@ func cleanAutogenFiles(directories []string, verbose bool) error {
 // findAutogenFilesRecursive recursively finds all autogen_module.go files in a directory
 func findAutogenFilesRecursive(rootDir string) ([]string, error) {
 	var autogenFiles []string
-	
+
 	// Convert to absolute path for consistency
 	absRootDir, err := filepath.Abs(rootDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get absolute path for %s: %w", rootDir, err)
 	}
-	
+
 	err = filepath.Walk(absRootDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		
+
 		// Skip hidden directories and files
 		if strings.HasPrefix(info.Name(), ".") {
 			if info.IsDir() {
@@ -198,19 +198,19 @@ func findAutogenFilesRecursive(rootDir string) ([]string, error) {
 			}
 			return nil
 		}
-		
+
 		// Skip vendor directory
 		if info.IsDir() && info.Name() == "vendor" {
 			return filepath.SkipDir
 		}
-		
+
 		// Check if this is an autogen_module.go file
 		if !info.IsDir() && info.Name() == "autogen_module.go" {
 			autogenFiles = append(autogenFiles, path)
 		}
-		
+
 		return nil
 	})
-	
+
 	return autogenFiles, err
 }

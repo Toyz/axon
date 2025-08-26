@@ -61,12 +61,12 @@ func TestParserRegistry_GetParser(t *testing.T) {
 	assert.Equal(t, parser.TypeName, retrieved.TypeName)
 	assert.Equal(t, parser.FunctionName, retrieved.FunctionName)
 	assert.Equal(t, parser.PackagePath, retrieved.PackagePath)
-	
+
 	// Test getting built-in parser
 	builtinParser, exists := registry.GetParser("int")
 	assert.True(t, exists)
 	assert.Equal(t, "int", builtinParser.TypeName)
-	
+
 	// Test getting parser by alias
 	uuidParser, exists := registry.GetParser("UUID")
 	assert.True(t, exists)
@@ -102,8 +102,8 @@ func TestParserRegistry_ListParsers(t *testing.T) {
 
 	// Test listing parsers includes both built-ins and custom
 	parsers = registry.ListParsers()
-	assert.Contains(t, parsers, "int") // built-in
-	assert.Contains(t, parsers, "CustomUUID") // custom
+	assert.Contains(t, parsers, "int")         // built-in
+	assert.Contains(t, parsers, "CustomUUID")  // custom
 	assert.Contains(t, parsers, "CompositeID") // custom
 }
 
@@ -144,7 +144,7 @@ func TestParserRegistry_Clear(t *testing.T) {
 	registry.Clear()
 
 	assert.False(t, registry.HasParser("CustomType"))
-	assert.True(t, registry.HasParser("int")) // built-ins are preserved
+	assert.True(t, registry.HasParser("int"))  // built-ins are preserved
 	assert.NotEmpty(t, registry.ListParsers()) // built-ins remain
 }
 
@@ -169,7 +169,7 @@ func TestParserRegistry_ClearCustomParsers(t *testing.T) {
 	registry.ClearCustomParsers()
 
 	assert.False(t, registry.HasParser("CustomType"))
-	assert.True(t, registry.HasParser("int")) // built-ins are preserved
+	assert.True(t, registry.HasParser("int"))  // built-ins are preserved
 	assert.NotEmpty(t, registry.ListParsers()) // built-ins remain
 }
 

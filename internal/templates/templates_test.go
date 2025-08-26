@@ -168,12 +168,12 @@ func TestGetParameterSourceString(t *testing.T) {
 
 func TestGenerateRouteRegistration(t *testing.T) {
 	tests := []struct {
-		name           string
-		route          models.RouteMetadata
-		controllerVar  string
-		middlewares    []string
+		name             string
+		route            models.RouteMetadata
+		controllerVar    string
+		middlewares      []string
 		expectedContains []string
-		expectError    bool
+		expectError      bool
 	}{
 		{
 			name: "route without middleware",
@@ -261,19 +261,19 @@ func TestGenerateRouteRegistration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := GenerateRouteRegistration(tt.route, tt.controllerVar, tt.middlewares)
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Errorf("expected error but got none")
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 				return
 			}
-			
+
 			// Check that all expected strings are contained in the result
 			for _, expected := range tt.expectedContains {
 				if !strings.Contains(result, expected) {
@@ -418,7 +418,7 @@ func TestGenerateCoreServiceProvider(t *testing.T) {
 				}
 				return strings.Join(normalized, "\n")
 			}
-			
+
 			expected := normalizeWhitespace(tt.expected)
 			actual := normalizeWhitespace(result)
 
@@ -812,7 +812,7 @@ func TestGenerateParameterBindingCode_WithContextParameters(t *testing.T) {
 					Position: 0,
 				},
 			},
-			expected: "",
+			expected:    "",
 			expectError: false,
 		},
 		{

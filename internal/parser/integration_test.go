@@ -149,7 +149,7 @@ func (s *UserService) CreateUser(user User) (*User, error) {
 			if route1.Path != "/users/{id:int}" {
 				t.Errorf("expected first route path '/users/{id:int}', got '%s'", route1.Path)
 			}
-			
+
 			// Check that path parameters were parsed correctly
 			if len(route1.Parameters) != 1 {
 				t.Errorf("expected 1 parameter for first route, got %d", len(route1.Parameters))
@@ -177,7 +177,7 @@ func (s *UserService) CreateUser(user User) (*User, error) {
 			if route2.Path != "/users" {
 				t.Errorf("expected second route path '/users', got '%s'", route2.Path)
 			}
-			
+
 			// Check that no path parameters were parsed for this route
 			var pathParams []models.Parameter
 			for _, param := range route2.Parameters {
@@ -188,7 +188,7 @@ func (s *UserService) CreateUser(user User) (*User, error) {
 			if len(pathParams) != 0 {
 				t.Errorf("expected 0 path parameters for second route, got %d", len(pathParams))
 			}
-			
+
 			if len(route2.Middlewares) != 2 {
 				t.Errorf("expected 2 middlewares, got %d", len(route2.Middlewares))
 			} else {
@@ -212,7 +212,7 @@ func (s *UserService) CreateUser(user User) (*User, error) {
 				loggingMiddleware = &metadata.Middlewares[i]
 			}
 		}
-		
+
 		if authMiddleware == nil {
 			t.Errorf("expected to find Auth middleware")
 		} else {
@@ -220,7 +220,7 @@ func (s *UserService) CreateUser(user User) (*User, error) {
 				t.Errorf("expected Auth middleware struct name 'AuthMiddleware', got '%s'", authMiddleware.StructName)
 			}
 		}
-		
+
 		if loggingMiddleware == nil {
 			t.Errorf("expected to find Logging middleware")
 		} else {
@@ -244,7 +244,7 @@ func (s *UserService) CreateUser(user User) (*User, error) {
 				userService = &metadata.CoreServices[i]
 			}
 		}
-		
+
 		if dbService == nil {
 			t.Errorf("expected to find DatabaseService")
 		} else {
@@ -252,7 +252,7 @@ func (s *UserService) CreateUser(user User) (*User, error) {
 				t.Errorf("expected DatabaseService to have lifecycle")
 			}
 		}
-		
+
 		if userService == nil {
 			t.Errorf("expected to find UserService")
 		}
@@ -367,7 +367,7 @@ func (c *APIController) HealthCheck() (string, error) {
 		path               string
 		expectedParamCount int
 		expectedParams     []struct {
-			name     string
+			name      string
 			paramType string
 		}
 	}{
@@ -375,7 +375,7 @@ func (c *APIController) HealthCheck() (string, error) {
 			path:               "/users/{id:int}",
 			expectedParamCount: 1,
 			expectedParams: []struct {
-				name     string
+				name      string
 				paramType string
 			}{
 				{name: "id", paramType: "int"},
@@ -385,7 +385,7 @@ func (c *APIController) HealthCheck() (string, error) {
 			path:               "/users/{id:int}/posts/{slug:string}",
 			expectedParamCount: 2,
 			expectedParams: []struct {
-				name     string
+				name      string
 				paramType string
 			}{
 				{name: "id", paramType: "int"},
@@ -396,7 +396,7 @@ func (c *APIController) HealthCheck() (string, error) {
 			path:               "/categories/{name:string}/items",
 			expectedParamCount: 1,
 			expectedParams: []struct {
-				name     string
+				name      string
 				paramType string
 			}{
 				{name: "name", paramType: "string"},
@@ -405,8 +405,8 @@ func (c *APIController) HealthCheck() (string, error) {
 		{
 			path:               "/health",
 			expectedParamCount: 0,
-			expectedParams:     []struct {
-				name     string
+			expectedParams: []struct {
+				name      string
 				paramType string
 			}{},
 		},

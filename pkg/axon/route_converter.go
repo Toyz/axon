@@ -16,15 +16,15 @@ func NewRouteConverter() *RouteConverter {
 
 // AxonToEcho converts Axon route syntax to Echo route syntax
 // Converts: /users/{id:int} -> /users/:id
-// Converts: /users/{id:string} -> /users/:id  
+// Converts: /users/{id:string} -> /users/:id
 // Converts: /posts/{slug:string}/comments/{id:int} -> /posts/:slug/comments/:id
 func (rc *RouteConverter) AxonToEcho(axonPath string) string {
 	// Regex to match Axon parameter syntax: {param:type}
 	axonParamRegex := regexp.MustCompile(`\{([^:}]+):[^}]+\}`)
-	
+
 	// Replace with Echo parameter syntax: :param
 	echoPath := axonParamRegex.ReplaceAllString(axonPath, `:$1`)
-	
+
 	return echoPath
 }
 
@@ -33,7 +33,7 @@ func (rc *RouteConverter) AxonToEcho(axonPath string) string {
 func (rc *RouteConverter) EchoToAxon(echoPath string, paramTypes map[string]string) string {
 	// Regex to match Echo parameter syntax: :param
 	echoParamRegex := regexp.MustCompile(`:([a-zA-Z_][a-zA-Z0-9_]*)`)
-	
+
 	// Replace with Axon parameter syntax using provided types or default to string
 	axonPath := echoParamRegex.ReplaceAllStringFunc(echoPath, func(match string) string {
 		paramName := strings.TrimPrefix(match, ":")
@@ -45,7 +45,7 @@ func (rc *RouteConverter) EchoToAxon(echoPath string, paramTypes map[string]stri
 		}
 		return "{" + paramName + ":" + paramType + "}"
 	})
-	
+
 	return axonPath
 }
 
@@ -53,10 +53,10 @@ func (rc *RouteConverter) EchoToAxon(echoPath string, paramTypes map[string]stri
 // Returns a map of parameter names to their types
 func (rc *RouteConverter) ExtractParameterInfo(axonPath string) map[string]string {
 	paramInfo := make(map[string]string)
-	
+
 	// Regex to match Axon parameter syntax: {param:type}
 	axonParamRegex := regexp.MustCompile(`\{([^:}]+):([^}]+)\}`)
-	
+
 	matches := axonParamRegex.FindAllStringSubmatch(axonPath, -1)
 	for _, match := range matches {
 		if len(match) == 3 {
@@ -65,7 +65,7 @@ func (rc *RouteConverter) ExtractParameterInfo(axonPath string) map[string]strin
 			paramInfo[paramName] = paramType
 		}
 	}
-	
+
 	return paramInfo
 }
 
@@ -77,19 +77,19 @@ func (rc *RouteConverter) ValidateAxonPath(axonPath string) error {
 	if openBraces != closeBraces {
 		return fmt.Errorf("mismatched braces in path: %s", axonPath)
 	}
-	
+
 	// Check parameter syntax
 	axonParamRegex := regexp.MustCompile(`\{([^:}]+):([^}]+)\}`)
 	invalidParamRegex := regexp.MustCompile(`\{[^}]*\}`)
-	
+
 	// Find all parameter-like patterns
 	allParams := invalidParamRegex.FindAllString(axonPath, -1)
 	validParams := axonParamRegex.FindAllString(axonPath, -1)
-	
+
 	if len(allParams) != len(validParams) {
 		return fmt.Errorf("invalid parameter syntax in path: %s (use {name:type} format)", axonPath)
 	}
-	
+
 	return nil
 }
 

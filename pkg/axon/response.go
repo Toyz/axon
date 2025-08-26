@@ -6,30 +6,31 @@ package axon
 // you need full control over the HTTP response.
 //
 // Example usage:
-//   func (c *UserController) CreateUser(user User) (*axon.Response, error) {
-//       // ... create user logic ...
-//       return &axon.Response{
-//           StatusCode: 201,
-//           Body:       createdUser,
-//           Headers: map[string]string{
-//               "Location": "/users/123",
-//               "X-Custom-Header": "value",
-//           },
-//       }, nil
-//   }
+//
+//	func (c *UserController) CreateUser(user User) (*axon.Response, error) {
+//	    // ... create user logic ...
+//	    return &axon.Response{
+//	        StatusCode: 201,
+//	        Body:       createdUser,
+//	        Headers: map[string]string{
+//	            "Location": "/users/123",
+//	            "X-Custom-Header": "value",
+//	        },
+//	    }, nil
+//	}
 type Response struct {
 	// StatusCode is the HTTP status code to return (e.g., 200, 201, 404, 500)
 	StatusCode int `json:"-"`
-	
+
 	// Body is the response body that will be JSON-encoded and sent to the client
 	Body interface{} `json:"body,omitempty"`
-	
+
 	// Headers contains HTTP headers to set on the response
 	Headers map[string]string `json:"-"`
-	
+
 	// ContentType overrides the default "application/json" content type
 	ContentType string `json:"-"`
-	
+
 	// Cookies contains cookies to set on the response
 	Cookies []*Cookie `json:"-"`
 }

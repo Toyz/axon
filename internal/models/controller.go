@@ -2,10 +2,10 @@ package models
 
 // ControllerMetadata represents a controller and its routes
 type ControllerMetadata struct {
-	Name         string            // name of the controller
-	StructName   string            // name of the struct
-	Routes       []RouteMetadata   // all routes defined on this controller
-	Dependencies []Dependency      // dependencies injected via fx.In
+	Name         string          // name of the controller
+	StructName   string          // name of the struct
+	Routes       []RouteMetadata // all routes defined on this controller
+	Dependencies []Dependency    // dependencies injected via fx.In
 }
 
 // RouteMetadata represents an HTTP route handler

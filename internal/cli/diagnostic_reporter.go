@@ -48,7 +48,7 @@ func (r *DiagnosticReporter) reportGeneratorError(genErr *models.GeneratorError)
 
 	// Main error message
 	fmt.Fprintf(os.Stderr, "Message: %s\n\n", genErr.Message)
-	
+
 	// In verbose mode, show the underlying cause if available
 	if r.verbose && genErr.Cause != nil {
 		fmt.Fprintf(os.Stderr, "Underlying cause: %s\n\n", genErr.Cause.Error())
@@ -75,7 +75,7 @@ func (r *DiagnosticReporter) reportGeneratorError(genErr *models.GeneratorError)
 
 	// Additional help based on error type
 	r.printAdditionalHelp(genErr.Type)
-	
+
 	// In verbose mode, show additional debugging information
 	if r.verbose {
 		r.printVerboseDebuggingInfo(genErr)
@@ -88,7 +88,7 @@ func (r *DiagnosticReporter) reportBasicError(err error) {
 
 	// Try to provide some general guidance based on error message
 	errorMsg := strings.ToLower(err.Error())
-	
+
 	if strings.Contains(errorMsg, "parser") {
 		fmt.Fprintf(os.Stderr, "This appears to be a parser-related issue.\n")
 		fmt.Fprintf(os.Stderr, "Common solutions:\n")
@@ -113,7 +113,7 @@ func (r *DiagnosticReporter) reportBasicError(err error) {
 // printErrorHeader prints a formatted error header based on error type
 func (r *DiagnosticReporter) printErrorHeader(genErr *models.GeneratorError) {
 	var errorTypeStr string
-	
+
 	switch genErr.Type {
 	case models.ErrorTypeParserValidation:
 		errorTypeStr = "Parser Validation Error"
@@ -134,7 +134,7 @@ func (r *DiagnosticReporter) printErrorHeader(genErr *models.GeneratorError) {
 	default:
 		errorTypeStr = "Unknown Error"
 	}
-	
+
 	fmt.Fprintf(os.Stderr, "Type: %s\n", errorTypeStr)
 	fmt.Fprintf(os.Stderr, "%s\n\n", strings.Repeat("-", len(errorTypeStr)+6))
 }
@@ -142,25 +142,25 @@ func (r *DiagnosticReporter) printErrorHeader(genErr *models.GeneratorError) {
 // printContext prints context information in a readable format
 func (r *DiagnosticReporter) printContext(context map[string]interface{}) {
 	fmt.Fprintf(os.Stderr, "Context:\n")
-	
+
 	// Print important context items first
 	importantKeys := []string{"function_name", "type_name", "route_method", "route_path", "parameter_name"}
 	printed := make(map[string]bool)
-	
+
 	for _, key := range importantKeys {
 		if value, exists := context[key]; exists {
 			fmt.Fprintf(os.Stderr, "   %s: %v\n", r.formatContextKey(key), value)
 			printed[key] = true
 		}
 	}
-	
+
 	// Print remaining context items
 	for key, value := range context {
 		if !printed[key] {
 			fmt.Fprintf(os.Stderr, "   %s: %v\n", r.formatContextKey(key), value)
 		}
 	}
-	
+
 	fmt.Fprintf(os.Stderr, "\n")
 }
 
@@ -198,7 +198,7 @@ func (r *DiagnosticReporter) formatContextKey(key string) string {
 // printSuggestions prints actionable suggestions
 func (r *DiagnosticReporter) printSuggestions(suggestions []string) {
 	fmt.Fprintf(os.Stderr, "Suggestions:\n")
-	
+
 	for i, suggestion := range suggestions {
 		// Format multi-line suggestions nicely
 		lines := strings.Split(suggestion, "\n")
@@ -213,7 +213,7 @@ func (r *DiagnosticReporter) printSuggestions(suggestions []string) {
 			}
 		}
 	}
-	
+
 	fmt.Fprintf(os.Stderr, "\n")
 }
 
@@ -226,26 +226,26 @@ func (r *DiagnosticReporter) printAdditionalHelp(errorType models.ErrorType) {
 		fmt.Fprintf(os.Stderr, "  - Must return exactly 2 values: (YourType, error)\n")
 		fmt.Fprintf(os.Stderr, "  - Must be a regular function (not a method)\n")
 		fmt.Fprintf(os.Stderr, "  - Must be in the same file as the annotation\n\n")
-		
+
 	case models.ErrorTypeParserImport:
 		fmt.Fprintf(os.Stderr, "Import Requirements:\n")
 		fmt.Fprintf(os.Stderr, "  - Ensure all required packages are imported\n")
 		fmt.Fprintf(os.Stderr, "  - Check that import paths are correct\n")
 		fmt.Fprintf(os.Stderr, "  - Run 'go mod tidy' to ensure dependencies are available\n\n")
-		
+
 	case models.ErrorTypeParserConflict:
 		fmt.Fprintf(os.Stderr, "Resolving Parser Conflicts:\n")
 		fmt.Fprintf(os.Stderr, "  - Each type can only have one parser\n")
 		fmt.Fprintf(os.Stderr, "  - Remove duplicate parser registrations\n")
 		fmt.Fprintf(os.Stderr, "  - Consider using different type names if you need multiple parsers\n\n")
-		
+
 	case models.ErrorTypeAnnotationSyntax:
 		fmt.Fprintf(os.Stderr, "Annotation Syntax Help:\n")
 		fmt.Fprintf(os.Stderr, "  - Annotations must start with //axon::\n")
 		fmt.Fprintf(os.Stderr, "  - Check the documentation for correct syntax\n")
 		fmt.Fprintf(os.Stderr, "  - Ensure proper spacing and parameter format\n\n")
 	}
-	
+
 	// Always show general help
 	fmt.Fprintf(os.Stderr, "For more help:\n")
 	fmt.Fprintf(os.Stderr, "  - Check the Axon documentation\n")
@@ -258,17 +258,17 @@ func (r *DiagnosticReporter) findGeneratorError(err error) *models.GeneratorErro
 	if err == nil {
 		return nil
 	}
-	
+
 	// Check if this is a GeneratorError
 	if genErr, ok := err.(*models.GeneratorError); ok {
 		return genErr
 	}
-	
+
 	// Try to unwrap and search recursively
 	if unwrapper, ok := err.(interface{ Unwrap() error }); ok {
 		return r.findGeneratorError(unwrapper.Unwrap())
 	}
-	
+
 	return nil
 }
 
@@ -276,14 +276,14 @@ func (r *DiagnosticReporter) findGeneratorError(err error) *models.GeneratorErro
 func (r *DiagnosticReporter) printVerboseDebuggingInfo(genErr *models.GeneratorError) {
 	fmt.Fprintf(os.Stderr, "Verbose Debug Information:\n")
 	fmt.Fprintf(os.Stderr, "  Error Type Code: %d\n", int(genErr.Type))
-	
+
 	if genErr.Context != nil {
 		fmt.Fprintf(os.Stderr, "  Full Context Data:\n")
 		for key, value := range genErr.Context {
 			fmt.Fprintf(os.Stderr, "    %s: %+v\n", key, value)
 		}
 	}
-	
+
 	if genErr.Cause != nil {
 		fmt.Fprintf(os.Stderr, "  Error Chain:\n")
 		err := genErr.Cause
@@ -298,7 +298,7 @@ func (r *DiagnosticReporter) printVerboseDebuggingInfo(genErr *models.GeneratorE
 			}
 		}
 	}
-	
+
 	fmt.Fprintf(os.Stderr, "\n")
 }
 
@@ -320,38 +320,38 @@ func (r *DiagnosticReporter) DebugSection(section string) {
 func (r *DiagnosticReporter) ReportSuccess(summary GenerationSummary) {
 	fmt.Printf("\nCode Generation Completed Successfully!\n")
 	fmt.Printf("=======================================\n\n")
-	
+
 	if summary.PackagesProcessed > 0 {
 		fmt.Printf("Processed %d packages\n", summary.PackagesProcessed)
 	}
-	
+
 	if summary.ModulesGenerated > 0 {
 		fmt.Printf("Generated %d FX modules\n", summary.ModulesGenerated)
 	}
-	
+
 	if summary.ParsersDiscovered > 0 {
 		fmt.Printf("Discovered %d custom parsers\n", summary.ParsersDiscovered)
 	}
-	
+
 	if summary.ControllersFound > 0 {
 		fmt.Printf("Found %d controllers\n", summary.ControllersFound)
 	}
-	
+
 	if summary.ServicesFound > 0 {
 		fmt.Printf("Found %d services\n", summary.ServicesFound)
 	}
-	
+
 	if summary.MiddlewaresFound > 0 {
 		fmt.Printf("Found %d middlewares\n", summary.MiddlewaresFound)
 	}
-	
+
 	if len(summary.GeneratedFiles) > 0 {
 		fmt.Printf("\nGenerated files:\n")
 		for _, file := range summary.GeneratedFiles {
 			fmt.Printf("  - %s\n", file)
 		}
 	}
-	
+
 	fmt.Printf("\nYour Axon application is ready to use!\n")
 }
 
