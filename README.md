@@ -82,7 +82,7 @@ func (c *Controller) GetUserPost(id int, slug string) (*Post, error) {}
 - `string` - Direct string value
 - `float64`, `float32` - Floating point conversion
 - `uuid.UUID` - UUID parsing (requires custom parser)
-- Custom types via `//axon::parser`
+- Custom types via `//axon::route_parser`
 
 **Route Flags:**
 
@@ -398,11 +398,11 @@ func NewUserRepositoryInterface(impl *UserRepository) UserRepositoryInterface {
 
 ### Custom Parameter Parsers
 
-#### `//axon::parser Type`
+#### `//axon::route_parser Type`
 Defines a custom parameter parser for route parameters.
 
 ```go
-//axon::parser uuid.UUID
+//axon::route_parser uuid.UUID
 func ParseUUID(c echo.Context, value string) (uuid.UUID, error) {
     return uuid.Parse(value)
 }
