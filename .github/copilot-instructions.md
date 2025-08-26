@@ -90,7 +90,7 @@ The framework supports these annotation types in Go comments:
 - `//axon::init` - Initialization field
 - `//axon::middleware Name` - Named middleware
 - `//axon::interface` - Interface generation
-- `//axon::parser Type` - Custom parameter parsers
+- `//axon::route_parser Type` - Custom parameter parsers
 
 ### Development Workflow
 1. Write Go code with axon:: annotations
