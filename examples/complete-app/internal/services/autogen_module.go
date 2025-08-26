@@ -5,15 +5,31 @@ package services
 
 import (
 	"context"
+
 	"go.uber.org/fx"
+
 	"github.com/toyz/axon/examples/complete-app/internal/config"
 )
 
-func NewDatabaseService(lc fx.Lifecycle, Config *config.Config) *DatabaseService {
-	service := &DatabaseService{
+// CrawlerServiceInterface is the interface for CrawlerService
+type CrawlerServiceInterface interface {
+	Start(ctx context.Context) (error)
+	Stop(ctx context.Context) (error)
+}
+
+func NewCrawlerService() *CrawlerService {
+	return &CrawlerService{
+		
+	}
+}
+
+func NewDatabaseService(Config *config.Config) *DatabaseService {
+	return &DatabaseService{
 		Config: Config,
 	}
-	
+}
+
+func initDatabaseServiceLifecycle(lc fx.Lifecycle, service *DatabaseService) {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			return service.Start(ctx)
@@ -22,8 +38,6 @@ func NewDatabaseService(lc fx.Lifecycle, Config *config.Config) *DatabaseService
 			return service.Stop(ctx)
 		},
 	})
-	
-	return service
 }
 
 // NewSessionServiceFactory creates a factory function for SessionService (Transient mode)
@@ -35,11 +49,13 @@ func NewSessionServiceFactory(DatabaseService *DatabaseService) func() *SessionS
 	}
 }
 
-func NewUserService(lc fx.Lifecycle, Config *config.Config) *UserService {
-	service := &UserService{
+func NewUserService(Config *config.Config) *UserService {
+	return &UserService{
 		Config: Config,
 	}
-	
+}
+
+func initUserServiceLifecycle(lc fx.Lifecycle, service *UserService) {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			return service.Start(ctx)
@@ -48,13 +64,19 @@ func NewUserService(lc fx.Lifecycle, Config *config.Config) *UserService {
 			return service.Stop(ctx)
 		},
 	})
-	
-	return service
+}
+
+func NewCrawlerServiceInterface(impl *CrawlerService) CrawlerServiceInterface {
+	return impl
 }
 
 // AutogenModule provides all core services in this package
 var AutogenModule = fx.Module("services",
+	fx.Provide(NewCrawlerService),
 	fx.Provide(NewDatabaseService),
+	fx.Invoke(initDatabaseServiceLifecycle),
 	fx.Provide(NewSessionServiceFactory),
 	fx.Provide(NewUserService),
+	fx.Invoke(initUserServiceLifecycle),
+	fx.Provide(NewCrawlerServiceInterface),
 )

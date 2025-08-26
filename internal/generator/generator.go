@@ -57,6 +57,11 @@ func (g *Generator) GenerateModule(metadata *models.PackageMetadata) (*models.Ge
 
 // GenerateModuleWithModule generates a complete FX module file for a package with annotations and module name
 func (g *Generator) GenerateModuleWithModule(metadata *models.PackageMetadata, moduleName string) (*models.GeneratedModule, error) {
+	return g.GenerateModuleWithPackagePaths(metadata, moduleName, nil)
+}
+
+// GenerateModuleWithPackagePaths generates a complete FX module file with package path mappings
+func (g *Generator) GenerateModuleWithPackagePaths(metadata *models.PackageMetadata, moduleName string, packagePaths map[string]string) (*models.GeneratedModule, error) {
 	if metadata == nil {
 		return nil, fmt.Errorf("metadata cannot be nil")
 	}
@@ -76,7 +81,7 @@ func (g *Generator) GenerateModuleWithModule(metadata *models.PackageMetadata, m
 		content, err = g.generateMiddlewareModule(metadata)
 	} else if len(metadata.CoreServices) > 0 || len(metadata.Interfaces) > 0 || len(metadata.Loggers) > 0 {
 		// Generate core services module (includes loggers)
-		content, err = templates.GenerateCoreServiceModuleWithModule(metadata, moduleName)
+		content, err = templates.GenerateCoreServiceModuleWithResolver(metadata, moduleName, packagePaths)
 	} else {
 		// Empty module
 		content = g.generateEmptyModule(metadata)
@@ -300,8 +305,22 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 				
 				// Only analyze path parameters for parser imports
 				if param.Source == models.ParameterSourcePath {
-					// Check if this parameter uses a custom parser
-					if parser, exists := g.parserRegistry.GetParser(param.Type); exists {
+					// Check if ParserFunc references a custom parser package
+					if param.ParserFunc != "" && strings.Contains(param.ParserFunc, "parsers.") {
+						hasCustomParsers = true
+						// Add parsers package import (avoid duplicates)
+						importPath := g.resolvePackageImportPath(moduleName, metadata.PackagePath, "parsers")
+						found := false
+						for _, existing := range analysis.Local {
+							if existing.Path == importPath {
+								found = true
+								break
+							}
+						}
+						if !found {
+							analysis.Local = append(analysis.Local, ImportSpec{Path: importPath})
+						}
+					} else if parser, exists := g.parserRegistry.GetParser(param.Type); exists {
 						// Add parser import if it's not a built-in parser
 						if parser.PackagePath != "builtin" && parser.PackagePath != "" {
 							hasCustomParsers = true
@@ -500,8 +519,44 @@ func (g *Generator) resolvePackageImportPath(moduleName, currentPackagePath, tar
 		return fmt.Sprintf("%s/internal/%s", moduleName, targetPackage)
 	}
 	
-	// Fallback to relative import
-	return fmt.Sprintf("../%s", targetPackage)
+	// If moduleName is empty, try to detect it from the current working directory
+	if cwd, err := os.Getwd(); err == nil {
+		if goModPath := filepath.Join(cwd, "go.mod"); fileExists(goModPath) {
+			if detectedModule := extractModuleNameFromGoMod(goModPath); detectedModule != "" {
+				return fmt.Sprintf("%s/internal/%s", detectedModule, targetPackage)
+			}
+		}
+	}
+	
+	// Last resort: use a reasonable default module path instead of relative imports
+	// This avoids the "relative import paths are not supported in module mode" error
+	return fmt.Sprintf("testmodule/%s", targetPackage)
+}
+
+// fileExists checks if a file exists
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// extractModuleNameFromGoMod extracts the module name from a go.mod file
+func extractModuleNameFromGoMod(goModPath string) string {
+	content, err := os.ReadFile(goModPath)
+	if err != nil {
+		return ""
+	}
+	
+	lines := strings.Split(string(content), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "module ") {
+			parts := strings.Fields(line)
+			if len(parts) >= 2 {
+				return parts[1]
+			}
+		}
+	}
+	return ""
 }
 
 // generateRouteRegistrationFunction generates a function that registers all routes with Echo

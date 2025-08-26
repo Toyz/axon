@@ -4,10 +4,12 @@
 package logging
 
 import (
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxevent"
 	"log/slog"
 	"os"
+
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxevent"
+
 	"github.com/toyz/axon/examples/complete-app/internal/config"
 )
 

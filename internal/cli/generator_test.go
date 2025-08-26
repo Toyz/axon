@@ -159,7 +159,7 @@ type User struct {
 
 		err := generator.Run(config)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "no Go packages found")
+		assert.Contains(t, err.Error(), "No Go packages found")
 	})
 
 	t.Run("no annotations found", func(t *testing.T) {

@@ -73,7 +73,7 @@ func TestGenerateModule_CoreServices(t *testing.T) {
 				StructName:   "UserService",
 				HasLifecycle: false,
 				IsManual:     false,
-				Dependencies: []string{"UserRepository"},
+				Dependencies: []models.Dependency{{Name: "UserRepository", Type: "UserRepository"}},
 			},
 		},
 	}
@@ -134,7 +134,7 @@ func TestGenerateModule_Controllers(t *testing.T) {
 						},
 					},
 				},
-				Dependencies: []string{"UserService"},
+				Dependencies: []models.Dependency{{Name: "UserService", Type: "UserService"}},
 			},
 		},
 	}
@@ -152,9 +152,10 @@ func TestGenerateModule_Controllers(t *testing.T) {
 	// Check imports
 	expectedImports := []string{
 		"\"net/http\"",
-		"\"strconv\"",
+		"\"fmt\"",
 		"\"github.com/labstack/echo/v4\"",
 		"\"go.uber.org/fx\"",
+		"\"github.com/toyz/axon/pkg/axon\"",
 	}
 	
 	for _, imp := range expectedImports {
@@ -198,7 +199,10 @@ func TestGenerateControllerProvider(t *testing.T) {
 	controller := models.ControllerMetadata{
 		Name:       "UserController",
 		StructName: "UserController",
-		Dependencies: []string{"UserService", "*Config"},
+		Dependencies: []models.Dependency{
+			{Name: "UserService", Type: "UserService"},
+			{Name: "Config", Type: "*Config"},
+		},
 	}
 	
 	result, err := generator.generateControllerProvider(controller)
@@ -212,11 +216,11 @@ func TestGenerateControllerProvider(t *testing.T) {
 	}
 	
 	// Check dependencies
-	if !strings.Contains(result, "UserService UserService") {
+	if !strings.Contains(result, "userService UserService") {
 		t.Errorf("expected UserService parameter")
 	}
 	
-	if !strings.Contains(result, "Config *Config") {
+	if !strings.Contains(result, "config *Config") {
 		t.Errorf("expected Config parameter")
 	}
 	
@@ -274,7 +278,7 @@ func TestExtractProviders(t *testing.T) {
 			{
 				Name:         "UserController",
 				StructName:   "UserController",
-				Dependencies: []string{"UserService"},
+				Dependencies: []models.Dependency{{Name: "UserService", Type: "UserService"}},
 			},
 		},
 		CoreServices: []models.CoreServiceMetadata{
@@ -283,7 +287,7 @@ func TestExtractProviders(t *testing.T) {
 				StructName:   "UserService",
 				HasLifecycle: true,
 				IsManual:     false,
-				Dependencies: []string{"UserRepository"},
+				Dependencies: []models.Dependency{{Name: "UserRepository", Type: "UserRepository"}},
 			},
 			{
 				Name:         "ConfigService",

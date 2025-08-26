@@ -10,9 +10,9 @@ import (
 	"github.com/labstack/echo/v4"
 	"go.uber.org/fx"
 	"github.com/toyz/axon/pkg/axon"
-	"github.com/toyz/axon/examples/complete-app/internal/parsers"
 
 	"github.com/toyz/axon/examples/complete-app/internal/services"
+	"github.com/toyz/axon/examples/complete-app/internal/parsers"
 	"github.com/toyz/axon/examples/complete-app/internal/models"
 	middleware "github.com/toyz/axon/examples/complete-app/internal/middleware"
 )
@@ -71,6 +71,18 @@ func handleError(c echo.Context, err error) error {
 	return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 }
 
+func NewHealthController(databaseService *services.DatabaseService) *HealthController {
+	return &HealthController{
+		DatabaseService: databaseService,
+	}
+}
+
+func NewIndexController() *IndexController {
+	return &IndexController{
+
+	}
+}
+
 func NewProductController(databaseService *services.DatabaseService) *ProductController {
 	return &ProductController{
 		DatabaseService: databaseService,
@@ -90,9 +102,85 @@ func NewUserController(userService *services.UserService) *UserController {
 	}
 }
 
-func NewHealthController(databaseService *services.DatabaseService) *HealthController {
-	return &HealthController{
-		DatabaseService: databaseService,
+func wrapHealthControllerGetHealth(handler *HealthController) echo.HandlerFunc {
+	return func(c echo.Context) error {
+
+		data, err := handler.GetHealth()
+		if err != nil {
+			return handleError(c, err)
+		}
+		return c.JSON(http.StatusOK, data)
+	}
+}
+
+func wrapHealthControllerGetReadiness(handler *HealthController) echo.HandlerFunc {
+	return func(c echo.Context) error {
+
+		data, err := handler.GetReadiness()
+		if err != nil {
+			return handleError(c, err)
+		}
+		return c.JSON(http.StatusOK, data)
+	}
+}
+
+func wrapIndexControllerIndex(handler *IndexController) echo.HandlerFunc {
+	return func(c echo.Context) error {
+
+		data, err := handler.Index(c)
+		if err != nil {
+			return handleError(c, err)
+		}
+		return c.JSON(http.StatusOK, data)
+	}
+}
+
+func wrapIndexControllerCreate(handler *IndexController) echo.HandlerFunc {
+	return func(c echo.Context) error {
+
+		data, err := handler.Create(c)
+		if err != nil {
+			return handleError(c, err)
+		}
+		return c.JSON(http.StatusOK, data)
+	}
+}
+
+func wrapIndexControllerShow(handler *IndexController) echo.HandlerFunc {
+	return func(c echo.Context) error {
+
+		data, err := handler.Show(c)
+		if err != nil {
+			return handleError(c, err)
+		}
+		return c.JSON(http.StatusOK, data)
+	}
+}
+
+func wrapIndexControllerShowFish(handler *IndexController) echo.HandlerFunc {
+	return func(c echo.Context) error {
+
+		data, err := handler.ShowFish(c)
+		if err != nil {
+			return handleError(c, err)
+		}
+		return c.JSON(http.StatusOK, data)
+	}
+}
+
+func wrapIndexControllerShowTest(handler *IndexController) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		id, err := axon.ParseString(c, c.Param("id"))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid id: %v", err))
+		}
+
+		var data interface{}
+		data, err = handler.ShowTest(c, id)
+		if err != nil {
+			return handleError(c, err)
+		}
+		return c.JSON(http.StatusOK, data)
 	}
 }
 
@@ -225,15 +313,12 @@ func wrapSessionControllerStartSession(handler *SessionController, loggingmiddle
 			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid userID: %v", err))
 		}
 
-		var response *axon.Response
-		response, err = handler.StartSession(userID)
+		var data interface{}
+		data, err = handler.StartSession(userID)
 		if err != nil {
 			return handleError(c, err)
 		}
-		if response == nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
-		}
-		return handleAxonResponse(c, response)
+		return c.JSON(http.StatusOK, data)
 	}
 
 	// Apply middlewares in order
@@ -310,14 +395,11 @@ func wrapUserControllerCreateUser(handler *UserController, authmiddleware *AuthM
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
 
-		response, err := handler.CreateUser(body)
+		data, err := handler.CreateUser(body)
 		if err != nil {
 			return handleError(c, err)
 		}
-		if response == nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
-		}
-		return handleAxonResponse(c, response)
+		return c.JSON(http.StatusOK, data)
 	}
 
 	// Apply middlewares in order
@@ -338,15 +420,12 @@ func wrapUserControllerUpdateUser(handler *UserController, authmiddleware *AuthM
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
 
-		var response *axon.Response
-		response, err = handler.UpdateUser(id, body)
+		var data interface{}
+		data, err = handler.UpdateUser(id, body)
 		if err != nil {
 			return handleError(c, err)
 		}
-		if response == nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
-		}
-		return handleAxonResponse(c, response)
+		return c.JSON(http.StatusOK, data)
 	}
 
 	// Apply middlewares in order
@@ -377,30 +456,106 @@ func wrapUserControllerDeleteUser(handler *UserController, authmiddleware *AuthM
 	return finalHandler
 }
 
-func wrapHealthControllerGetHealth(handler *HealthController) echo.HandlerFunc {
-	return func(c echo.Context) error {
-
-		data, err := handler.GetHealth()
-		if err != nil {
-			return handleError(c, err)
-		}
-		return c.JSON(http.StatusOK, data)
-	}
-}
-
-func wrapHealthControllerGetReadiness(handler *HealthController) echo.HandlerFunc {
-	return func(c echo.Context) error {
-
-		data, err := handler.GetReadiness()
-		if err != nil {
-			return handleError(c, err)
-		}
-		return c.JSON(http.StatusOK, data)
-	}
-}
-
 // RegisterRoutes registers all HTTP routes with the Echo instance
-func RegisterRoutes(e *echo.Echo, productcontroller *ProductController, sessioncontroller *SessionController, usercontroller *UserController, healthcontroller *HealthController, loggingmiddleware *LoggingMiddleware, authmiddleware *AuthMiddleware) {
+func RegisterRoutes(e *echo.Echo, healthcontroller *HealthController, indexcontroller *IndexController, productcontroller *ProductController, sessioncontroller *SessionController, usercontroller *UserController, loggingmiddleware *LoggingMiddleware, authmiddleware *AuthMiddleware) {
+	handler_healthcontrollergethealth := wrapHealthControllerGetHealth(healthcontroller)
+	e.GET("/health", handler_healthcontrollergethealth)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "GET",
+		Path:                "/health",
+		EchoPath:            "/health",
+		HandlerName:         "GetHealth",
+		ControllerName:      "HealthController",
+		PackageName:         "controllers",
+		Middlewares:         []string{},
+		MiddlewareInstances: []axon.MiddlewareInstance{},
+		ParameterTypes:      map[string]string{},
+		Handler:             handler_healthcontrollergethealth,
+	})
+	handler_healthcontrollergetreadiness := wrapHealthControllerGetReadiness(healthcontroller)
+	e.GET("/ready", handler_healthcontrollergetreadiness)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "GET",
+		Path:                "/ready",
+		EchoPath:            "/ready",
+		HandlerName:         "GetReadiness",
+		ControllerName:      "HealthController",
+		PackageName:         "controllers",
+		Middlewares:         []string{},
+		MiddlewareInstances: []axon.MiddlewareInstance{},
+		ParameterTypes:      map[string]string{},
+		Handler:             handler_healthcontrollergetreadiness,
+	})
+	handler_indexcontrollerindex := wrapIndexControllerIndex(indexcontroller)
+	e.GET("/", handler_indexcontrollerindex)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "GET",
+		Path:                "/",
+		EchoPath:            "/",
+		HandlerName:         "Index",
+		ControllerName:      "IndexController",
+		PackageName:         "controllers",
+		Middlewares:         []string{},
+		MiddlewareInstances: []axon.MiddlewareInstance{},
+		ParameterTypes:      map[string]string{},
+		Handler:             handler_indexcontrollerindex,
+	})
+	handler_indexcontrollercreate := wrapIndexControllerCreate(indexcontroller)
+	e.POST("/", handler_indexcontrollercreate)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "POST",
+		Path:                "/",
+		EchoPath:            "/",
+		HandlerName:         "Create",
+		ControllerName:      "IndexController",
+		PackageName:         "controllers",
+		Middlewares:         []string{},
+		MiddlewareInstances: []axon.MiddlewareInstance{},
+		ParameterTypes:      map[string]string{},
+		Handler:             handler_indexcontrollercreate,
+	})
+	handler_indexcontrollershow := wrapIndexControllerShow(indexcontroller)
+	e.GET("/:id", handler_indexcontrollershow)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "GET",
+		Path:                "/{id:string}",
+		EchoPath:            "/:id",
+		HandlerName:         "Show",
+		ControllerName:      "IndexController",
+		PackageName:         "controllers",
+		Middlewares:         []string{},
+		MiddlewareInstances: []axon.MiddlewareInstance{},
+		ParameterTypes:      map[string]string{},
+		Handler:             handler_indexcontrollershow,
+	})
+	handler_indexcontrollershowfish := wrapIndexControllerShowFish(indexcontroller)
+	e.GET("/:id/fish", handler_indexcontrollershowfish)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "GET",
+		Path:                "/{id}/fish",
+		EchoPath:            "/:id/fish",
+		HandlerName:         "ShowFish",
+		ControllerName:      "IndexController",
+		PackageName:         "controllers",
+		Middlewares:         []string{},
+		MiddlewareInstances: []axon.MiddlewareInstance{},
+		ParameterTypes:      map[string]string{},
+		Handler:             handler_indexcontrollershowfish,
+	})
+	handler_indexcontrollershowtest := wrapIndexControllerShowTest(indexcontroller)
+	e.GET("/:id/test", handler_indexcontrollershowtest)
+	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "GET",
+		Path:                "/{id:string}/test",
+		EchoPath:            "/:id/test",
+		HandlerName:         "ShowTest",
+		ControllerName:      "IndexController",
+		PackageName:         "controllers",
+		Middlewares:         []string{},
+		MiddlewareInstances: []axon.MiddlewareInstance{},
+		ParameterTypes:      map[string]string{"id": "string"},
+		Handler:             handler_indexcontrollershowtest,
+	})
 	handler_productcontrollergetproduct := wrapProductControllerGetProduct(productcontroller)
 	e.GET("/products/:id", handler_productcontrollergetproduct)
 	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
@@ -430,7 +585,7 @@ func RegisterRoutes(e *echo.Echo, productcontroller *ProductController, sessionc
 			Handler:  loggingmiddleware.Handle,
 			Instance: loggingmiddleware,
 		}},
-		ParameterTypes:      map[string]string{"code": "ProductCode"},
+		ParameterTypes:      map[string]string{"code": "parsers.ProductCode"},
 		Handler:             handler_productcontrollergetproductbycode,
 	})
 	handler_productcontrollergetproductsales := wrapProductControllerGetProductSales(productcontroller, authmiddleware, loggingmiddleware)
@@ -452,7 +607,7 @@ func RegisterRoutes(e *echo.Echo, productcontroller *ProductController, sessionc
 			Handler:  loggingmiddleware.Handle,
 			Instance: loggingmiddleware,
 		}},
-		ParameterTypes:      map[string]string{"dateRange": "DateRange"},
+		ParameterTypes:      map[string]string{"dateRange": "parsers.DateRange"},
 		Handler:             handler_productcontrollergetproductsales,
 	})
 	handler_productcontrollercreateproductincategory := wrapProductControllerCreateProductInCategory(productcontroller, authmiddleware)
@@ -633,41 +788,14 @@ func RegisterRoutes(e *echo.Echo, productcontroller *ProductController, sessionc
 		ParameterTypes:      map[string]string{"id": "int"},
 		Handler:             handler_usercontrollerdeleteuser,
 	})
-	handler_healthcontrollergethealth := wrapHealthControllerGetHealth(healthcontroller)
-	e.GET("/health", handler_healthcontrollergethealth)
-	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
-		Method:              "GET",
-		Path:                "/health",
-		EchoPath:            "/health",
-		HandlerName:         "GetHealth",
-		ControllerName:      "HealthController",
-		PackageName:         "controllers",
-		Middlewares:         []string{},
-		MiddlewareInstances: []axon.MiddlewareInstance{},
-		ParameterTypes:      map[string]string{},
-		Handler:             handler_healthcontrollergethealth,
-	})
-	handler_healthcontrollergetreadiness := wrapHealthControllerGetReadiness(healthcontroller)
-	e.GET("/ready", handler_healthcontrollergetreadiness)
-	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
-		Method:              "GET",
-		Path:                "/ready",
-		EchoPath:            "/ready",
-		HandlerName:         "GetReadiness",
-		ControllerName:      "HealthController",
-		PackageName:         "controllers",
-		Middlewares:         []string{},
-		MiddlewareInstances: []axon.MiddlewareInstance{},
-		ParameterTypes:      map[string]string{},
-		Handler:             handler_healthcontrollergetreadiness,
-	})
 }
 
 // AutogenModule provides all controllers and route registration in this package
 var AutogenModule = fx.Module("controllers",
+	fx.Provide(NewHealthController),
+	fx.Provide(NewIndexController),
 	fx.Provide(NewProductController),
 	fx.Provide(NewSessionController),
 	fx.Provide(NewUserController),
-	fx.Provide(NewHealthController),
 	fx.Invoke(RegisterRoutes),
 )
