@@ -278,7 +278,7 @@ The Axon framework generates the following for each package:
 The example includes custom parameter parsers for advanced type conversion:
 
 ```go
-//axon::parser uuid.UUID
+//axon::route_parser uuid.UUID
 func ParseUUID(c echo.Context, value string) (uuid.UUID, error) {
     return uuid.Parse(value)
 }
@@ -304,7 +304,7 @@ All framework features are configured through code comments using the `axon::` p
 - `//axon::inject` - Marks dependencies for injection
 - `//axon::init` - Marks fields for initialization (not injection)
 - `//axon::logger` - Marks logger services
-- `//axon::parser Type` - Defines custom parameter parsers
+- `//axon::route_parser Type` - Defines custom parameter parsers
 
 ### Dependency Injection
 The framework uses Uber FX for dependency injection. Dependencies are declared using `//axon::inject` annotations:
