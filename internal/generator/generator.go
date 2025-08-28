@@ -559,6 +559,44 @@ func extractModuleNameFromGoMod(goModPath string) string {
 	return ""
 }
 
+// analyzeMiddlewareImports analyzes imports needed for middleware module generation
+func (g *Generator) analyzeMiddlewareImports(metadata *models.PackageMetadata) ImportAnalysis {
+	analysis := ImportAnalysis{
+		StandardLibrary: []string{},
+		ThirdParty:      []string{},
+		Local:           []ImportSpec{},
+		TypeAliases:     make(map[string]string),
+	}
+	
+	// Always needed for middleware modules
+	analysis.ThirdParty = append(analysis.ThirdParty, 
+		"go.uber.org/fx",
+		"github.com/toyz/axon/pkg/axon")
+	
+	// Analyze middleware dependencies for service imports
+	addedPaths := make(map[string]bool) // Track added paths to avoid duplicates
+	for _, middleware := range metadata.Middlewares {
+		for _, dep := range middleware.Dependencies {
+			if packageName := g.extractPackageFromType(dep.Type); packageName != "" {
+				// Skip well-known packages that are already imported
+				if !g.isWellKnownPackage(packageName) {
+					// Resolve import path for the dependency package
+					importPath := g.resolvePackageImportPath("", metadata.PackagePath, packageName)
+					if !addedPaths[importPath] {
+						analysis.Local = append(analysis.Local, ImportSpec{
+							Alias: "", // No alias for dependencies
+							Path:  importPath,
+						})
+						addedPaths[importPath] = true
+					}
+				}
+			}
+		}
+	}
+	
+	return analysis
+}
+
 // generateRouteRegistrationFunction generates a function that registers all routes with Echo
 func (g *Generator) generateRouteRegistrationFunction(metadata *models.PackageMetadata) (string, error) {
 	var funcBuilder strings.Builder
@@ -658,10 +696,41 @@ func (g *Generator) generateMiddlewareModule(metadata *models.PackageMetadata) (
 	moduleBuilder.WriteString("// This file was automatically generated and should not be modified manually.\n\n")
 	moduleBuilder.WriteString(fmt.Sprintf("package %s\n\n", metadata.PackageName))
 
-	// Generate imports
+	// Analyze what imports are needed by examining middleware dependencies
+	imports := g.analyzeMiddlewareImports(metadata)
+	
+	// Generate imports section
 	moduleBuilder.WriteString("import (\n")
-	moduleBuilder.WriteString("\t\"go.uber.org/fx\"\n")
-	moduleBuilder.WriteString("\t\"github.com/toyz/axon/pkg/axon\"\n")
+	
+	// Add standard library imports
+	for _, imp := range imports.StandardLibrary {
+		moduleBuilder.WriteString(fmt.Sprintf("\t\"%s\"\n", imp))
+	}
+	
+	// Add a blank line if we have both standard and third-party imports
+	if len(imports.StandardLibrary) > 0 && len(imports.ThirdParty) > 0 {
+		moduleBuilder.WriteString("\n")
+	}
+	
+	// Add third-party imports
+	for _, imp := range imports.ThirdParty {
+		moduleBuilder.WriteString(fmt.Sprintf("\t\"%s\"\n", imp))
+	}
+	
+	// Add a blank line if we have both third-party and local imports
+	if len(imports.ThirdParty) > 0 && len(imports.Local) > 0 {
+		moduleBuilder.WriteString("\n")
+	}
+	
+	// Add local imports
+	for _, imp := range imports.Local {
+		if imp.Alias != "" {
+			moduleBuilder.WriteString(fmt.Sprintf("\t%s \"%s\"\n", imp.Alias, imp.Path))
+		} else {
+			moduleBuilder.WriteString(fmt.Sprintf("\t\"%s\"\n", imp.Path))
+		}
+	}
+	
 	moduleBuilder.WriteString(")\n\n")
 
 	// Generate middleware providers
@@ -688,12 +757,37 @@ func (g *Generator) generateMiddlewareModule(metadata *models.PackageMetadata) (
 
 // generateMiddlewareProvider generates a provider function for a middleware
 func (g *Generator) generateMiddlewareProvider(middleware models.MiddlewareMetadata) (string, error) {
-	// Use FX provider template for middleware (they all use fx.In)
+	// Convert middleware dependencies to template format
+	var dependencies []templates.DependencyData
+	var injectedDeps []templates.DependencyData
+	
+	for _, dep := range middleware.Dependencies {
+		depData := templates.DependencyData{
+			Name:      dep.Name,
+			FieldName: dep.Name, // Use same for both
+			Type:      dep.Type,
+			IsInit:    dep.IsInit,
+		}
+		dependencies = append(dependencies, depData)
+		
+		// Only add to injected deps if it's not an init dependency
+		if !dep.IsInit {
+			injectedDeps = append(injectedDeps, depData)
+		}
+	}
+
+	// Use appropriate template based on whether middleware has dependencies
 	data := templates.CoreServiceProviderData{
 		StructName:   middleware.StructName,
-		Dependencies: []templates.DependencyData{},
+		Dependencies: dependencies,
+		InjectedDeps: injectedDeps,
 		HasStart:     false,
 		HasStop:      false,
+	}
+
+	// Use the ProviderTemplate if there are dependencies, FXProviderTemplate if none
+	if len(middleware.Dependencies) > 0 {
+		return templates.ExecuteTemplate("middleware-provider", templates.ProviderTemplate, data)
 	}
 	return templates.ExecuteTemplate("fx-middleware-provider", templates.FXProviderTemplate, data)
 }

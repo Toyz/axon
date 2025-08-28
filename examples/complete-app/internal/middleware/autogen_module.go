@@ -6,11 +6,13 @@ package middleware
 import (
 	"go.uber.org/fx"
 	"github.com/toyz/axon/pkg/axon"
+
+	"github.com/toyz/axon/examples/complete-app/internal/config"
 )
 
-func NewAuthMiddleware() *AuthMiddleware {
+func NewAuthMiddleware(Config *config.Config) *AuthMiddleware {
 	return &AuthMiddleware{
-		
+		Config: Config,
 	}
 }
 func NewLoggingMiddleware() *LoggingMiddleware {

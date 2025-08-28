@@ -5,10 +5,13 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"github.com/toyz/axon/examples/complete-app/internal/config"
 )
 
 //axon::middleware AuthMiddleware
 type AuthMiddleware struct {
+	//axon::inject
+	Config *config.Config
 }
 
 // Handle implements the middleware logic for authentication
