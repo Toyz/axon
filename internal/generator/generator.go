@@ -118,28 +118,28 @@ func (g *Generator) generateControllerModuleWithModule(metadata *models.PackageM
 
 	// Analyze what imports are needed by examining the metadata
 	imports := g.analyzeRequiredImports(metadata, moduleName)
-	
+
 	// Generate imports
 	moduleBuilder.WriteString("import (\n")
-	
+
 	// Standard library imports first
 	for _, imp := range imports.StandardLibrary {
 		moduleBuilder.WriteString(fmt.Sprintf("\t\"%s\"\n", imp))
 	}
-	
+
 	if len(imports.StandardLibrary) > 0 && (len(imports.ThirdParty) > 0 || len(imports.Local) > 0) {
 		moduleBuilder.WriteString("\n")
 	}
-	
+
 	// Third party imports
 	for _, imp := range imports.ThirdParty {
 		moduleBuilder.WriteString(fmt.Sprintf("\t\"%s\"\n", imp))
 	}
-	
+
 	if len(imports.ThirdParty) > 0 && len(imports.Local) > 0 {
 		moduleBuilder.WriteString("\n")
 	}
-	
+
 	// Local imports with aliases
 	for _, importSpec := range imports.Local {
 		if importSpec.Alias != "" {
@@ -148,9 +148,9 @@ func (g *Generator) generateControllerModuleWithModule(metadata *models.PackageM
 			moduleBuilder.WriteString(fmt.Sprintf("\t\"%s\"\n", importSpec.Path))
 		}
 	}
-	
+
 	moduleBuilder.WriteString(")\n\n")
-	
+
 	// Add type aliases for imported types if needed
 	for alias, typeName := range imports.TypeAliases {
 		moduleBuilder.WriteString(fmt.Sprintf("type %s = %s\n", alias, typeName))
@@ -208,7 +208,7 @@ func (g *Generator) generateControllerProvider(controller models.ControllerMetad
 	// Convert dependencies to template data
 	var deps []templates.DependencyData
 	var injectedDeps []templates.DependencyData
-	
+
 	for _, dep := range controller.Dependencies {
 		// Use the actual field name, converted to camelCase for parameter
 		paramName := strings.ToLower(dep.Name[:1]) + dep.Name[1:]
@@ -219,7 +219,7 @@ func (g *Generator) generateControllerProvider(controller models.ControllerMetad
 			IsInit:    dep.IsInit,
 		}
 		deps = append(deps, depData)
-		
+
 		// Only add to injected deps if it's not an init dependency
 		if !dep.IsInit {
 			injectedDeps = append(injectedDeps, depData)
@@ -239,10 +239,10 @@ func (g *Generator) generateControllerProvider(controller models.ControllerMetad
 
 // ImportAnalysis represents the analyzed imports needed for code generation
 type ImportAnalysis struct {
-	StandardLibrary []string            // Standard library imports like "net/http"
-	ThirdParty      []string            // Third party imports like "github.com/labstack/echo/v4"
-	Local           []ImportSpec        // Local imports with optional aliases
-	TypeAliases     map[string]string   // Type aliases: alias -> full type name
+	StandardLibrary []string          // Standard library imports like "net/http"
+	ThirdParty      []string          // Third party imports like "github.com/labstack/echo/v4"
+	Local           []ImportSpec      // Local imports with optional aliases
+	TypeAliases     map[string]string // Type aliases: alias -> full type name
 }
 
 // ImportSpec represents an import specification
@@ -259,14 +259,14 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 		Local:           []ImportSpec{},
 		TypeAliases:     make(map[string]string),
 	}
-	
+
 	// Always needed for controllers
 	analysis.StandardLibrary = append(analysis.StandardLibrary, "net/http")
-	analysis.ThirdParty = append(analysis.ThirdParty, 
+	analysis.ThirdParty = append(analysis.ThirdParty,
 		"github.com/labstack/echo/v4",
 		"go.uber.org/fx",
 		"github.com/toyz/axon/pkg/axon")
-	
+
 	// Analyze controller dependencies for service imports
 	servicePackages := make(map[string]bool)
 	for _, controller := range metadata.Controllers {
@@ -276,7 +276,7 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 			}
 		}
 	}
-	
+
 	// Analyze route parameters for model imports and parser imports
 	modelPackages := make(map[string]bool)
 	parserPackages := make(map[string]bool)
@@ -288,7 +288,7 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 			for _, param := range route.Parameters {
 				// Resolve type alias to check for imports
 				resolvedType := axon.ResolveTypeAlias(param.Type)
-				
+
 				// Check for UUID parameters (including alias)
 				// Only add UUID import if using a custom parser, not built-in parser
 				if resolvedType == "uuid.UUID" {
@@ -302,7 +302,7 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 						hasUUIDParams = true
 					}
 				}
-				
+
 				// Only analyze path parameters for parser imports
 				if param.Source == models.ParameterSourcePath {
 					// Check if ParserFunc references a custom parser package
@@ -324,10 +324,10 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 						// Add parser import if it's not a built-in parser
 						if parser.PackagePath != "builtin" && parser.PackagePath != "" {
 							hasCustomParsers = true
-							
+
 							// Resolve import path from package path
 							importPath := g.resolvePackageImportPath(moduleName, metadata.PackagePath, filepath.Base(parser.PackagePath))
-							
+
 							// Check if this is a third-party import (contains github.com, etc.)
 							if strings.Contains(importPath, "github.com") || strings.Contains(importPath, "golang.org") || strings.Contains(importPath, "gopkg.in") {
 								// Add to third-party imports, avoiding duplicates
@@ -354,7 +354,7 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 						}
 					}
 				}
-				
+
 				// Analyze all parameter types for model imports (path, body, etc.)
 				// Skip built-in parser types since they use axon.ParseXXX functions
 				if param.Source == models.ParameterSourcePath {
@@ -363,7 +363,7 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 						continue
 					}
 				}
-				
+
 				if packageName := g.extractPackageFromType(resolvedType); packageName != "" {
 					// Skip well-known packages that are already imported
 					if !g.isWellKnownPackage(packageName) {
@@ -373,26 +373,26 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 			}
 		}
 	}
-	
+
 	// Add fmt import if custom parsers are used (for error formatting) or if controllers exist (for response handling)
 	if hasCustomParsers || len(metadata.Controllers) > 0 {
 		analysis.StandardLibrary = append(analysis.StandardLibrary, "fmt")
 	}
-	
+
 	// Add UUID import if needed
 	if hasUUIDParams {
 		analysis.ThirdParty = append(analysis.ThirdParty, "github.com/google/uuid")
 	}
-	
+
 	// Analyze middleware dependencies
 	middlewarePackages := make(map[string]bool)
 	middlewares := g.collectMiddlewareDependencies(metadata)
 	if len(middlewares) > 0 {
 		middlewarePackages["middleware"] = true
 	}
-	
+
 	// Resolve import paths for detected packages
-	
+
 	for pkg := range servicePackages {
 		importPath := g.resolvePackageImportPath(moduleName, metadata.PackagePath, pkg)
 		if !addedPaths[importPath] {
@@ -403,7 +403,7 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 			addedPaths[importPath] = true
 		}
 	}
-	
+
 	for pkg := range modelPackages {
 		importPath := g.resolvePackageImportPath(moduleName, metadata.PackagePath, pkg)
 		if !addedPaths[importPath] {
@@ -414,7 +414,7 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 			addedPaths[importPath] = true
 		}
 	}
-	
+
 	for pkg := range parserPackages {
 		importPath := g.resolvePackageImportPath(moduleName, metadata.PackagePath, pkg)
 		if !addedPaths[importPath] {
@@ -425,7 +425,7 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 			addedPaths[importPath] = true
 		}
 	}
-	
+
 	for pkg := range middlewarePackages {
 		importPath := g.resolvePackageImportPath(moduleName, metadata.PackagePath, pkg)
 		if !addedPaths[importPath] {
@@ -435,13 +435,13 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 			})
 			addedPaths[importPath] = true
 		}
-		
+
 		// Add type aliases for middleware types
 		for _, middleware := range middlewares {
 			analysis.TypeAliases[middleware] = fmt.Sprintf("%s.%s", pkg, middleware)
 		}
 	}
-	
+
 	return analysis
 }
 
@@ -459,15 +459,15 @@ func (g *Generator) extractPackageFromType(typeStr string) string {
 		}
 		return ""
 	}
-	
+
 	// Remove pointer prefix
 	typeStr = strings.TrimPrefix(typeStr, "*")
-	
+
 	// Check if it contains a package qualifier
 	if dotIndex := strings.Index(typeStr, "."); dotIndex != -1 {
 		return typeStr[:dotIndex]
 	}
-	
+
 	return ""
 }
 
@@ -481,7 +481,7 @@ func (g *Generator) isWellKnownPackage(packageName string) bool {
 		"errors":  true, // errors
 		"uuid":    true, // github.com/google/uuid (already imported in controller)
 	}
-	
+
 	return wellKnownPackages[packageName]
 }
 
@@ -493,12 +493,12 @@ func (g *Generator) resolvePackageImportPath(moduleName, currentPackagePath, tar
 		// This assumes the target package is a sibling of the current package
 		baseDir := filepath.Dir(currentPackagePath)
 		targetPackageDir := filepath.Join(baseDir, targetPackage)
-		
+
 		// Use the module resolver to build the import path
 		if importPath, err := g.moduleResolver.BuildPackagePath(moduleName, targetPackageDir); err == nil {
 			return importPath
 		}
-		
+
 		// If BuildPackagePath fails, try to construct the path manually
 		// Get current working directory
 		if currentDir, err := os.Getwd(); err == nil {
@@ -513,12 +513,12 @@ func (g *Generator) resolvePackageImportPath(moduleName, currentPackagePath, tar
 			}
 		}
 	}
-	
+
 	// Final fallback to standard internal structure
 	if moduleName != "" {
 		return fmt.Sprintf("%s/internal/%s", moduleName, targetPackage)
 	}
-	
+
 	// If moduleName is empty, try to detect it from the current working directory
 	if cwd, err := os.Getwd(); err == nil {
 		if goModPath := filepath.Join(cwd, "go.mod"); fileExists(goModPath) {
@@ -527,7 +527,7 @@ func (g *Generator) resolvePackageImportPath(moduleName, currentPackagePath, tar
 			}
 		}
 	}
-	
+
 	// Last resort: use a reasonable default module path instead of relative imports
 	// This avoids the "relative import paths are not supported in module mode" error
 	return fmt.Sprintf("testmodule/%s", targetPackage)
@@ -545,7 +545,7 @@ func extractModuleNameFromGoMod(goModPath string) string {
 	if err != nil {
 		return ""
 	}
-	
+
 	lines := strings.Split(string(content), "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -567,12 +567,12 @@ func (g *Generator) analyzeMiddlewareImports(metadata *models.PackageMetadata) I
 		Local:           []ImportSpec{},
 		TypeAliases:     make(map[string]string),
 	}
-	
+
 	// Always needed for middleware modules
-	analysis.ThirdParty = append(analysis.ThirdParty, 
+	analysis.ThirdParty = append(analysis.ThirdParty,
 		"go.uber.org/fx",
 		"github.com/toyz/axon/pkg/axon")
-	
+
 	// Analyze middleware dependencies for service imports
 	addedPaths := make(map[string]bool) // Track added paths to avoid duplicates
 	for _, middleware := range metadata.Middlewares {
@@ -593,7 +593,7 @@ func (g *Generator) analyzeMiddlewareImports(metadata *models.PackageMetadata) I
 			}
 		}
 	}
-	
+
 	return analysis
 }
 
@@ -610,15 +610,15 @@ func (g *Generator) generateRouteRegistrationFunction(metadata *models.PackageMe
 
 	// Add controller parameters
 	for _, controller := range metadata.Controllers {
-		funcBuilder.WriteString(fmt.Sprintf(", %s *%s", 
-			strings.ToLower(controller.StructName), 
+		funcBuilder.WriteString(fmt.Sprintf(", %s *%s",
+			strings.ToLower(controller.StructName),
 			controller.StructName))
 	}
 
 	// Add middleware parameters
 	for _, middleware := range middlewareDeps {
-		funcBuilder.WriteString(fmt.Sprintf(", %s *%s", 
-			strings.ToLower(middleware), 
+		funcBuilder.WriteString(fmt.Sprintf(", %s *%s",
+			strings.ToLower(middleware),
 			middleware))
 	}
 
@@ -648,7 +648,7 @@ func (g *Generator) generateRouteRegistrationFunction(metadata *models.PackageMe
 // collectMiddlewareDependencies collects all unique middleware names used across routes
 func (g *Generator) collectMiddlewareDependencies(metadata *models.PackageMetadata) []string {
 	middlewareSet := make(map[string]bool)
-	
+
 	for _, controller := range metadata.Controllers {
 		for _, route := range controller.Routes {
 			for _, middleware := range route.Middlewares {
@@ -698,30 +698,30 @@ func (g *Generator) generateMiddlewareModule(metadata *models.PackageMetadata) (
 
 	// Analyze what imports are needed by examining middleware dependencies
 	imports := g.analyzeMiddlewareImports(metadata)
-	
+
 	// Generate imports section
 	moduleBuilder.WriteString("import (\n")
-	
+
 	// Add standard library imports
 	for _, imp := range imports.StandardLibrary {
 		moduleBuilder.WriteString(fmt.Sprintf("\t\"%s\"\n", imp))
 	}
-	
+
 	// Add a blank line if we have both standard and third-party imports
 	if len(imports.StandardLibrary) > 0 && len(imports.ThirdParty) > 0 {
 		moduleBuilder.WriteString("\n")
 	}
-	
+
 	// Add third-party imports
 	for _, imp := range imports.ThirdParty {
 		moduleBuilder.WriteString(fmt.Sprintf("\t\"%s\"\n", imp))
 	}
-	
+
 	// Add a blank line if we have both third-party and local imports
 	if len(imports.ThirdParty) > 0 && len(imports.Local) > 0 {
 		moduleBuilder.WriteString("\n")
 	}
-	
+
 	// Add local imports
 	for _, imp := range imports.Local {
 		if imp.Alias != "" {
@@ -730,7 +730,7 @@ func (g *Generator) generateMiddlewareModule(metadata *models.PackageMetadata) (
 			moduleBuilder.WriteString(fmt.Sprintf("\t\"%s\"\n", imp.Path))
 		}
 	}
-	
+
 	moduleBuilder.WriteString(")\n\n")
 
 	// Generate middleware providers
@@ -760,7 +760,7 @@ func (g *Generator) generateMiddlewareProvider(middleware models.MiddlewareMetad
 	// Convert middleware dependencies to template format
 	var dependencies []templates.DependencyData
 	var injectedDeps []templates.DependencyData
-	
+
 	for _, dep := range middleware.Dependencies {
 		depData := templates.DependencyData{
 			Name:      dep.Name,
@@ -769,7 +769,7 @@ func (g *Generator) generateMiddlewareProvider(middleware models.MiddlewareMetad
 			IsInit:    dep.IsInit,
 		}
 		dependencies = append(dependencies, depData)
-		
+
 		// Only add to injected deps if it's not an init dependency
 		if !dep.IsInit {
 			injectedDeps = append(injectedDeps, depData)
@@ -797,7 +797,7 @@ func (g *Generator) generateMiddlewareRegistration(middlewares []models.Middlewa
 	var regBuilder strings.Builder
 
 	regBuilder.WriteString("func RegisterMiddlewares(")
-	
+
 	// Add parameters for each middleware
 	for i, middleware := range middlewares {
 		if i > 0 {
@@ -809,8 +809,8 @@ func (g *Generator) generateMiddlewareRegistration(middlewares []models.Middlewa
 
 	// Register each middleware with the axon registry
 	for _, middleware := range middlewares {
-		regBuilder.WriteString(fmt.Sprintf("\taxon.RegisterMiddleware(\"%s\", %s.Handle, %s)\n", 
-			middleware.Name, 
+		regBuilder.WriteString(fmt.Sprintf("\taxon.RegisterMiddleware(\"%s\", %s.Handle, %s)\n",
+			middleware.Name,
 			strings.ToLower(middleware.StructName),
 			strings.ToLower(middleware.StructName)))
 	}
@@ -895,8 +895,6 @@ func (g *Generator) extractProviders(metadata *models.PackageMetadata) []models.
 	return providers
 }
 
-
-
 // GenerateRootModule generates an autogen_root_module.go file that combines sub-package modules
 func (g *Generator) GenerateRootModule(packageName string, subModules []models.ModuleReference, outputPath string) error {
 	if len(subModules) == 0 {
@@ -952,12 +950,12 @@ func (g *Generator) GenerateRootModule(packageName string, subModules []models.M
 func extractDependencyName(depType string) string {
 	// Remove pointer prefix
 	name := strings.TrimPrefix(depType, "*")
-	
+
 	// Handle package-qualified types (e.g., "pkg.Type" -> "type")
 	if dotIndex := strings.LastIndex(name, "."); dotIndex != -1 {
 		name = name[dotIndex+1:]
 	}
-	
+
 	// Keep the original case for field names - Go struct fields are exported (PascalCase)
 	return name
 }

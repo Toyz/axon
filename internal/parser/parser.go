@@ -1180,8 +1180,30 @@ func (p *Parser) mergeParameters(pathParams, signatureParams []models.Parameter)
 
 	// Add path parameters ONLY if they exist in the method signature
 	for _, pathParam := range pathParams {
-		if sigParam, exists := signatureParamMap[pathParam.Name]; exists {
-			// Path parameter exists in method signature - use the signature parameter
+		if pathParam.Name == "*" {
+			// For wildcard parameters, find the first string parameter in signature that's not context
+			for _, sigParam := range signatureParams {
+				if sigParam.Source != models.ParameterSourceContext &&
+					sigParam.Type == "string" {
+
+					// Check if this param is already matched to another path param
+					_, alreadyMatched := pathParamMap[sigParam.Name]
+					if !alreadyMatched {
+						// Match wildcard to this string parameter - mark it as coming from wildcard
+						mergedParam := sigParam
+						mergedParam.Source = models.ParameterSourcePath
+						mergedParam.Required = true
+						mergedParam.IsCustomType = pathParam.IsCustomType
+						mergedParam.ParserFunc = pathParam.ParserFunc
+						// Mark this parameter as sourcing from wildcard by setting a special name pattern
+						mergedParam.Name = sigParam.Name + ":*"
+						merged = append(merged, mergedParam)
+						break
+					}
+				}
+			}
+		} else if sigParam, exists := signatureParamMap[pathParam.Name]; exists {
+			// Regular path parameter exists in method signature - use the signature parameter
 			// but with path parameter metadata (Required, Source, etc.)
 			mergedParam := sigParam
 			mergedParam.Source = models.ParameterSourcePath
@@ -1192,12 +1214,30 @@ func (p *Parser) mergeParameters(pathParams, signatureParams []models.Parameter)
 		}
 		// If path parameter doesn't exist in signature, don't include it
 		// The method will extract it from context manually
-	}
-
-	// Add other signature parameters that are not path parameters and not context
+	} // Add other signature parameters that are not path parameters and not context
 	for _, sigParam := range signatureParams {
 		if sigParam.Source != models.ParameterSourceContext {
-			if _, exists := pathParamMap[sigParam.Name]; !exists {
+			// Check if this parameter was matched to a path parameter
+			_, matchedToPath := pathParamMap[sigParam.Name]
+
+			// For wildcard routes, check if any path parameter was matched to this signature param
+			isWildcardMatched := false
+			for _, pathParam := range pathParams {
+				if pathParam.Name == "*" {
+					// Check if this signature param was matched to wildcard
+					for _, merged := range merged {
+						if strings.HasSuffix(merged.Name, ":*") &&
+							strings.TrimSuffix(merged.Name, ":*") == sigParam.Name {
+							isWildcardMatched = true
+							break
+						}
+					}
+					break
+				}
+			}
+
+			// Only add as body parameter if not matched to any path parameter
+			if !matchedToPath && !isWildcardMatched {
 				merged = append(merged, sigParam)
 			}
 		}

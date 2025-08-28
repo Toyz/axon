@@ -7,8 +7,6 @@ import (
 	"github.com/toyz/axon/internal/models"
 )
 
-
-
 func TestGenerateResponseHandling(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -87,19 +85,19 @@ func TestGenerateResponseHandling(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := GenerateResponseHandling(tt.route, tt.controllerName)
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Errorf("expected error but got none")
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 				return
 			}
-			
+
 			if strings.TrimSpace(result) != strings.TrimSpace(tt.expected) {
 				t.Errorf("expected:\n%s\n\ngot:\n%s", tt.expected, result)
 			}
@@ -166,7 +164,7 @@ func TestGenerateHandlerCall(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := generateHandlerCall(tt.route, tt.controllerName)
-			
+
 			if result != tt.expected {
 				t.Errorf("expected: %s, got: %s", tt.expected, result)
 			}
@@ -289,19 +287,19 @@ func TestGenerateRouteWrapper(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			registry := createTestParserRegistry()
 			result, err := GenerateRouteWrapper(tt.route, tt.controllerName, registry)
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Errorf("expected error but got none")
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 				return
 			}
-			
+
 			for _, expected := range tt.shouldContain {
 				if !strings.Contains(result, expected) {
 					t.Errorf("expected result to contain: %s\n\nActual result:\n%s", expected, result)
@@ -354,6 +352,7 @@ func TestGenerateBodyBindingCode(t *testing.T) {
 		name       string
 		parameters []models.Parameter
 		expected   string
+		method     string
 	}{
 		{
 			name: "with body parameter",
@@ -361,6 +360,7 @@ func TestGenerateBodyBindingCode(t *testing.T) {
 				{Name: "user", Type: "User", Source: models.ParameterSourceBody},
 				{Name: "id", Type: "int", Source: models.ParameterSourcePath},
 			},
+			method: "POST",
 			expected: `		var body User
 		if err := c.Bind(&body); err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
@@ -373,17 +373,19 @@ func TestGenerateBodyBindingCode(t *testing.T) {
 				{Name: "id", Type: "int", Source: models.ParameterSourcePath},
 			},
 			expected: "",
+			method:   "POST",
 		},
 		{
 			name:       "empty parameters",
 			parameters: []models.Parameter{},
 			expected:   "",
+			method:     "POST",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := generateBodyBindingCode(tt.parameters)
+			result := generateBodyBindingCode(tt.parameters, tt.method)
 			if result != tt.expected {
 				t.Errorf("expected:\n%s\n\ngot:\n%s", tt.expected, result)
 			}
