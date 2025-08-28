@@ -167,6 +167,29 @@ type {{.Name}} interface {
 }`
 )
 
+// Middleware Templates - Templates for generating middleware providers and registration
+const (
+	// MiddlewareProviderTemplate is the template for generating FX provider functions for middleware
+	MiddlewareProviderTemplate = `func New{{.StructName}}({{range $i, $dep := .InjectedDeps}}{{if $i}}, {{end}}{{$dep.Name}} {{$dep.Type}}{{end}}) *{{.StructName}} {
+	return &{{.StructName}}{
+{{range .Dependencies}}{{if .IsInit}}		{{.Name}}: {{generateInitCode .Type}},
+{{else}}		{{.Name}}: {{.Name}},
+{{end}}{{end}}	}
+}`
+
+	// GlobalMiddlewareRegistrationTemplate is the template for registering global middleware
+	GlobalMiddlewareRegistrationTemplate = `// RegisterGlobalMiddleware registers all global middleware with Echo
+func RegisterGlobalMiddleware(e *echo.Echo{{range .GlobalMiddlewares}}, {{.Name}} *{{.StructName}}{{end}}) {
+{{range .GlobalMiddlewares}}	e.Use({{.Name}}.Handle)
+{{end}}}`
+
+	// MiddlewareRegistryTemplate is the template for middleware registry functions
+	MiddlewareRegistryTemplate = `// RegisterMiddlewares registers all middleware with the axon middleware registry
+func RegisterMiddlewares({{range $i, $mw := .Middlewares}}{{if $i}}, {{end}}{{$mw.Name}} *{{$mw.StructName}}{{end}}) {
+{{range .Middlewares}}	axon.RegisterMiddlewareHandler("{{.Name}}", {{.Name}})
+{{end}}}`
+)
+
 // Module Templates - Templates for generating FX modules and related components
 const (
 	// FXLoggerAdapterTemplate is the template for generating FX logger adapter

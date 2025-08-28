@@ -636,7 +636,7 @@ func TestTypeSafeGettersIntegration(t *testing.T) {
 		t.Fatalf("failed to register builtin schemas: %v", err)
 	}
 
-	parser := NewParser(registry)
+	parser := NewParticipleParser(registry)
 	location := SourceLocation{File: "test.go", Line: 10, Column: 1}
 
 	tests := []struct {

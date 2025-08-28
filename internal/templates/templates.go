@@ -9,16 +9,17 @@ import (
 	"text/template"
 
 	"github.com/toyz/axon/internal/models"
+	"github.com/toyz/axon/pkg/axon"
 )
 
 // ParserRegistryInterface defines the interface for parser registry operations
 type ParserRegistryInterface interface {
-	RegisterParser(parser models.RouteParserMetadata) error
-	GetParser(typeName string) (models.RouteParserMetadata, bool)
+	RegisterParser(parser axon.RouteParserMetadata) error
+	GetParser(typeName string) (axon.RouteParserMetadata, bool)
 	ListParsers() []string
 	HasParser(typeName string) bool
 	Clear()
-	GetAllParsers() map[string]models.RouteParserMetadata
+	GetAllParsers() map[string]axon.RouteParserMetadata
 }
 
 // This package contains Go templates for code generation
@@ -101,6 +102,12 @@ func GenerateParameterBindingCode(parameters []models.Parameter, parserRegistry 
 	var bindingCode strings.Builder
 
 	for _, param := range parameters {
+		// Special handling for QueryMap type
+		if param.Type == "axon.QueryMap" {
+			bindingCode.WriteString(fmt.Sprintf("\t%s := axon.NewQueryMap(c)\n", param.Name))
+			continue
+		}
+
 		switch param.Source {
 		case models.ParameterSourcePath:
 			// Check if this is a wildcard parameter (marked with :* suffix)
@@ -968,4 +975,68 @@ func executeTemplate(name, templateStr string, data interface{}) (string, error)
 // ExecuteTemplate executes a Go template with the given data (exported version)
 func ExecuteTemplate(name, templateStr string, data interface{}) (string, error) {
 	return executeTemplate(name, templateStr, data)
+}
+// GenerateMiddlewareProvider generates FX provider function for middleware
+func GenerateMiddlewareProvider(middleware models.MiddlewareMetadata) (string, error) {
+	data := struct {
+		StructName   string
+		Dependencies []models.Dependency
+		InjectedDeps []models.Dependency
+	}{
+		StructName:   middleware.StructName,
+		Dependencies: middleware.Dependencies,
+		InjectedDeps: filterInjectedDependencies(middleware.Dependencies),
+	}
+
+	return executeTemplate("middleware-provider", MiddlewareProviderTemplate, data)
+}
+
+// GenerateGlobalMiddlewareRegistration generates function to register global middleware with Echo
+func GenerateGlobalMiddlewareRegistration(middlewares []models.MiddlewareMetadata) (string, error) {
+	// Filter only global middleware and sort by priority
+	var globalMiddlewares []models.MiddlewareMetadata
+	for _, mw := range middlewares {
+		if mw.IsGlobal {
+			globalMiddlewares = append(globalMiddlewares, mw)
+		}
+	}
+
+	// Sort by priority (lower number = higher priority)
+	for i := 0; i < len(globalMiddlewares)-1; i++ {
+		for j := i + 1; j < len(globalMiddlewares); j++ {
+			if globalMiddlewares[i].Priority > globalMiddlewares[j].Priority {
+				globalMiddlewares[i], globalMiddlewares[j] = globalMiddlewares[j], globalMiddlewares[i]
+			}
+		}
+	}
+
+	data := struct {
+		GlobalMiddlewares []models.MiddlewareMetadata
+	}{
+		GlobalMiddlewares: globalMiddlewares,
+	}
+
+	return executeTemplate("global-middleware-registration", GlobalMiddlewareRegistrationTemplate, data)
+}
+
+// GenerateMiddlewareRegistry generates function to register all middleware with axon registry
+func GenerateMiddlewareRegistry(middlewares []models.MiddlewareMetadata) (string, error) {
+	data := struct {
+		Middlewares []models.MiddlewareMetadata
+	}{
+		Middlewares: middlewares,
+	}
+
+	return executeTemplate("middleware-registry", MiddlewareRegistryTemplate, data)
+}
+
+// filterInjectedDependencies filters out dependencies that are initialized (IsInit=true)
+func filterInjectedDependencies(dependencies []models.Dependency) []models.Dependency {
+	var injected []models.Dependency
+	for _, dep := range dependencies {
+		if !dep.IsInit {
+			injected = append(injected, dep)
+		}
+	}
+	return injected
 }

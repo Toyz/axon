@@ -9,6 +9,7 @@ import (
 	"github.com/toyz/axon/internal/generator"
 	"github.com/toyz/axon/internal/models"
 	"github.com/toyz/axon/internal/parser"
+	"github.com/toyz/axon/pkg/axon"
 )
 
 // Generator coordinates the CLI generation process
@@ -17,7 +18,7 @@ type Generator struct {
 	moduleResolver *ModuleResolver
 	parser         parser.AnnotationParser
 	codeGenerator  generator.CodeGenerator
-	globalParsers     map[string]models.RouteParserMetadata // Global parser registry for cross-package discovery
+	globalParsers     map[string]axon.RouteParserMetadata // Global parser registry for cross-package discovery
 	globalMiddleware  map[string]models.MiddlewareMetadata  // Global middleware registry for cross-package discovery
 	reporter          *DiagnosticReporter
 	summary           GenerationSummary
@@ -32,7 +33,7 @@ func NewGenerator(verbose bool) *Generator {
 		moduleResolver: moduleResolver,
 		parser:         parser.NewParserWithReporter(reporter),
 		codeGenerator:  generator.NewGeneratorWithResolver(moduleResolver),
-		globalParsers:    make(map[string]models.RouteParserMetadata),
+		globalParsers:    make(map[string]axon.RouteParserMetadata),
 		globalMiddleware: make(map[string]models.MiddlewareMetadata),
 		reporter:         reporter,
 		summary:          GenerationSummary{GeneratedFiles: make([]string, 0)},

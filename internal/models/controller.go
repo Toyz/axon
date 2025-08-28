@@ -4,6 +4,8 @@ package models
 type ControllerMetadata struct {
 	Name         string            // name of the controller
 	StructName   string            // name of the struct
+	Prefix       string            // URL prefix for all routes in this controller
+	Middlewares  []string          // middleware names to apply to all routes in this controller
 	Routes       []RouteMetadata   // all routes defined on this controller
 	Dependencies []Dependency      // dependencies injected via fx.In
 }

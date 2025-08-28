@@ -1,10 +1,8 @@
 package parser
 
 import (
-	"bufio"
 	"fmt"
 	"go/ast"
-	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
@@ -14,17 +12,20 @@ import (
 	"github.com/toyz/axon/internal/annotations"
 	"github.com/toyz/axon/internal/models"
 	"github.com/toyz/axon/internal/registry"
+	"github.com/toyz/axon/internal/utils"
+	"github.com/toyz/axon/pkg/axon"
 )
 
 // Parser implements the AnnotationParser interface using the new annotations package
 type Parser struct {
-	fileSet                  *token.FileSet
-	middlewareRegistry       registry.MiddlewareRegistry
-	skipParserValidation     bool               // Skip custom parser validation during discovery phase
-	skipMiddlewareValidation bool               // Skip middleware validation during discovery phase
-	reporter                 DiagnosticReporter // For debug logging and error reporting
-	annotationParser         annotations.ParserEngine
-	annotationRegistry       annotations.AnnotationRegistry
+	fileReader              *utils.FileReader
+	middlewareRegistry      registry.MiddlewareRegistry
+	skipParserValidation    bool               // Skip custom parser validation during discovery phase
+	skipMiddlewareValidation bool              // Skip middleware validation during discovery phase
+	reporter                DiagnosticReporter // For debug logging and error reporting
+	annotationParser        *annotations.ParticipleParser
+	annotationRegistry      annotations.AnnotationRegistry
+	goModParser             *utils.GoModParser
 }
 
 // DiagnosticReporter interface for debug logging
@@ -41,12 +42,14 @@ func NewParser() *Parser {
 		panic(fmt.Sprintf("failed to register builtin annotation schemas: %v", err))
 	}
 
+	fileReader := utils.NewFileReader()
 	return &Parser{
-		fileSet:            token.NewFileSet(),
+		fileReader:         fileReader,
 		middlewareRegistry: registry.NewMiddlewareRegistry(),
 		reporter:           &noOpReporter{}, // Default no-op reporter for backward compatibility
-		annotationParser:   annotations.NewParser(annotationRegistry),
+		annotationParser:   annotations.NewParticipleParser(annotationRegistry),
 		annotationRegistry: annotationRegistry,
+		goModParser:        utils.NewGoModParser(fileReader),
 	}
 }
 
@@ -58,12 +61,14 @@ func NewParserWithReporter(reporter DiagnosticReporter) *Parser {
 		panic(fmt.Sprintf("failed to register builtin annotation schemas: %v", err))
 	}
 
+	fileReader := utils.NewFileReader()
 	return &Parser{
-		fileSet:            token.NewFileSet(),
+		fileReader:         fileReader,
 		middlewareRegistry: registry.NewMiddlewareRegistry(),
 		reporter:           reporter,
-		annotationParser:   annotations.NewParser(annotationRegistry),
+		annotationParser:   annotations.NewParticipleParser(annotationRegistry),
 		annotationRegistry: annotationRegistry,
+		goModParser:        utils.NewGoModParser(fileReader),
 	}
 }
 
@@ -76,9 +81,9 @@ func (n *noOpReporter) DebugSection(section string)              {}
 // ParseSource parses source code from a string for testing purposes
 func (p *Parser) ParseSource(filename, source string) (*models.PackageMetadata, error) {
 	// Parse the source code
-	file, err := parser.ParseFile(p.fileSet, filename, source, parser.ParseComments)
+	file, err := p.fileReader.ParseGoSource(filename, source)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse source: %w", err)
+		return nil, err
 	}
 
 	// Create package metadata
@@ -127,27 +132,10 @@ func (p *Parser) ParseDirectory(path string) (*models.PackageMetadata, error) {
 		return nil, fmt.Errorf("path traversal not allowed: %s", path)
 	}
 
-	// Parse all Go files in the directory
-	pkgs, err := parser.ParseDir(p.fileSet, cleanPath, nil, parser.ParseComments)
+	// Parse all Go files in the directory using cached FileReader
+	files, packageName, err := p.parseDirectoryFiles(cleanPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse directory %s: %w", cleanPath, err)
-	}
-
-	// We expect only one package per directory
-	if len(pkgs) == 0 {
-		return nil, fmt.Errorf("no Go packages found in directory %s", path)
-	}
-	if len(pkgs) > 1 {
-		return nil, fmt.Errorf("multiple packages found in directory %s", path)
-	}
-
-	// Get the single package
-	var pkg *ast.Package
-	var packageName string
-	for name, p := range pkgs {
-		pkg = p
-		packageName = name
-		break
 	}
 
 	// Create package metadata
@@ -165,11 +153,9 @@ func (p *Parser) ParseDirectory(path string) (*models.PackageMetadata, error) {
 
 	// First pass: Extract all annotations and imports from all files
 	allAnnotations := []models.Annotation{}
-	fileMap := make(map[string]*ast.File)
+	fileMap := files // Use the cached files directly
 
-	for fileName, file := range pkg.Files {
-		fileMap[fileName] = file
-
+	for fileName, file := range files {
 		// Extract imports from this file
 		imports := p.ExtractImports(file)
 		metadata.SourceImports[fileName] = imports
@@ -313,7 +299,7 @@ func (p *Parser) SetSkipMiddlewareValidation(skip bool) {
 }
 
 // ValidateCustomParsersWithRegistry implements the AnnotationParser interface
-func (p *Parser) ValidateCustomParsersWithRegistry(metadata *models.PackageMetadata, parserRegistry map[string]models.RouteParserMetadata) error {
+func (p *Parser) ValidateCustomParsersWithRegistry(metadata *models.PackageMetadata, parserRegistry map[string]axon.RouteParserMetadata) error {
 	// This method validates custom parsers - for now, return nil as the new parser handles validation internally
 	return nil
 }
@@ -338,6 +324,9 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				PackagePath:  metadata.PackagePath,
 				StructName:   annotation.Target,
 				Dependencies: annotation.Dependencies,
+				Parameters:   annotation.Parameters,
+				IsGlobal:     annotation.HasParameter("Global"),
+				Priority:     annotation.GetInt("Priority", 100), // Default priority 100
 			}
 
 			err := p.middlewareRegistry.Register(middleware.Name, middleware)
@@ -354,6 +343,8 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 			controller := models.ControllerMetadata{
 				Name:         annotation.Target,
 				StructName:   annotation.Target,
+				Prefix:       annotation.GetString("Prefix", ""),
+				Middlewares:  annotation.GetStringSlice("Middleware"),
 				Dependencies: annotation.Dependencies,
 			}
 			metadata.Controllers = append(metadata.Controllers, controller)
@@ -453,8 +444,7 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				route.Middlewares = middlewareNames
 			}
 
-			// Add flags
-			route.Flags = annotation.Flags
+			// Flags are now handled through parameters
 
 			// Find the controller this route belongs to and add it
 			p.addRouteToController(route, metadata)
@@ -465,6 +455,9 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				PackagePath:  metadata.PackagePath,
 				StructName:   annotation.Target,
 				Dependencies: annotation.Dependencies,
+				Parameters:   annotation.Parameters,
+				IsGlobal:     annotation.HasParameter("Global"),
+				Priority:     annotation.GetInt("Priority", 100), // Default priority 100
 			}
 			metadata.Middlewares = append(metadata.Middlewares, middleware)
 
@@ -475,11 +468,11 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				Dependencies: annotation.Dependencies,
 			}
 
-			// Check for Init flag (not parameter, since parameters include defaults)
-			hasInitFlag := annotation.HasFlag("Init")
+			// Check for Init parameter (now stored in Parameters map)
+			hasInitParam := annotation.HasParameter("Init")
 
-			if hasInitFlag {
-				// Enable lifecycle when -Init flag is explicitly present
+			if hasInitParam {
+				// Enable lifecycle when Init parameter is present
 				service.HasLifecycle = true
 				initMode := annotation.GetString("Init", "Same")
 				service.StartMode = initMode
@@ -548,17 +541,11 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				Dependencies: annotation.Dependencies,
 			}
 
-			// Check for Init flag (not parameter, since parameters include defaults)
-			hasInitFlag := false
-			for _, flag := range annotation.Flags {
-				if flag == "-Init" {
-					hasInitFlag = true
-					break
-				}
-			}
+			// Check for Init parameter (now stored in Parameters map)
+			hasInitParam := annotation.HasParameter("Init")
 
-			if hasInitFlag {
-				// Enable lifecycle when -Init flag is explicitly present
+			if hasInitParam {
+				// Enable lifecycle when Init parameter is present
 				logger.HasLifecycle = true
 				// Detect Start and Stop methods when lifecycle is enabled
 				file := fileMap[annotation.FileName]
@@ -603,7 +590,7 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				}
 			}
 
-			parser := models.RouteParserMetadata{
+			parser := axon.RouteParserMetadata{
 				TypeName:     typeName,
 				FunctionName: annotation.Target,
 				PackagePath:  metadata.PackagePath,
@@ -716,33 +703,8 @@ func (p *Parser) parseGoModFile(path string) (string, error) {
 		return "", fmt.Errorf("path traversal not allowed in go.mod path: %s", path)
 	}
 
-	// Ensure it's actually a go.mod file
-	if !strings.HasSuffix(cleanPath, "go.mod") {
-		return "", fmt.Errorf("file is not a go.mod file: %s", path)
-	}
-
-	file, err := os.Open(cleanPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to open go.mod file: %w", err)
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if strings.HasPrefix(line, "module ") {
-			parts := strings.Fields(line)
-			if len(parts) >= 2 {
-				return parts[1], nil
-			}
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return "", fmt.Errorf("failed to read go.mod file: %w", err)
-	}
-
-	return "", fmt.Errorf("module declaration not found in go.mod")
+	// Use the shared go.mod parser
+	return p.goModParser.ParseModuleName(cleanPath)
 }
 
 // calculatePackageImportPath calculates the full import path for a package
@@ -1263,7 +1225,19 @@ func (p *Parser) addRouteToController(route models.RouteMetadata, metadata *mode
 	// Find the controller and add the route
 	for i, controller := range metadata.Controllers {
 		if controller.Name == controllerName {
-			metadata.Controllers[i].Routes = append(metadata.Controllers[i].Routes, route)
+			// Merge controller prefix with route if prefix exists
+			if controller.Prefix != "" {
+				mergedRoute, err := p.mergeControllerPrefixWithRoute(controller, route)
+				if err != nil {
+					// Log error but don't fail - use original route
+					p.reporter.Debug("Failed to merge controller prefix: %v", err)
+					metadata.Controllers[i].Routes = append(metadata.Controllers[i].Routes, route)
+				} else {
+					metadata.Controllers[i].Routes = append(metadata.Controllers[i].Routes, mergedRoute)
+				}
+			} else {
+				metadata.Controllers[i].Routes = append(metadata.Controllers[i].Routes, route)
+			}
 			return
 		}
 	}
@@ -1481,8 +1455,8 @@ func (p *Parser) parseAnnotationCommentWithFile(comment, target string, pos toke
 	// Create source location for the new parser
 	location := annotations.SourceLocation{
 		File:   fileName,
-		Line:   p.fileSet.Position(pos).Line,
-		Column: p.fileSet.Position(pos).Column,
+		Line:   p.fileReader.GetFileSet().Position(pos).Line,
+		Column: p.fileReader.GetFileSet().Position(pos).Column,
 	}
 
 	// Parse with the new annotations parser
@@ -1521,4 +1495,142 @@ func (p *Parser) parseParameterDefinition(paramDef string, isEchoSyntax bool) (m
 		Type:   validType,
 		Source: models.ParameterSourcePath,
 	}, nil
+}
+// parseDirectoryFiles parses all Go files in a directory using cached FileReader
+func (p *Parser) parseDirectoryFiles(dirPath string) (map[string]*ast.File, string, error) {
+	// Read directory contents
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to read directory: %w", err)
+	}
+
+	files := make(map[string]*ast.File)
+	var packageName string
+	
+	// Parse each .go file using cached FileReader
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
+			continue
+		}
+		
+		filePath := filepath.Join(dirPath, entry.Name())
+		
+		// Use cached ParseGoFile instead of parsing directly
+		file, err := p.fileReader.ParseGoFile(filePath)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to parse file %s: %w", entry.Name(), err)
+		}
+		
+		// Verify all files belong to the same package
+		if packageName == "" {
+			packageName = file.Name.Name
+		} else if file.Name.Name != packageName {
+			return nil, "", fmt.Errorf("multiple packages found in directory: %s and %s", packageName, file.Name.Name)
+		}
+		
+		files[filePath] = file
+	}
+	
+	if len(files) == 0 {
+		return nil, "", fmt.Errorf("no Go files found in directory")
+	}
+	
+	return files, packageName, nil
+}
+
+// extractParametersFromPath extracts parameters from a URL path (e.g., /users/{id:int})
+func (p *Parser) extractParametersFromPath(path string) ([]models.Parameter, error) {
+	var parameters []models.Parameter
+	
+	// Find all parameter patterns like {name:type}
+	paramPattern := regexp.MustCompile(`\{([^}]+)\}`)
+	matches := paramPattern.FindAllStringSubmatch(path, -1)
+	
+	for _, match := range matches {
+		if len(match) < 2 {
+			continue
+		}
+		
+		paramDef := match[1]
+		parts := strings.Split(paramDef, ":")
+		
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid parameter format in path %s: expected {name:type}, got {%s}", path, paramDef)
+		}
+		
+		paramName := strings.TrimSpace(parts[0])
+		paramType := strings.TrimSpace(parts[1])
+		
+		// Convert type to Go type
+		goType, err := p.validateParameterType(paramType)
+		if err != nil {
+			return nil, fmt.Errorf("invalid parameter type %s in path %s: %w", paramType, path, err)
+		}
+		
+		parameter := models.Parameter{
+			Name:     paramName,
+			Type:     goType,
+			Source:   models.ParameterSourcePath,
+			Required: true,
+		}
+		
+		parameters = append(parameters, parameter)
+	}
+	
+	return parameters, nil
+}
+
+// mergeControllerPrefixWithRoute merges controller prefix parameters with route parameters
+// and handles duplicate parameter names by renaming them appropriately
+func (p *Parser) mergeControllerPrefixWithRoute(controller models.ControllerMetadata, route models.RouteMetadata) (models.RouteMetadata, error) {
+	if controller.Prefix == "" {
+		return route, nil
+	}
+	
+	// Extract parameters from controller prefix
+	prefixParams, err := p.extractParametersFromPath(controller.Prefix)
+	if err != nil {
+		return route, fmt.Errorf("failed to parse controller prefix %s: %w", controller.Prefix, err)
+	}
+	
+	// Extract parameters from route path
+	routeParams, err := p.extractParametersFromPath(route.Path)
+	if err != nil {
+		return route, fmt.Errorf("failed to parse route path %s: %w", route.Path, err)
+	}
+	
+	// Check for parameter name conflicts and resolve them
+	paramNameMap := make(map[string]string) // old name -> new name
+	usedNames := make(map[string]bool)
+	
+	// First, mark all prefix parameter names as used
+	for _, param := range prefixParams {
+		usedNames[param.Name] = true
+	}
+	
+	// Then, check route parameters for conflicts and rename if necessary
+	for i, param := range routeParams {
+		if usedNames[param.Name] {
+			// Generate a new name by prefixing with controller name
+			newName := fmt.Sprintf("%s%s", strings.ToLower(controller.Name), strings.Title(param.Name))
+			paramNameMap[param.Name] = newName
+			routeParams[i].Name = newName
+			usedNames[newName] = true
+		} else {
+			usedNames[param.Name] = true
+		}
+	}
+	
+	// Merge parameters (prefix first, then route)
+	allParams := append(prefixParams, routeParams...)
+	
+	// Merge existing route parameters (from function signature) with path parameters
+	mergedParams := p.mergeParameters(allParams, route.Parameters)
+	
+	// Update route with merged parameters and combined path
+	updatedRoute := route
+	updatedRoute.Path = controller.Prefix + route.Path
+	updatedRoute.Parameters = mergedParams
+	
+	return updatedRoute, nil
 }

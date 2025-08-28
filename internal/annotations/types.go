@@ -2,7 +2,6 @@ package annotations
 
 import (
 	"fmt"
-	"strings"
 )
 
 // AnnotationType represents the type of annotation
@@ -84,19 +83,8 @@ type ParsedAnnotation struct {
 	Type       AnnotationType         // Annotation type enum
 	Target     string                 // Target struct/function name
 	Parameters map[string]interface{} // Typed parameters
-	Flags      []string               // Boolean flags
 	Location   SourceLocation         // Source location
 	Raw        string                 // Original annotation text
-}
-
-// HasFlag checks if a flag is present
-func (p *ParsedAnnotation) HasFlag(flag string) bool {
-	for _, f := range p.Flags {
-		if strings.Contains(f, "-"+flag) {
-			return true
-		}
-	}
-	return false
 }
 
 // GetString returns a string parameter value with optional default

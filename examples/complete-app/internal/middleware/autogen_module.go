@@ -5,6 +5,7 @@ package middleware
 
 import (
 	"go.uber.org/fx"
+	"github.com/labstack/echo/v4"
 	"github.com/toyz/axon/pkg/axon"
 
 	"github.com/toyz/axon/examples/complete-app/internal/config"
@@ -15,19 +16,29 @@ func NewAuthMiddleware(Config *config.Config) *AuthMiddleware {
 		Config: Config,
 	}
 }
-func NewLoggingMiddleware() *LoggingMiddleware {
-	return &LoggingMiddleware{
-		
+func NewGlobalMiddleware() *GlobalMiddleware {
+	return &GlobalMiddleware{
 	}
 }
-func RegisterMiddlewares(authmiddleware *AuthMiddleware, loggingmiddleware *LoggingMiddleware) {
-	axon.RegisterMiddleware("AuthMiddleware", authmiddleware.Handle, authmiddleware)
-	axon.RegisterMiddleware("LoggingMiddleware", loggingmiddleware.Handle, loggingmiddleware)
+func NewLoggingMiddleware() *LoggingMiddleware {
+	return &LoggingMiddleware{
+	}
 }
-
+// RegisterMiddlewares registers all middleware with the axon middleware registry
+func RegisterMiddlewares(AuthMiddleware *AuthMiddleware, GlobalMiddleware *GlobalMiddleware, LoggingMiddleware *LoggingMiddleware) {
+	axon.RegisterMiddlewareHandler("AuthMiddleware", AuthMiddleware)
+	axon.RegisterMiddlewareHandler("GlobalMiddleware", GlobalMiddleware)
+	axon.RegisterMiddlewareHandler("LoggingMiddleware", LoggingMiddleware)
+}
+// RegisterGlobalMiddleware registers all global middleware with Echo
+func RegisterGlobalMiddleware(e *echo.Echo, GlobalMiddleware *GlobalMiddleware) {
+	e.Use(GlobalMiddleware.Handle)
+}
 // AutogenModule provides all middleware in this package
 var AutogenModule = fx.Module("middleware",
 	fx.Provide(NewAuthMiddleware),
+	fx.Provide(NewGlobalMiddleware),
 	fx.Provide(NewLoggingMiddleware),
 	fx.Invoke(RegisterMiddlewares),
+	fx.Invoke(RegisterGlobalMiddleware),
 )

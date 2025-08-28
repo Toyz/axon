@@ -8,12 +8,12 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// axon::controller
+// axon::controller -Prefix=/files
 type FileController struct{}
 
 // ServeStaticFiles handles all requests under /files/* path
 // This demonstrates wildcard route functionality
-// axon::route GET /files/{*}
+// axon::route GET /{*}
 func (c *FileController) ServeStaticFiles(ctx echo.Context, wildcardPath string) (map[string]interface{}, error) {
 	// Basic security check to prevent directory traversal
 	if strings.Contains(wildcardPath, "..") {
@@ -54,7 +54,7 @@ func (c *FileController) ServeStaticFiles(ctx echo.Context, wildcardPath string)
 
 // UploadFile handles file uploads (more specific route)
 // This demonstrates that specific routes still work alongside wildcards
-// axon::route POST /files/upload
+// axon::route POST /upload
 func (c *FileController) UploadFile() (map[string]interface{}, error) {
 	return map[string]interface{}{
 		"message": "File upload endpoint",
@@ -64,7 +64,7 @@ func (c *FileController) UploadFile() (map[string]interface{}, error) {
 
 // GetFileInfo shows information about a specific file
 // This also demonstrates specific routes working with wildcards
-// axon::route GET /files/info/{filename:string}
+// axon::route GET /finfo/{filename:string}
 func (c *FileController) GetFileInfo(filename string) (map[string]interface{}, error) {
 	return map[string]interface{}{
 		"message":  "File info endpoint",

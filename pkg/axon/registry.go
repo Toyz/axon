@@ -258,3 +258,20 @@ func ConvertAxonPathToEcho(axonPath string) string {
 	
 	return result
 }
+
+// MiddlewareHandler interface for middleware structs
+type MiddlewareHandler interface {
+	Handle(next echo.HandlerFunc) echo.HandlerFunc
+}
+
+// RegisterMiddlewareHandler registers a middleware struct that implements the Handle method
+func RegisterMiddlewareHandler(name string, middleware MiddlewareHandler) {
+	DefaultMiddlewareRegistry.RegisterMiddleware(name, middleware.Handle, middleware)
+}
+
+// RegisterGlobalMiddleware registers global middleware with Echo in priority order
+func RegisterGlobalMiddleware(e *echo.Echo, middlewares ...MiddlewareHandler) {
+	for _, mw := range middlewares {
+		e.Use(mw.Handle)
+	}
+}

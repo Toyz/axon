@@ -9,20 +9,30 @@ import (
 	"github.com/toyz/axon/pkg/axon"
 )
 
-//axon::controller
+//axon::controller -Prefix=/api/v1/users/{userId:int} -Middleware=AuthMiddleware
 type UserController struct {
 	//axon::inject
 	UserService *services.UserService
 }
 
-//axon::route GET /users
+//axon::route GET /
 func (c *UserController) GetAllUsers() ([]*models.User, error) {
 	return c.UserService.GetAllUsers()
 }
 
-//axon::route GET /users/{id:int}
-func (c *UserController) GetUser(id int) (*models.User, error) {
-	user, err := c.UserService.GetUser(id)
+//axon::route GET /search
+func (c *UserController) SearchUsers(ctx echo.Context, query axon.QueryMap) ([]*models.User, error) {
+	// Access query parameters easily
+	name := query.Get("name")
+	age := query.GetInt("age")
+	active := query.GetBool("active")
+	
+	return c.UserService.SearchUsers(name, age, active)
+}
+
+//axon::route GET /profile
+func (c *UserController) GetUser(userId int) (*models.User, error) {
+	user, err := c.UserService.GetUser(userId)
 	if err != nil {
 		// Example of using axon.HttpError for better error responses
 		return nil, axon.ErrNotFound("User not found")
