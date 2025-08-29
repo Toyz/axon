@@ -188,10 +188,10 @@ jobs:
           curl -f -H "Authorization: Bearer valid-token" http://localhost:8080/api/v1/users/
 
           echo "Testing get user by ID with auth..."
-          curl -f -H "Authorization: Bearer valid-token" http://localhost:8080/api/v1/users/profile
+          curl -f -H "Authorization: Bearer valid-token" http://localhost:8080/api/v1/users/1
 
           echo "Testing create user without auth (should fail)..."
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8080/api/v1/users/users \
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8080/api/v1/users \
             -H "Content-Type: application/json" \
             -d '{"name":"Test User","email":"test@example.com"}')
           if [ "$HTTP_CODE" = "401" ]; then
