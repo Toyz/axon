@@ -4,23 +4,26 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/toyz/axon/internal/models"
 	"github.com/toyz/axon/internal/registry"
 	"github.com/toyz/axon/internal/templates"
+	"github.com/toyz/axon/internal/utils"
 	"github.com/toyz/axon/pkg/axon"
 )
 
 // ParserRegistryInterface defines the interface for parser registry operations
 type ParserRegistryInterface interface {
-	RegisterParser(parser models.RouteParserMetadata) error
-	GetParser(typeName string) (models.RouteParserMetadata, bool)
+	RegisterParser(parser axon.RouteParserMetadata) error
+	GetParser(typeName string) (axon.RouteParserMetadata, bool)
 	ListParsers() []string
 	HasParser(typeName string) bool
 	Clear()
 	ClearCustomParsers()
-	GetAllParsers() map[string]models.RouteParserMetadata
+	GetAllParsers() map[string]axon.RouteParserMetadata
 }
 
 // Generator implements the CodeGenerator interface
@@ -65,6 +68,11 @@ func (g *Generator) GenerateModuleWithPackagePaths(metadata *models.PackageMetad
 	if metadata == nil {
 		return nil, fmt.Errorf("metadata cannot be nil")
 	}
+
+	// Sort controllers by priority (lower priority numbers first, higher numbers last)
+	sort.Slice(metadata.Controllers, func(i, j int) bool {
+		return metadata.Controllers[i].Priority < metadata.Controllers[j].Priority
+	})
 
 	// Determine the output file path
 	filePath := filepath.Join(metadata.PackagePath, "autogen_module.go")
@@ -271,7 +279,7 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 	servicePackages := make(map[string]bool)
 	for _, controller := range metadata.Controllers {
 		for _, dep := range controller.Dependencies {
-			if packageName := g.extractPackageFromType(dep.Type); packageName != "" {
+			if packageName := utils.ExtractPackageFromType(dep.Type); packageName != "" {
 				servicePackages[packageName] = true
 			}
 		}
@@ -364,7 +372,7 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 					}
 				}
 
-				if packageName := g.extractPackageFromType(resolvedType); packageName != "" {
+				if packageName := utils.ExtractPackageFromType(resolvedType); packageName != "" {
 					// Skip well-known packages that are already imported
 					if !g.isWellKnownPackage(packageName) {
 						modelPackages[packageName] = true
@@ -445,31 +453,7 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 	return analysis
 }
 
-// extractPackageFromType extracts the package name from a type string like "*services.DatabaseService"
-func (g *Generator) extractPackageFromType(typeStr string) string {
-	// Handle function types by extracting packages from return types
-	if strings.HasPrefix(typeStr, "func(") {
-		// Find the return type part after the closing parenthesis
-		if parenIndex := strings.Index(typeStr, ")"); parenIndex != -1 {
-			returnPart := strings.TrimSpace(typeStr[parenIndex+1:])
-			if returnPart != "" {
-				// Recursively extract package from return type
-				return g.extractPackageFromType(returnPart)
-			}
-		}
-		return ""
-	}
-
-	// Remove pointer prefix
-	typeStr = strings.TrimPrefix(typeStr, "*")
-
-	// Check if it contains a package qualifier
-	if dotIndex := strings.Index(typeStr, "."); dotIndex != -1 {
-		return typeStr[:dotIndex]
-	}
-
-	return ""
-}
+// extractPackageFromType is now available as utils.ExtractPackageFromType
 
 // isWellKnownPackage checks if a package is already imported or is a well-known package
 func (g *Generator) isWellKnownPackage(packageName string) bool {
@@ -480,6 +464,7 @@ func (g *Generator) isWellKnownPackage(packageName string) bool {
 		"fmt":     true, // fmt
 		"errors":  true, // errors
 		"uuid":    true, // github.com/google/uuid (already imported in controller)
+		"axon":    true, // github.com/toyz/axon/pkg/axon (already imported)
 	}
 
 	return wellKnownPackages[packageName]
@@ -539,63 +524,18 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-// extractModuleNameFromGoMod extracts the module name from a go.mod file
+// extractModuleNameFromGoMod extracts the module name from a go.mod file using the shared utility
 func extractModuleNameFromGoMod(goModPath string) string {
-	content, err := os.ReadFile(goModPath)
+	fileReader := utils.NewFileReader()
+	goModParser := utils.NewGoModParser(fileReader)
+	
+	moduleName, err := goModParser.ParseModuleName(goModPath)
 	if err != nil {
 		return ""
 	}
-
-	lines := strings.Split(string(content), "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "module ") {
-			parts := strings.Fields(line)
-			if len(parts) >= 2 {
-				return parts[1]
-			}
-		}
-	}
-	return ""
+	return moduleName
 }
 
-// analyzeMiddlewareImports analyzes imports needed for middleware module generation
-func (g *Generator) analyzeMiddlewareImports(metadata *models.PackageMetadata) ImportAnalysis {
-	analysis := ImportAnalysis{
-		StandardLibrary: []string{},
-		ThirdParty:      []string{},
-		Local:           []ImportSpec{},
-		TypeAliases:     make(map[string]string),
-	}
-
-	// Always needed for middleware modules
-	analysis.ThirdParty = append(analysis.ThirdParty,
-		"go.uber.org/fx",
-		"github.com/toyz/axon/pkg/axon")
-
-	// Analyze middleware dependencies for service imports
-	addedPaths := make(map[string]bool) // Track added paths to avoid duplicates
-	for _, middleware := range metadata.Middlewares {
-		for _, dep := range middleware.Dependencies {
-			if packageName := g.extractPackageFromType(dep.Type); packageName != "" {
-				// Skip well-known packages that are already imported
-				if !g.isWellKnownPackage(packageName) {
-					// Resolve import path for the dependency package
-					importPath := g.resolvePackageImportPath("", metadata.PackagePath, packageName)
-					if !addedPaths[importPath] {
-						analysis.Local = append(analysis.Local, ImportSpec{
-							Alias: "", // No alias for dependencies
-							Path:  importPath,
-						})
-						addedPaths[importPath] = true
-					}
-				}
-			}
-		}
-	}
-
-	return analysis
-}
 
 // generateRouteRegistrationFunction generates a function that registers all routes with Echo
 func (g *Generator) generateRouteRegistrationFunction(metadata *models.PackageMetadata) (string, error) {
@@ -624,19 +564,29 @@ func (g *Generator) generateRouteRegistrationFunction(metadata *models.PackageMe
 
 	funcBuilder.WriteString(") {\n")
 
-	// Generate route registrations
+	// Generate route registrations - group by controller
 	for _, controller := range metadata.Controllers {
 		controllerVar := strings.ToLower(controller.StructName)
+		
+		// Treat all controllers uniformly - use group approach
+		var groupVar string
+		if controller.Prefix != "" {
+			// Create Echo group with prefix
+			groupVar = fmt.Sprintf("%sGroup", controllerVar)
+			echoPrefix := g.convertToEchoPath(controller.Prefix)
+			funcBuilder.WriteString(fmt.Sprintf("\t%s := e.Group(\"%s\")\n", groupVar, echoPrefix))
+		} else {
+			// No prefix, use base Echo instance as the "group"
+			groupVar = "e"
+		}
+		
+		// Register routes on the group (or base Echo instance)
 		for _, route := range controller.Routes {
-			registration, err := templates.GenerateRouteRegistration(route, controller.StructName, route.Middlewares)
+			registration, err := g.generateGroupRouteRegistration(route, controller, groupVar, metadata.PackageName)
 			if err != nil {
 				return "", fmt.Errorf("failed to generate registration for route %s: %w", route.HandlerName, err)
 			}
-			// Replace PACKAGE_NAME placeholder with actual package name
-			registration = strings.ReplaceAll(registration, "PACKAGE_NAME", metadata.PackageName)
-			// Replace the controller variable name in the function call
-			registration = strings.ReplaceAll(registration, fmt.Sprintf("(%s", controller.StructName), fmt.Sprintf("(%s", controllerVar))
-			funcBuilder.WriteString(fmt.Sprintf("\t%s\n", registration))
+			funcBuilder.WriteString(registration)
 		}
 	}
 
@@ -689,158 +639,11 @@ func (g *Generator) generateControllerModuleVariable(metadata *models.PackageMet
 
 // generateMiddlewareModule generates a module file for packages with middleware
 func (g *Generator) generateMiddlewareModule(metadata *models.PackageMetadata) (string, error) {
-	var moduleBuilder strings.Builder
-
-	// Generate package declaration with DO NOT EDIT header
-	moduleBuilder.WriteString("// Code generated by Axon framework. DO NOT EDIT.\n")
-	moduleBuilder.WriteString("// This file was automatically generated and should not be modified manually.\n\n")
-	moduleBuilder.WriteString(fmt.Sprintf("package %s\n\n", metadata.PackageName))
-
-	// Analyze what imports are needed by examining middleware dependencies
-	imports := g.analyzeMiddlewareImports(metadata)
-
-	// Generate imports section
-	moduleBuilder.WriteString("import (\n")
-
-	// Add standard library imports
-	for _, imp := range imports.StandardLibrary {
-		moduleBuilder.WriteString(fmt.Sprintf("\t\"%s\"\n", imp))
-	}
-
-	// Add a blank line if we have both standard and third-party imports
-	if len(imports.StandardLibrary) > 0 && len(imports.ThirdParty) > 0 {
-		moduleBuilder.WriteString("\n")
-	}
-
-	// Add third-party imports
-	for _, imp := range imports.ThirdParty {
-		moduleBuilder.WriteString(fmt.Sprintf("\t\"%s\"\n", imp))
-	}
-
-	// Add a blank line if we have both third-party and local imports
-	if len(imports.ThirdParty) > 0 && len(imports.Local) > 0 {
-		moduleBuilder.WriteString("\n")
-	}
-
-	// Add local imports
-	for _, imp := range imports.Local {
-		if imp.Alias != "" {
-			moduleBuilder.WriteString(fmt.Sprintf("\t%s \"%s\"\n", imp.Alias, imp.Path))
-		} else {
-			moduleBuilder.WriteString(fmt.Sprintf("\t\"%s\"\n", imp.Path))
-		}
-	}
-
-	moduleBuilder.WriteString(")\n\n")
-
-	// Generate middleware providers
-	for _, middleware := range metadata.Middlewares {
-		providerCode, err := g.generateMiddlewareProvider(middleware)
-		if err != nil {
-			return "", fmt.Errorf("failed to generate provider for middleware %s: %w", middleware.Name, err)
-		}
-		moduleBuilder.WriteString(providerCode)
-		moduleBuilder.WriteString("\n")
-	}
-
-	// Generate middleware registration function
-	registrationCode := g.generateMiddlewareRegistration(metadata.Middlewares)
-	moduleBuilder.WriteString(registrationCode)
-	moduleBuilder.WriteString("\n")
-
-	// Generate module variable
-	moduleVar := g.generateMiddlewareModuleVariable(metadata)
-	moduleBuilder.WriteString(moduleVar)
-
-	return moduleBuilder.String(), nil
+	// Use the unified template system with ImportManager
+	return templates.GenerateMiddlewareModule(metadata)
 }
 
-// generateMiddlewareProvider generates a provider function for a middleware
-func (g *Generator) generateMiddlewareProvider(middleware models.MiddlewareMetadata) (string, error) {
-	// Convert middleware dependencies to template format
-	var dependencies []templates.DependencyData
-	var injectedDeps []templates.DependencyData
-
-	for _, dep := range middleware.Dependencies {
-		depData := templates.DependencyData{
-			Name:      dep.Name,
-			FieldName: dep.Name, // Use same for both
-			Type:      dep.Type,
-			IsInit:    dep.IsInit,
-		}
-		dependencies = append(dependencies, depData)
-
-		// Only add to injected deps if it's not an init dependency
-		if !dep.IsInit {
-			injectedDeps = append(injectedDeps, depData)
-		}
-	}
-
-	// Use appropriate template based on whether middleware has dependencies
-	data := templates.CoreServiceProviderData{
-		StructName:   middleware.StructName,
-		Dependencies: dependencies,
-		InjectedDeps: injectedDeps,
-		HasStart:     false,
-		HasStop:      false,
-	}
-
-	// Use the ProviderTemplate if there are dependencies, FXProviderTemplate if none
-	if len(middleware.Dependencies) > 0 {
-		return templates.ExecuteTemplate("middleware-provider", templates.ProviderTemplate, data)
-	}
-	return templates.ExecuteTemplate("fx-middleware-provider", templates.FXProviderTemplate, data)
-}
-
-// generateMiddlewareRegistration generates the middleware registration function
-func (g *Generator) generateMiddlewareRegistration(middlewares []models.MiddlewareMetadata) string {
-	var regBuilder strings.Builder
-
-	regBuilder.WriteString("func RegisterMiddlewares(")
-
-	// Add parameters for each middleware
-	for i, middleware := range middlewares {
-		if i > 0 {
-			regBuilder.WriteString(", ")
-		}
-		regBuilder.WriteString(fmt.Sprintf("%s *%s", strings.ToLower(middleware.StructName), middleware.StructName))
-	}
-	regBuilder.WriteString(") {\n")
-
-	// Register each middleware with the axon registry
-	for _, middleware := range middlewares {
-		regBuilder.WriteString(fmt.Sprintf("\taxon.RegisterMiddleware(\"%s\", %s.Handle, %s)\n",
-			middleware.Name,
-			strings.ToLower(middleware.StructName),
-			strings.ToLower(middleware.StructName)))
-	}
-
-	regBuilder.WriteString("}\n")
-
-	return regBuilder.String()
-}
-
-// generateMiddlewareModuleVariable generates the FX module variable for middleware
-func (g *Generator) generateMiddlewareModuleVariable(metadata *models.PackageMetadata) string {
-	var moduleBuilder strings.Builder
-
-	moduleBuilder.WriteString("// AutogenModule provides all middleware in this package\n")
-	moduleBuilder.WriteString("var AutogenModule = fx.Module(\"")
-	moduleBuilder.WriteString(metadata.PackageName)
-	moduleBuilder.WriteString("\",\n")
-
-	// Add middleware providers
-	for _, middleware := range metadata.Middlewares {
-		moduleBuilder.WriteString(fmt.Sprintf("\tfx.Provide(New%s),\n", middleware.StructName))
-	}
-
-	// Add middleware registration as an invoke
-	moduleBuilder.WriteString("\tfx.Invoke(RegisterMiddlewares),\n")
-
-	moduleBuilder.WriteString(")\n")
-
-	return moduleBuilder.String()
-}
+// Removed old inline middleware generation functions - now using templates
 
 // generateEmptyModule generates an empty module for packages with no annotations
 func (g *Generator) generateEmptyModule(metadata *models.PackageMetadata) string {
@@ -938,7 +741,14 @@ func (g *Generator) GenerateRootModule(packageName string, subModules []models.M
 		return fmt.Errorf("failed to create directory for root module file: %w", err)
 	}
 
-	err = os.WriteFile(outputPath, []byte(rootBuilder.String()), 0644)
+	// Format the generated code before writing
+	formattedCode, err := utils.FormatGoCodeString(rootBuilder.String())
+	if err != nil {
+		// If formatting fails, write the unformatted code with a warning
+		formattedCode = rootBuilder.String()
+	}
+
+	err = os.WriteFile(outputPath, []byte(formattedCode), 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write root module file: %w", err)
 	}
@@ -946,19 +756,6 @@ func (g *Generator) GenerateRootModule(packageName string, subModules []models.M
 	return nil
 }
 
-// extractDependencyName extracts a variable name from a dependency type
-func extractDependencyName(depType string) string {
-	// Remove pointer prefix
-	name := strings.TrimPrefix(depType, "*")
-
-	// Handle package-qualified types (e.g., "pkg.Type" -> "type")
-	if dotIndex := strings.LastIndex(name, "."); dotIndex != -1 {
-		name = name[dotIndex+1:]
-	}
-
-	// Keep the original case for field names - Go struct fields are exported (PascalCase)
-	return name
-}
 
 // generateResponseHelperFunctions generates shared helper functions for response handling
 func (g *Generator) generateResponseHelperFunctions() string {
@@ -1017,4 +814,83 @@ func handleError(c echo.Context, err error) error {
 // GetParserRegistry returns the parser registry for cross-package parser discovery
 func (g *Generator) GetParserRegistry() ParserRegistryInterface {
 	return g.parserRegistry
+}
+// convertToEchoPath converts Axon path format to Echo path format
+func (g *Generator) convertToEchoPath(axonPath string) string {
+	// Convert {param:type} to :param
+	re := regexp.MustCompile(`\{([^:}]+):[^}]+\}`)
+	return re.ReplaceAllString(axonPath, ":$1")
+}
+
+// generateGroupRouteRegistration generates route registration for Echo groups
+func (g *Generator) generateGroupRouteRegistration(route models.RouteMetadata, controller models.ControllerMetadata, groupVar, packageName string) (string, error) {
+	var regBuilder strings.Builder
+	
+	controllerVar := strings.ToLower(controller.StructName)
+	handlerVar := fmt.Sprintf("handler_%s%s", controllerVar, strings.ToLower(route.HandlerName))
+	
+	// Generate handler wrapper
+	wrapperFunc := fmt.Sprintf("wrap%s%s", controller.StructName, route.HandlerName)
+	
+	// Combine controller middleware and route middleware
+	allMiddlewares := append([]string{}, controller.Middlewares...)
+	allMiddlewares = append(allMiddlewares, route.Middlewares...)
+	
+	// Generate handler wrapper (middleware is passed to Echo route, not wrapper)
+	regBuilder.WriteString(fmt.Sprintf("\t%s := %s(%s)\n", handlerVar, wrapperFunc, controllerVar))
+	
+	// Register route on group (path is relative to group prefix)
+	routePath := route.Path
+	if controller.Prefix != "" {
+		// Remove controller prefix from route path since group already has it
+		if strings.HasPrefix(route.Path, controller.Prefix) {
+			routePath = strings.TrimPrefix(route.Path, controller.Prefix)
+			if routePath == "" {
+				routePath = "/"
+			}
+		}
+	}
+	
+	echoPath := g.convertToEchoPath(routePath)
+	
+	// Build middleware list for this route
+	if len(allMiddlewares) > 0 {
+		middlewareList := make([]string, len(allMiddlewares))
+		for i, mw := range allMiddlewares {
+			middlewareList[i] = fmt.Sprintf("%s.Handle", strings.ToLower(mw))
+		}
+		regBuilder.WriteString(fmt.Sprintf("\t%s.%s(\"%s\", %s, %s)\n", groupVar, route.Method, echoPath, handlerVar, strings.Join(middlewareList, ", ")))
+	} else {
+		regBuilder.WriteString(fmt.Sprintf("\t%s.%s(\"%s\", %s)\n", groupVar, route.Method, echoPath, handlerVar))
+	}
+	
+	// Generate route registry registration
+	regBuilder.WriteString(fmt.Sprintf("\taxon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{\n"))
+	regBuilder.WriteString(fmt.Sprintf("\t\tMethod:         \"%s\",\n", route.Method))
+	regBuilder.WriteString(fmt.Sprintf("\t\tPath:           \"%s\",\n", route.Path))
+	regBuilder.WriteString(fmt.Sprintf("\t\tEchoPath:       \"%s\",\n", g.convertToEchoPath(route.Path)))
+	regBuilder.WriteString(fmt.Sprintf("\t\tHandlerName:    \"%s\",\n", route.HandlerName))
+	regBuilder.WriteString(fmt.Sprintf("\t\tControllerName: \"%s\",\n", controller.StructName))
+	regBuilder.WriteString(fmt.Sprintf("\t\tPackageName:    \"%s\",\n", packageName))
+	
+	// Add middleware info (controller + route middlewares)
+	if len(allMiddlewares) > 0 {
+		regBuilder.WriteString("\t\tMiddlewares:    []string{")
+		for i, mw := range allMiddlewares {
+			if i > 0 {
+				regBuilder.WriteString(", ")
+			}
+			regBuilder.WriteString(fmt.Sprintf("\"%s\"", mw))
+		}
+		regBuilder.WriteString("},\n")
+	} else {
+		regBuilder.WriteString("\t\tMiddlewares:    []string{},\n")
+	}
+	
+	regBuilder.WriteString("\t\tMiddlewareInstances: []axon.MiddlewareInstance{},\n") // TODO: Add middleware instances
+	regBuilder.WriteString("\t\tParameterTypes:      map[string]string{},\n") // TODO: Add parameter types
+	regBuilder.WriteString(fmt.Sprintf("\t\tHandler:             %s,\n", handlerVar))
+	regBuilder.WriteString("\t})\n")
+	
+	return regBuilder.String(), nil
 }

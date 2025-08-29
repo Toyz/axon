@@ -3,13 +3,14 @@ package templates
 import (
 	"fmt"
 	"go/ast"
-	"go/parser"
-	"go/token"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+
+	"github.com/toyz/axon/internal/utils"
 )
 
 // Pre-compiled regex patterns for performance
@@ -473,6 +474,15 @@ func (im *ImportManager) isImportUsed(imp Import, code string) bool {
 		if strings.Contains(packageName, ".") {
 			packageName = strings.Split(packageName, ".")[0]
 		}
+
+		// Handle versioned packages like "github.com/labstack/echo/v4" -> "echo"
+		if strings.HasPrefix(packageName, "v") && len(packageName) > 1 {
+			// Check if it's a version (v1, v2, etc.)
+			if _, err := strconv.Atoi(packageName[1:]); err == nil && len(parts) >= 2 {
+				// Use the second-to-last part as package name
+				packageName = parts[len(parts)-2]
+			}
+		}
 	}
 
 	// Use simple string matching for better performance instead of regex
@@ -656,54 +666,25 @@ func extractModulePath(goModPath string, moduleRoot string) (string, error) {
 		return "", fmt.Errorf("invalid go.mod path: must be within module root and named go.mod")
 	}
 
-	content, err := os.ReadFile(cleanGoModPath)
+	// Use the shared go.mod parser utility
+	fileReader := utils.NewFileReader()
+	goModParser := utils.NewGoModParser(fileReader)
+	
+	modulePath, err := goModParser.ParseModuleName(cleanGoModPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to read go.mod: %w", err)
+		return "", fmt.Errorf("failed to parse go.mod: %w", err)
 	}
 
-	// Parse go.mod to extract module path
-	lines := strings.Split(string(content), "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "module ") {
-			parts := strings.Fields(line)
-			if len(parts) >= 2 {
-				return parts[1], nil
-			}
-		}
-	}
-
-	return "", fmt.Errorf("module declaration not found in go.mod")
+	return modulePath, nil
 }
 
 // ExtractImportsFromFile extracts imports from a Go source file
 func ExtractImportsFromFile(filename string) ([]Import, error) {
-	// Validate and sanitize the filename
-	cleanFilename := filepath.Clean(filename)
-
-	// Validate that the path is within the current working directory
-	wd, err := os.Getwd()
+	// Use the common FileReader for consistent file handling
+	fileReader := utils.NewFileReader()
+	file, err := fileReader.ParseGoFile(filename)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get working directory: %w", err)
-	}
-
-	rel, err := filepath.Rel(wd, cleanFilename)
-	if err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
-		return nil, fmt.Errorf("invalid filename: directory traversal not allowed")
-	}
-
-	// Validate that it's a Go file
-	if filepath.Ext(cleanFilename) != ".go" {
-		return nil, fmt.Errorf("invalid file: must be a .go file")
-	}
-
-	// Use only the base filename for error reporting to avoid path disclosure
-	baseFilename := filepath.Base(cleanFilename)
-
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, cleanFilename, nil, parser.ParseComments)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse file %s: %w", baseFilename, err)
+		return nil, err
 	}
 
 	var imports []Import

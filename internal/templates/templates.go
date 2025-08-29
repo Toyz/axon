@@ -9,16 +9,18 @@ import (
 	"text/template"
 
 	"github.com/toyz/axon/internal/models"
+	"github.com/toyz/axon/internal/utils"
+	"github.com/toyz/axon/pkg/axon"
 )
 
 // ParserRegistryInterface defines the interface for parser registry operations
 type ParserRegistryInterface interface {
-	RegisterParser(parser models.RouteParserMetadata) error
-	GetParser(typeName string) (models.RouteParserMetadata, bool)
+	RegisterParser(parser axon.RouteParserMetadata) error
+	GetParser(typeName string) (axon.RouteParserMetadata, bool)
 	ListParsers() []string
 	HasParser(typeName string) bool
 	Clear()
-	GetAllParsers() map[string]models.RouteParserMetadata
+	GetAllParsers() map[string]axon.RouteParserMetadata
 }
 
 // This package contains Go templates for code generation
@@ -101,6 +103,12 @@ func GenerateParameterBindingCode(parameters []models.Parameter, parserRegistry 
 	var bindingCode strings.Builder
 
 	for _, param := range parameters {
+		// Special handling for QueryMap type
+		if param.Type == "axon.QueryMap" {
+			bindingCode.WriteString(fmt.Sprintf("\t%s := axon.NewQueryMap(c)\n", param.Name))
+			continue
+		}
+
 		switch param.Source {
 		case models.ParameterSourcePath:
 			// Check if this is a wildcard parameter (marked with :* suffix)
@@ -226,63 +234,6 @@ type ImportAnalysis struct {
 	ThirdParty   []string        // third-party imports needed
 }
 
-// analyzeRequiredImports analyzes metadata to determine what imports are needed
-func analyzeRequiredImports(metadata *models.PackageMetadata) ImportAnalysis {
-	analysis := ImportAnalysis{
-		Dependencies: make(map[string]bool),
-		StandardLib:  []string{},
-		ThirdParty:   []string{},
-	}
-
-	// Analyze core services
-	for _, service := range metadata.CoreServices {
-		if service.HasLifecycle {
-			analysis.NeedsContext = true
-		}
-
-		// Analyze dependencies for imports
-		for _, dep := range service.Dependencies {
-			if packagePath := extractPackageFromType(dep.Type); packagePath != "" {
-				analysis.Dependencies[packagePath] = true
-			}
-		}
-	}
-
-	// Analyze loggers
-	for _, logger := range metadata.Loggers {
-		if logger.HasLifecycle {
-			analysis.NeedsContext = true
-		}
-		analysis.NeedsLogger = true
-
-		// Analyze dependencies for imports
-		for _, dep := range logger.Dependencies {
-			if packagePath := extractPackageFromType(dep.Type); packagePath != "" {
-				analysis.Dependencies[packagePath] = true
-			}
-		}
-	}
-
-	// Analyze interfaces
-	for _, iface := range metadata.Interfaces {
-		for _, method := range iface.Methods {
-			// Analyze parameters
-			for _, param := range method.Parameters {
-				if packagePath := extractPackageFromType(param.Type); packagePath != "" {
-					analysis.Dependencies[packagePath] = true
-				}
-			}
-			// Analyze return types
-			for _, ret := range method.Returns {
-				if packagePath := extractPackageFromType(ret); packagePath != "" {
-					analysis.Dependencies[packagePath] = true
-				}
-			}
-		}
-	}
-
-	return analysis
-}
 
 // Note: Removed resolveImportPath and buildModuleImportPath functions
 // These were making assumptions about project structure.
@@ -355,49 +306,7 @@ func isStandardLibraryPackage(packageName string) bool {
 	return false
 }
 
-// extractPackageFromType extracts the package name from a type string like "*config.Config"
-func extractPackageFromType(typeStr string) string {
-	// Remove pointer prefix
-	typeStr = strings.TrimPrefix(typeStr, "*")
-
-	// Handle complex types like maps, slices, channels
-	if strings.HasPrefix(typeStr, "map[") {
-		// For maps, extract package from the value type
-		// Find the closing bracket of the key type
-		bracketCount := 0
-		valueStart := -1
-		for i, char := range typeStr {
-			if char == '[' {
-				bracketCount++
-			} else if char == ']' {
-				bracketCount--
-				if bracketCount == 0 {
-					valueStart = i + 1
-					break
-				}
-			}
-		}
-		if valueStart > 0 && valueStart < len(typeStr) {
-			valueType := typeStr[valueStart:]
-			return extractPackageFromType(valueType) // Recursive call for value type
-		}
-	} else if strings.HasPrefix(typeStr, "[]") {
-		// For slices, extract package from the element type
-		elementType := typeStr[2:]
-		return extractPackageFromType(elementType) // Recursive call for element type
-	} else if strings.HasPrefix(typeStr, "chan ") {
-		// For channels, extract package from the element type
-		elementType := typeStr[5:]
-		return extractPackageFromType(elementType) // Recursive call for element type
-	}
-
-	// For simple types, check if it contains a package qualifier
-	if dotIndex := strings.Index(typeStr, "."); dotIndex != -1 {
-		return typeStr[:dotIndex]
-	}
-
-	return ""
-}
+// extractPackageFromType is now available as utils.ExtractPackageFromType
 
 // extractParameterName extracts a parameter name from a type string
 func extractParameterName(typeStr string) string {
@@ -754,18 +663,7 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 }
 
 // extractDependencyName extracts a variable name from a dependency type
-func extractDependencyName(depType string) string {
-	// Remove pointer prefix
-	name := strings.TrimPrefix(depType, "*")
-
-	// Handle package-qualified types (e.g., "pkg.Type" -> "type")
-	if dotIndex := strings.LastIndex(name, "."); dotIndex != -1 {
-		name = name[dotIndex+1:]
-	}
-
-	// Keep the original case for field names - Go struct fields are exported (PascalCase)
-	return name
-}
+// extractDependencyName is now available as utils.ExtractDependencyName
 
 // InterfaceData represents data needed for interface generation
 type InterfaceData struct {
@@ -968,4 +866,199 @@ func executeTemplate(name, templateStr string, data interface{}) (string, error)
 // ExecuteTemplate executes a Go template with the given data (exported version)
 func ExecuteTemplate(name, templateStr string, data interface{}) (string, error) {
 	return executeTemplate(name, templateStr, data)
+}
+// GenerateMiddlewareProvider generates FX provider function for middleware
+func GenerateMiddlewareProvider(middleware models.MiddlewareMetadata) (string, error) {
+	data := struct {
+		StructName   string
+		Dependencies []models.Dependency
+		InjectedDeps []models.Dependency
+	}{
+		StructName:   middleware.StructName,
+		Dependencies: middleware.Dependencies,
+		InjectedDeps: filterInjectedDependencies(middleware.Dependencies),
+	}
+
+	return executeTemplate("middleware-provider", MiddlewareProviderTemplate, data)
+}
+
+// GenerateGlobalMiddlewareRegistration generates function to register global middleware with Echo
+func GenerateGlobalMiddlewareRegistration(middlewares []models.MiddlewareMetadata) (string, error) {
+	// Filter only global middleware and sort by priority
+	var globalMiddlewares []models.MiddlewareMetadata
+	for _, mw := range middlewares {
+		if mw.IsGlobal {
+			globalMiddlewares = append(globalMiddlewares, mw)
+		}
+	}
+
+	// Sort by priority (lower number = higher priority)
+	for i := 0; i < len(globalMiddlewares)-1; i++ {
+		for j := i + 1; j < len(globalMiddlewares); j++ {
+			if globalMiddlewares[i].Priority > globalMiddlewares[j].Priority {
+				globalMiddlewares[i], globalMiddlewares[j] = globalMiddlewares[j], globalMiddlewares[i]
+			}
+		}
+	}
+
+	data := struct {
+		GlobalMiddlewares []models.MiddlewareMetadata
+	}{
+		GlobalMiddlewares: globalMiddlewares,
+	}
+
+	return executeTemplate("global-middleware-registration", GlobalMiddlewareRegistrationTemplate, data)
+}
+
+// GenerateMiddlewareRegistry generates function to register all middleware with axon registry
+func GenerateMiddlewareRegistry(middlewares []models.MiddlewareMetadata) (string, error) {
+	data := struct {
+		Middlewares []models.MiddlewareMetadata
+	}{
+		Middlewares: middlewares,
+	}
+
+	return executeTemplate("middleware-registry", MiddlewareRegistryTemplate, data)
+}
+
+// GenerateMiddlewareModule generates a complete middleware module using ImportManager
+func GenerateMiddlewareModule(metadata *models.PackageMetadata) (string, error) {
+	var contentBuilder strings.Builder
+
+	// Generate all content first (without imports)
+	
+	// Generate middleware providers
+	for _, middleware := range metadata.Middlewares {
+		providerCode, err := GenerateMiddlewareProvider(middleware)
+		if err != nil {
+			return "", fmt.Errorf("failed to generate provider for middleware %s: %w", middleware.Name, err)
+		}
+		contentBuilder.WriteString(providerCode)
+		contentBuilder.WriteString("\n")
+	}
+
+	// Generate middleware registration function
+	registrationCode, err := GenerateMiddlewareRegistry(metadata.Middlewares)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate middleware registration: %w", err)
+	}
+	contentBuilder.WriteString(registrationCode)
+	contentBuilder.WriteString("\n")
+
+	// Generate global middleware registration if there are global middlewares
+	hasGlobalMiddleware := false
+	for _, mw := range metadata.Middlewares {
+		if mw.IsGlobal {
+			hasGlobalMiddleware = true
+			break
+		}
+	}
+
+	if hasGlobalMiddleware {
+		globalRegistrationCode, err := GenerateGlobalMiddlewareRegistration(metadata.Middlewares)
+		if err != nil {
+			return "", fmt.Errorf("failed to generate global middleware registration: %w", err)
+		}
+		contentBuilder.WriteString(globalRegistrationCode)
+		contentBuilder.WriteString("\n")
+	}
+
+	// Generate module variable
+	contentBuilder.WriteString("// AutogenModule provides all middleware in this package\n")
+	contentBuilder.WriteString(fmt.Sprintf("var AutogenModule = fx.Module(\"%s\",\n", metadata.PackageName))
+
+	// Add middleware providers
+	for _, middleware := range metadata.Middlewares {
+		contentBuilder.WriteString(fmt.Sprintf("\tfx.Provide(New%s),\n", middleware.StructName))
+	}
+
+	// Add middleware registration as an invoke
+	contentBuilder.WriteString("\tfx.Invoke(RegisterMiddlewares),\n")
+
+	// Add global middleware registration if there are global middlewares
+	if hasGlobalMiddleware {
+		contentBuilder.WriteString("\tfx.Invoke(RegisterGlobalMiddleware),\n")
+	}
+
+	contentBuilder.WriteString(")\n")
+
+	// Get the generated content
+	generatedContent := contentBuilder.String()
+
+	// Use ImportManager to detect required imports
+	importManager := NewImportManager()
+	requiredImports := importManager.GetRequiredImports(generatedContent)
+
+	// Add dependency imports from middleware dependencies
+	for _, middleware := range metadata.Middlewares {
+		for _, dep := range middleware.Dependencies {
+			if packageName := utils.ExtractPackageFromType(dep.Type); packageName != "" {
+				// Resolve the import path for this dependency
+				importPath := resolveDependencyImportPath(packageName, metadata)
+				if importPath != "" {
+					requiredImports = append(requiredImports, Import{Path: importPath})
+				}
+			}
+		}
+	}
+
+	// Filter out unused imports
+	usedImports := importManager.FilterUnusedImports(requiredImports, generatedContent)
+
+	// Generate import block
+	importBlock := importManager.GenerateImportBlock(usedImports)
+
+	// Combine everything
+	var moduleBuilder strings.Builder
+	moduleBuilder.WriteString("// Code generated by Axon framework. DO NOT EDIT.\n")
+	moduleBuilder.WriteString("// This file was automatically generated and should not be modified manually.\n\n")
+	moduleBuilder.WriteString(fmt.Sprintf("package %s\n\n", metadata.PackageName))
+
+	if importBlock != "" {
+		moduleBuilder.WriteString(importBlock)
+		moduleBuilder.WriteString("\n\n")
+	}
+
+	moduleBuilder.WriteString(generatedContent)
+
+	return moduleBuilder.String(), nil
+}
+
+// resolveDependencyImportPath resolves the import path for a dependency package
+func resolveDependencyImportPath(packageName string, metadata *models.PackageMetadata) string {
+	// Use the module path from metadata to build the correct import path
+	if metadata.ModulePath != "" {
+		// For internal packages, use the module path + internal/packageName pattern
+		return metadata.ModulePath + "/internal/" + packageName
+	}
+	
+	// Fallback: try to extract from package path
+	// packagePath is like "/home/user/project/internal/middleware"
+	// We want "github.com/user/project/internal/packageName"
+	parts := strings.Split(metadata.PackagePath, "/")
+	for i, part := range parts {
+		if part == "internal" && i > 0 {
+			// Find the module root - look for github.com pattern
+			for j := i - 1; j >= 0; j-- {
+				if strings.Contains(parts[j], ".") { // Likely a domain
+					moduleRoot := strings.Join(parts[j:i], "/")
+					return moduleRoot + "/internal/" + packageName
+				}
+			}
+		}
+	}
+	
+	// Last resort: assume it's a sibling package
+	return strings.Replace(metadata.PackagePath, "/middleware", "/"+packageName, 1)
+}
+
+// filterInjectedDependencies filters out dependencies that are initialized (IsInit=true)
+func filterInjectedDependencies(dependencies []models.Dependency) []models.Dependency {
+	var injected []models.Dependency
+	for _, dep := range dependencies {
+		if !dep.IsInit {
+			injected = append(injected, dep)
+		}
+	}
+	return injected
 }

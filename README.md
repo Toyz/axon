@@ -11,15 +11,21 @@ Axon is an annotation-driven web framework for Go that uses code generation to c
 
 2. **Create a controller**:
    ```go
-   //axon::controller
+   //axon::controller -Prefix=/api/v1/users -Middleware=AuthMiddleware
    type UserController struct {
        //axon::inject
        UserService *services.UserService
    }
 
-   //axon::route GET /users/{id:int}
+   //axon::route GET /{id:int}
    func (c *UserController) GetUser(id int) (*User, error) {
        return c.UserService.GetUser(id)
+   }
+
+   //axon::route GET /search
+   func (c *UserController) SearchUsers(ctx echo.Context, query axon.QueryMap) ([]*User, error) {
+       name := query.Get("name")
+       return c.UserService.SearchUsers(name)
    }
    ```
 
@@ -40,11 +46,22 @@ Axon is an annotation-driven web framework for Go that uses code generation to c
 
 ### Controller Annotations
 
-#### `//axon::controller`
+#### `//axon::controller [flags]`
 Marks a struct as an HTTP controller. Generates FX providers and route registration.
+
+**Flags:**
+- `-Prefix=/path` - Sets a URL prefix for all routes in this controller
+- `-Middleware=MiddlewareName` - Applies middleware to all routes in this controller
 
 ```go
 //axon::controller
+type UserController struct {
+    //axon::inject
+    UserService *services.UserService
+}
+
+// Controller with prefix and middleware
+//axon::controller -Prefix=/api/v1/users/{userId:int} -Middleware=AuthMiddleware
 type UserController struct {
     //axon::inject
     UserService *services.UserService
@@ -54,8 +71,9 @@ type UserController struct {
 **Generated:**
 - `NewUserController()` provider function
 - Route wrapper functions for each handler
-- `RegisterRoutes()` function for Echo integration
+- `RegisterRoutes()` function for Echo integration (using Echo groups for prefixed controllers)
 - FX module with all providers
+- Middleware application (controller-level or route-level)
 
 #### `//axon::route METHOD /path [flags]`
 Defines an HTTP route handler method.
@@ -82,7 +100,22 @@ func (c *Controller) GetUserPost(id int, slug string) (*Post, error) {}
 - `string` - Direct string value
 - `float64`, `float32` - Floating point conversion
 - `uuid.UUID` - UUID parsing (requires custom parser)
+- `axon.QueryMap` - Type-safe query parameter access
+- `echo.Context` - Echo context (when using `-PassContext`)
 - Custom types via `//axon::route_parser`
+
+**Query Parameters with QueryMap:**
+```go
+//axon::route GET /search
+func (c *Controller) SearchUsers(ctx echo.Context, query axon.QueryMap) ([]*User, error) {
+    name := query.Get("name")           // string
+    age := query.GetInt("age")          // int with default 0
+    active := query.GetBool("active")   // bool with default false
+    limit := query.GetIntDefault("limit", 10) // int with custom default
+    
+    return c.UserService.SearchUsers(name, age, active, limit)
+}
+```
 
 **Route Flags:**
 
@@ -483,6 +516,76 @@ func main() {
 }
 ```
 
+## Advanced Features
+
+### Controller Prefixes and Echo Groups
+
+When using controller prefixes, Axon automatically creates Echo groups for better performance and organization:
+
+```go
+//axon::controller -Prefix=/api/v1/users/{userId:int} -Middleware=AuthMiddleware
+type UserController struct {
+    //axon::inject
+    UserService *services.UserService
+}
+
+//axon::route GET /profile
+func (c *UserController) GetProfile(userId int) (*User, error) {
+    return c.UserService.GetUser(userId)
+}
+
+//axon::route GET /posts
+func (c *UserController) GetUserPosts(userId int) ([]*Post, error) {
+    return c.UserService.GetUserPosts(userId)
+}
+```
+
+**Generated Echo registration:**
+```go
+// Creates Echo group with prefix and middleware
+userGroup := e.Group("/api/v1/users/:userId")
+userGroup.Use(authMiddleware.Handle)
+
+// Routes registered on the group (relative paths)
+userGroup.GET("/profile", handler_usercontrollergetprofile)
+userGroup.GET("/posts", handler_usercontrollergetuserposts)
+```
+
+**Benefits:**
+- **Performance**: Middleware applied once per group instead of per route
+- **Organization**: Related routes grouped together
+- **Parameter Extraction**: Both `userId` (from prefix) and route parameters work seamlessly
+- **Flexibility**: Mix prefixed and non-prefixed controllers in the same application
+
+### Type-Safe Query Parameters
+
+The `axon.QueryMap` provides type-safe access to query parameters with automatic conversion and default values:
+
+```go
+//axon::route GET /search
+func (c *Controller) Search(ctx echo.Context, query axon.QueryMap) (*SearchResult, error) {
+    // Type-safe parameter extraction
+    term := query.Get("q")                    // string, empty if missing
+    page := query.GetIntDefault("page", 1)    // int, defaults to 1
+    limit := query.GetIntDefault("limit", 10) // int, defaults to 10
+    active := query.GetBool("active")         // bool, defaults to false
+    
+    // Optional parameters with validation
+    if category := query.Get("category"); category != "" {
+        // Handle optional category filter
+    }
+    
+    return c.SearchService.Search(term, page, limit, active)
+}
+```
+
+**Available Methods:**
+- `Get(key) string` - Get string value or empty string
+- `GetInt(key) int` - Get int value or 0
+- `GetIntDefault(key, defaultValue) int` - Get int with custom default
+- `GetBool(key) bool` - Get bool value or false
+- `GetFloat64(key) float64` - Get float64 value or 0.0
+
 ## Best Practices
 
 ### Project Structure
@@ -517,6 +620,45 @@ your-app/
 - Use integration tests for full request/response cycles
 
 ## Examples
+
+### Complete Example with New Features
+
+```go
+// User API with prefix and middleware
+//axon::controller -Prefix=/api/v1/users/{userId:int} -Middleware=AuthMiddleware
+type UserController struct {
+    //axon::inject
+    UserService *services.UserService
+}
+
+//axon::route GET /profile
+func (c *UserController) GetProfile(userId int) (*User, error) {
+    return c.UserService.GetUser(userId)
+}
+
+//axon::route GET /search
+func (c *UserController) SearchUsers(ctx echo.Context, query axon.QueryMap) ([]*User, error) {
+    name := query.Get("name")
+    age := query.GetIntDefault("age", 0)
+    active := query.GetBool("active")
+    
+    return c.UserService.SearchUsers(name, age, active)
+}
+
+// Public API without prefix
+//axon::controller
+type PublicController struct {}
+
+//axon::route GET /health
+func (c *PublicController) Health() map[string]string {
+    return map[string]string{"status": "ok"}
+}
+```
+
+**Generated Routes:**
+- `GET /api/v1/users/:userId/profile` (with AuthMiddleware)
+- `GET /api/v1/users/:userId/search` (with AuthMiddleware)  
+- `GET /health` (no middleware)
 
 See the [complete example application](./examples/complete-app/) for a comprehensive demonstration of all Axon features.
 

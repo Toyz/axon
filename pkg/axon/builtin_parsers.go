@@ -5,11 +5,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
-	"github.com/toyz/axon/internal/models"
 )
 
 // BuiltinParsers contains metadata for all built-in parsers
-var BuiltinParsers = map[string]models.RouteParserMetadata{
+var BuiltinParsers = map[string]RouteParserMetadata{
 	"int": {
 		TypeName:       "int",
 		FunctionName:   "ParseInt",
@@ -94,7 +93,7 @@ func ParseUUID(c echo.Context, paramValue string) (uuid.UUID, error) {
 }
 
 // GetBuiltinParser returns a built-in parser by type name, checking aliases first
-func GetBuiltinParser(typeName string) (models.RouteParserMetadata, bool) {
+func GetBuiltinParser(typeName string) (RouteParserMetadata, bool) {
 	// Check if it's an alias first
 	if actualType, isAlias := ParserAliases[typeName]; isAlias {
 		typeName = actualType

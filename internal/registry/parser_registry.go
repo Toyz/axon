@@ -9,25 +9,25 @@ import (
 
 // ParserRegistryInterface defines the interface for parser registry operations
 type ParserRegistryInterface interface {
-	RegisterParser(parser models.RouteParserMetadata) error
-	GetParser(typeName string) (models.RouteParserMetadata, bool)
+	RegisterParser(parser axon.RouteParserMetadata) error
+	GetParser(typeName string) (axon.RouteParserMetadata, bool)
 	ListParsers() []string
 	HasParser(typeName string) bool
 	Clear()
 	ClearCustomParsers()
-	GetAllParsers() map[string]models.RouteParserMetadata
+	GetAllParsers() map[string]axon.RouteParserMetadata
 }
 
 // ParserRegistry manages route parameter parsers
 type ParserRegistry struct {
-	parsers map[string]models.RouteParserMetadata
+	parsers map[string]axon.RouteParserMetadata
 	mu      sync.RWMutex
 }
 
 // NewParserRegistry creates a new parser registry with built-in parsers
 func NewParserRegistry() *ParserRegistry {
 	registry := &ParserRegistry{
-		parsers: make(map[string]models.RouteParserMetadata),
+		parsers: make(map[string]axon.RouteParserMetadata),
 	}
 	
 	// Register built-in parsers from public API
@@ -39,7 +39,7 @@ func NewParserRegistry() *ParserRegistry {
 }
 
 // RegisterParser registers a new parser for a type
-func (r *ParserRegistry) RegisterParser(parser models.RouteParserMetadata) error {
+func (r *ParserRegistry) RegisterParser(parser axon.RouteParserMetadata) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -58,7 +58,7 @@ func (r *ParserRegistry) RegisterParser(parser models.RouteParserMetadata) error
 }
 
 // GetParser retrieves a parser for a type, resolving aliases
-func (r *ParserRegistry) GetParser(typeName string) (models.RouteParserMetadata, bool) {
+func (r *ParserRegistry) GetParser(typeName string) (axon.RouteParserMetadata, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -75,7 +75,7 @@ func (r *ParserRegistry) GetParser(typeName string) (models.RouteParserMetadata,
 		}
 	}
 	
-	return models.RouteParserMetadata{}, false
+	return axon.RouteParserMetadata{}, false
 }
 
 // ListParsers returns all registered parser type names
@@ -104,7 +104,7 @@ func (r *ParserRegistry) Clear() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.parsers = make(map[string]models.RouteParserMetadata)
+	r.parsers = make(map[string]axon.RouteParserMetadata)
 	
 	// Re-register built-in parsers
 	for _, parser := range axon.BuiltinParsers {
@@ -118,7 +118,7 @@ func (r *ParserRegistry) ClearCustomParsers() {
 	defer r.mu.Unlock()
 
 	// Keep only built-in parsers
-	builtinParsers := make(map[string]models.RouteParserMetadata)
+	builtinParsers := make(map[string]axon.RouteParserMetadata)
 	for _, parser := range axon.BuiltinParsers {
 		if existing, exists := r.parsers[parser.TypeName]; exists {
 			builtinParsers[parser.TypeName] = existing
@@ -129,11 +129,11 @@ func (r *ParserRegistry) ClearCustomParsers() {
 }
 
 // GetAllParsers returns a copy of all registered parsers
-func (r *ParserRegistry) GetAllParsers() map[string]models.RouteParserMetadata {
+func (r *ParserRegistry) GetAllParsers() map[string]axon.RouteParserMetadata {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	result := make(map[string]models.RouteParserMetadata, len(r.parsers))
+	result := make(map[string]axon.RouteParserMetadata, len(r.parsers))
 	for k, v := range r.parsers {
 		result[k] = v
 	}

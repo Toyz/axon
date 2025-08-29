@@ -9,6 +9,8 @@ import (
 	"github.com/toyz/axon/internal/generator"
 	"github.com/toyz/axon/internal/models"
 	"github.com/toyz/axon/internal/parser"
+	"github.com/toyz/axon/internal/utils"
+	"github.com/toyz/axon/pkg/axon"
 )
 
 // Generator coordinates the CLI generation process
@@ -17,9 +19,11 @@ type Generator struct {
 	moduleResolver *ModuleResolver
 	parser         parser.AnnotationParser
 	codeGenerator  generator.CodeGenerator
-	globalParsers     map[string]models.RouteParserMetadata // Global parser registry for cross-package discovery
+	globalParsers     map[string]axon.RouteParserMetadata // Global parser registry for cross-package discovery
 	globalMiddleware  map[string]models.MiddlewareMetadata  // Global middleware registry for cross-package discovery
 	reporter          *DiagnosticReporter
+	diagnostics       *utils.DiagnosticSystem // New diagnostic system
+	customModule      string                   // Custom module name if set
 	summary           GenerationSummary
 }
 
@@ -32,11 +36,50 @@ func NewGenerator(verbose bool) *Generator {
 		moduleResolver: moduleResolver,
 		parser:         parser.NewParserWithReporter(reporter),
 		codeGenerator:  generator.NewGeneratorWithResolver(moduleResolver),
-		globalParsers:    make(map[string]models.RouteParserMetadata),
+		globalParsers:    make(map[string]axon.RouteParserMetadata),
 		globalMiddleware: make(map[string]models.MiddlewareMetadata),
 		reporter:         reporter,
 		summary:          GenerationSummary{GeneratedFiles: make([]string, 0)},
 	}
+}
+
+// NewGeneratorWithDiagnostics creates a new CLI generator with the new diagnostic system
+func NewGeneratorWithDiagnostics(verbose bool, diagnostics *utils.DiagnosticSystem) *Generator {
+	moduleResolver := NewModuleResolver()
+	reporter := NewDiagnosticReporter(verbose)
+	return &Generator{
+		scanner:        NewDirectoryScanner(),
+		moduleResolver: moduleResolver,
+		parser:         parser.NewParserWithReporter(reporter),
+		codeGenerator:  generator.NewGeneratorWithResolver(moduleResolver),
+		globalParsers:    make(map[string]axon.RouteParserMetadata),
+		globalMiddleware: make(map[string]models.MiddlewareMetadata),
+		reporter:         reporter,
+		diagnostics:      diagnostics,
+		summary:          GenerationSummary{GeneratedFiles: make([]string, 0)},
+	}
+}
+
+// Generate executes the generation process for the given directories
+func (g *Generator) Generate(directories []string) error {
+	config := Config{
+		Directories: directories,
+		Verbose:     g.reporter != nil && g.reporter.verbose,
+		ModuleName:  g.customModule,
+	}
+	
+	return g.Run(config)
+}
+
+// SetCustomModule sets a custom module name for import resolution
+func (g *Generator) SetCustomModule(moduleName string) {
+	// Store the custom module in the config for the next run
+	g.customModule = moduleName
+}
+
+// GetSummary returns the generation summary
+func (g *Generator) GetSummary() GenerationSummary {
+	return g.summary
 }
 
 // Run executes the complete generation process
@@ -46,7 +89,14 @@ func (g *Generator) Run(config Config) error {
 	// Initialize summary
 	g.summary = GenerationSummary{GeneratedFiles: make([]string, 0)}
 	
-	if config.Verbose {
+	// Use new diagnostic system if available, otherwise fall back to old output
+	if g.diagnostics != nil {
+		g.diagnostics.Verbose("Starting code generation at %s", startTime.Format("15:04:05"))
+		g.diagnostics.Debug("Scanning directories: %v", config.Directories)
+		if config.ModuleName != "" {
+			g.diagnostics.Debug("Using custom module name: %s", config.ModuleName)
+		}
+	} else if config.Verbose {
 		fmt.Printf("Starting code generation at %s\n", startTime.Format("15:04:05"))
 		fmt.Printf("Verbose mode enabled\n")
 		fmt.Printf("Scanning directories: %v\n", config.Directories)
@@ -57,11 +107,17 @@ func (g *Generator) Run(config Config) error {
 	}
 	
 	// Resolve module name
-	if config.Verbose {
+	if g.diagnostics != nil {
+		g.diagnostics.StartProgress("Resolving module name")
+	} else if config.Verbose {
 		fmt.Printf("Resolving module name...\n")
 	}
 	moduleName, err := g.moduleResolver.ResolveModuleName(config.ModuleName)
 	if err != nil {
+		if g.diagnostics != nil {
+			g.diagnostics.EndProgress(false, "")
+			g.diagnostics.Error("Failed to resolve module name: %v", err)
+		}
 		return &models.GeneratorError{
 			Type:    models.ErrorTypeValidation,
 			Message: fmt.Sprintf("Failed to resolve module name: %v", err),
@@ -77,16 +133,20 @@ func (g *Generator) Run(config Config) error {
 		}
 	}
 
-	if config.Verbose {
+	if g.diagnostics != nil {
+		g.diagnostics.EndProgress(true, "")
+		g.diagnostics.Debug("Resolved module name: %s", moduleName)
+		g.diagnostics.StartProgress("Scanning directories for Go packages")
+	} else if config.Verbose {
 		fmt.Printf("Resolved module name: %s\n", moduleName)
-	}
-	
-	// Scan directories for Go packages
-	if config.Verbose {
 		fmt.Printf("Scanning directories for Go packages...\n")
 	}
 	packageDirs, err := g.scanner.ScanDirectories(config.Directories)
 	if err != nil {
+		if g.diagnostics != nil {
+			g.diagnostics.EndProgress(false, "")
+			g.diagnostics.Error("Failed to scan directories: %v", err)
+		}
 		return &models.GeneratorError{
 			Type:    models.ErrorTypeFileSystem,
 			Message: fmt.Sprintf("Failed to scan directories: %v", err),
@@ -102,6 +162,10 @@ func (g *Generator) Run(config Config) error {
 	}
 
 	if len(packageDirs) == 0 {
+		if g.diagnostics != nil {
+			g.diagnostics.EndProgress(false, "")
+			g.diagnostics.Warn("No Go packages found in specified directories")
+		}
 		return &models.GeneratorError{
 			Type:    models.ErrorTypeValidation,
 			Message: "No Go packages found in specified directories",
@@ -116,22 +180,36 @@ func (g *Generator) Run(config Config) error {
 		}
 	}
 
-	fmt.Printf("Found %d packages to process\n", len(packageDirs))
-	g.summary.PackagesProcessed = len(packageDirs)
-	
-	if config.Verbose {
-		fmt.Printf("Package directories:\n")
-		for i, dir := range packageDirs {
-			fmt.Printf("  %d. %s\n", i+1, dir)
+	if g.diagnostics != nil {
+		g.diagnostics.EndProgress(true, "")
+		g.diagnostics.Info("Found %d packages to process", len(packageDirs))
+		g.diagnostics.Indent()
+		for _, dir := range packageDirs {
+			g.diagnostics.List("%s", dir)
 		}
-		fmt.Printf("\n")
+		g.diagnostics.Unindent()
+	} else {
+		fmt.Printf("Found %d packages to process\n", len(packageDirs))
+		if config.Verbose {
+			fmt.Printf("Package directories:\n")
+			for i, dir := range packageDirs {
+				fmt.Printf("  %d. %s\n", i+1, dir)
+			}
+			fmt.Printf("\n")
+		}
 	}
+	
+	g.summary.PackagesProcessed = len(packageDirs)
 
 	// First pass: Discover all parsers across packages
-	fmt.Printf("Discovering parsers across all packages...\n")
-	
-	if config.Verbose {
-		fmt.Printf("Phase 1: Parser discovery (validation disabled)\n")
+	if g.diagnostics != nil {
+		g.diagnostics.Subsection("Parser Discovery Phase")
+		g.diagnostics.StartProgress("Discovering parsers across all packages")
+	} else {
+		fmt.Printf("Discovering parsers across all packages...\n")
+		if config.Verbose {
+			fmt.Printf("Phase 1: Parser discovery (validation disabled)\n")
+		}
 	}
 	
 	// Skip parser and middleware validation during discovery phase

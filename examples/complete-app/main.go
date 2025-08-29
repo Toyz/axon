@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,7 +17,6 @@ import (
 	"github.com/toyz/axon/examples/complete-app/internal/middleware"
 	"github.com/toyz/axon/examples/complete-app/internal/services"
 	"github.com/toyz/axon/examples/complete-app/internal/logging"
-	"github.com/toyz/axon/pkg/axon"
 	"go.uber.org/fx"
 )
 
@@ -42,31 +40,14 @@ func main() {
 		interfaces.AutogenModule,
 		logging.AutogenModule,
 		
-		// Start the HTTP server
+		// invoke echo
 		fx.Invoke(func(lc fx.Lifecycle, e *echo.Echo, cfg *config.Config) {
 			lc.Append(fx.Hook{
 				OnStart: func(ctx context.Context) error {
-					// Register routes from axon registry
-					routes := axon.GetRoutes()
-					for _, route := range routes {
-						if route.Handler != nil {
-							e.Add(route.Method, route.EchoPath, route.Handler)
-						}
-					}
-					
-					// Start server in a goroutine
-					go func() {
-						addr := fmt.Sprintf(":%d", cfg.Port)
-						fmt.Printf("Starting server on %s\n", addr)
-						if err := e.Start(addr); err != nil && err != http.ErrServerClosed {
-							log.Fatalf("Server failed to start: %v", err)
-						}
-					}()
-					
+					go e.Start(fmt.Sprintf(":%d", cfg.Port))
 					return nil
 				},
 				OnStop: func(ctx context.Context) error {
-					fmt.Println("Shutting down server...")
 					return e.Shutdown(ctx)
 				},
 			})

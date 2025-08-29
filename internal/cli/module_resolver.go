@@ -1,19 +1,24 @@
 package cli
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
+
+	"github.com/toyz/axon/internal/utils"
 )
 
 // ModuleResolver handles resolving Go module information
-type ModuleResolver struct{}
+type ModuleResolver struct{
+	goModParser *utils.GoModParser
+}
 
 // NewModuleResolver creates a new module resolver
 func NewModuleResolver() *ModuleResolver {
-	return &ModuleResolver{}
+	fileReader := utils.NewFileReader()
+	return &ModuleResolver{
+		goModParser: utils.NewGoModParser(fileReader),
+	}
 }
 
 // ResolveModuleName resolves the module name for imports
@@ -58,30 +63,9 @@ func (r *ModuleResolver) readGoModFile() (string, error) {
 	return "", fmt.Errorf("go.mod file not found")
 }
 
-// parseGoModFile parses the module name from a go.mod file
+// parseGoModFile parses the module name from a go.mod file using the shared utility
 func (r *ModuleResolver) parseGoModFile(path string) (string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return "", fmt.Errorf("failed to open go.mod file: %w", err)
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if strings.HasPrefix(line, "module ") {
-			parts := strings.Fields(line)
-			if len(parts) >= 2 {
-				return parts[1], nil
-			}
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return "", fmt.Errorf("failed to read go.mod file: %w", err)
-	}
-
-	return "", fmt.Errorf("module declaration not found in go.mod")
+	return r.goModParser.ParseModuleName(path)
 }
 
 // BuildPackagePath builds the full import path for a package directory

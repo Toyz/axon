@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/toyz/axon/internal/models"
+	"github.com/toyz/axon/pkg/axon"
 )
 
 func TestParserErrorReporter_ReportParserValidationError(t *testing.T) {
@@ -520,7 +521,7 @@ func TestParserErrorReporter_GenerateParserDiagnostics(t *testing.T) {
 		{
 			name: "no parsers",
 			metadata: &models.PackageMetadata{
-				RouteParsers: []models.RouteParserMetadata{},
+				RouteParsers: []axon.RouteParserMetadata{},
 				Controllers:  []models.ControllerMetadata{},
 			},
 			expected: []string{"No custom parsers found"},
@@ -528,7 +529,7 @@ func TestParserErrorReporter_GenerateParserDiagnostics(t *testing.T) {
 		{
 			name: "unused parser",
 			metadata: &models.PackageMetadata{
-				RouteParsers: []models.RouteParserMetadata{
+				RouteParsers: []axon.RouteParserMetadata{
 					{TypeName: "UnusedType", FunctionName: "ParseUnused"},
 				},
 				Controllers: []models.ControllerMetadata{
@@ -550,7 +551,7 @@ func TestParserErrorReporter_GenerateParserDiagnostics(t *testing.T) {
 		{
 			name: "missing parser",
 			metadata: &models.PackageMetadata{
-				RouteParsers: []models.RouteParserMetadata{},
+				RouteParsers: []axon.RouteParserMetadata{},
 				Controllers: []models.ControllerMetadata{
 					{
 						Routes: []models.RouteMetadata{

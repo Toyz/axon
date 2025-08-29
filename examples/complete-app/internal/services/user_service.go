@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -130,4 +131,25 @@ func (s *UserService) DeleteUser(id int) error {
 	
 	delete(s.users, id)
 	return nil
+}
+
+// SearchUsers searches for users based on criteria
+func (s *UserService) SearchUsers(name string, age int, active bool) ([]*models.User, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	
+	var results []*models.User
+	
+	for _, user := range s.users {
+		// Simple search logic - in real app this would be more sophisticated
+		if name != "" && !strings.Contains(strings.ToLower(user.Name), strings.ToLower(name)) {
+			continue
+		}
+		
+		// For this example, we'll just return matching users
+		// In a real app, you'd have age and active fields in the User model
+		results = append(results, user)
+	}
+	
+	return results, nil
 }

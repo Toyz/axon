@@ -7,7 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-//axon::middleware LoggingMiddleware
+//axon::middleware LoggingMiddleware -Global
 type LoggingMiddleware struct {
 }
 

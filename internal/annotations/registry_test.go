@@ -263,7 +263,7 @@ func TestIsRegistered(t *testing.T) {
 
 func TestConcurrentAccess(t *testing.T) {
 	registry := NewRegistry()
-	
+
 	// Number of goroutines to run concurrently
 	numGoroutines := 10
 	numOperations := 100
@@ -306,10 +306,10 @@ func TestConcurrentParserAccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to register builtin schemas: %v", err)
 	}
-	
-	parser := NewParser(registry)
+
+	parser := NewParticipleParser(registry)
 	location := SourceLocation{File: "test.go", Line: 1, Column: 1}
-	
+
 	// Test annotations to parse concurrently
 	testAnnotations := []string{
 		"//axon::core -Mode=Singleton",
@@ -317,27 +317,27 @@ func TestConcurrentParserAccess(t *testing.T) {
 		"//axon::route GET /users",
 		"//axon::route POST /users -Middleware=Auth,Logging",
 		"//axon::controller -Prefix=/api/v1",
-		"//axon::middleware -Routes=/api/*",
+		"//axon::middleware",
 		"//axon::interface -Name=UserService",
 	}
-	
+
 	numGoroutines := 20
 	numOperations := 50
-	
+
 	var wg sync.WaitGroup
 	var errorCount int32
 	var successCount int32
-	
+
 	wg.Add(numGoroutines)
-	
+
 	for i := 0; i < numGoroutines; i++ {
 		go func(goroutineID int) {
 			defer wg.Done()
-			
+
 			for j := 0; j < numOperations; j++ {
 				// Pick a random annotation to parse
 				annotationText := testAnnotations[j%len(testAnnotations)]
-				
+
 				// Parse the annotation
 				annotation, err := parser.ParseAnnotation(annotationText, location)
 				if err != nil {
@@ -345,61 +345,61 @@ func TestConcurrentParserAccess(t *testing.T) {
 					t.Errorf("goroutine %d, operation %d: unexpected error: %v", goroutineID, j, err)
 					continue
 				}
-				
+
 				// Validate the result
 				if annotation == nil {
 					atomic.AddInt32(&errorCount, 1)
 					t.Errorf("goroutine %d, operation %d: got nil annotation", goroutineID, j)
 					continue
 				}
-				
+
 				// Test type-safe getters concurrently
 				_ = annotation.GetString("Mode", "Singleton")
 				_ = annotation.GetBool("PassContext", false)
 				_ = annotation.GetStringSlice("Middleware", nil)
 				_ = annotation.HasParameter("Mode")
-				
+
 				atomic.AddInt32(&successCount, 1)
 			}
 		}(i)
 	}
-	
+
 	wg.Wait()
-	
+
 	totalOperations := int32(numGoroutines * numOperations)
 	if errorCount > 0 {
 		t.Errorf("had %d errors out of %d total operations", errorCount, totalOperations)
 	}
-	
+
 	if successCount != totalOperations-errorCount {
 		t.Errorf("success count mismatch: expected %d, got %d", totalOperations-errorCount, successCount)
 	}
-	
+
 	t.Logf("Concurrent test completed: %d successful operations, %d errors", successCount, errorCount)
 }
 
 // Test concurrent registry modifications
 func TestConcurrentRegistryModifications(t *testing.T) {
 	registry := NewRegistry()
-	
+
 	numGoroutines := 15
 	numSchemas := 5
-	
+
 	var wg sync.WaitGroup
 	var registrationErrors int32
 	var lookupErrors int32
-	
+
 	wg.Add(numGoroutines)
-	
+
 	// Concurrent registration and lookup
 	for i := 0; i < numGoroutines; i++ {
 		go func(goroutineID int) {
 			defer wg.Done()
-			
+
 			// Each goroutine tries to register different schemas
 			for j := 0; j < numSchemas; j++ {
 				schemaType := AnnotationType(goroutineID*numSchemas + j + 100) // Avoid conflicts with builtin types
-				
+
 				schema := AnnotationSchema{
 					Type:        schemaType,
 					Description: fmt.Sprintf("Test schema %d from goroutine %d", j, goroutineID),
@@ -411,32 +411,32 @@ func TestConcurrentRegistryModifications(t *testing.T) {
 						},
 					},
 				}
-				
+
 				// Try to register
 				err := registry.Register(schemaType, schema)
 				if err != nil {
 					atomic.AddInt32(&registrationErrors, 1)
 					// This might be expected if another goroutine registered first
 				}
-				
+
 				// Try to lookup immediately after registration
 				_, err = registry.GetSchema(schemaType)
 				if err != nil {
 					atomic.AddInt32(&lookupErrors, 1)
 				}
-				
+
 				// Test other registry operations
 				_ = registry.IsRegistered(schemaType)
 				_ = registry.ListTypes()
 			}
 		}(i)
 	}
-	
+
 	wg.Wait()
-	
-	t.Logf("Concurrent registry test completed: %d registration errors, %d lookup errors", 
+
+	t.Logf("Concurrent registry test completed: %d registration errors, %d lookup errors",
 		registrationErrors, lookupErrors)
-	
+
 	// Verify final state
 	types := registry.ListTypes()
 	if len(types) == 0 {
@@ -451,10 +451,10 @@ func TestConcurrentValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to register builtin schemas: %v", err)
 	}
-	
+
 	validator := NewValidator()
 	location := SourceLocation{File: "test.go", Line: 1, Column: 1}
-	
+
 	// Create test annotations for validation
 	testAnnotations := []*ParsedAnnotation{
 		{
@@ -482,55 +482,55 @@ func TestConcurrentValidation(t *testing.T) {
 			Location: location,
 		},
 	}
-	
+
 	numGoroutines := 10
 	numOperations := 100
-	
+
 	var wg sync.WaitGroup
 	var validationErrors int32
-	
+
 	wg.Add(numGoroutines)
-	
+
 	for i := 0; i < numGoroutines; i++ {
 		go func(goroutineID int) {
 			defer wg.Done()
-			
+
 			for j := 0; j < numOperations; j++ {
 				annotation := testAnnotations[j%len(testAnnotations)]
-				
+
 				// Get schema
 				schema, err := registry.GetSchema(annotation.Type)
 				if err != nil {
 					atomic.AddInt32(&validationErrors, 1)
 					continue
 				}
-				
+
 				// Create a copy to avoid concurrent modification
 				annotationCopy := &ParsedAnnotation{
 					Type:       annotation.Type,
 					Parameters: make(map[string]interface{}),
 					Location:   annotation.Location,
 				}
-				
+
 				// Copy parameters
 				for k, v := range annotation.Parameters {
 					annotationCopy.Parameters[k] = v
 				}
-				
+
 				// Apply defaults
 				err = validator.ApplyDefaults(annotationCopy, schema)
 				if err != nil {
 					atomic.AddInt32(&validationErrors, 1)
 					continue
 				}
-				
+
 				// Transform parameters
 				err = validator.TransformParameters(annotationCopy, schema)
 				if err != nil {
 					atomic.AddInt32(&validationErrors, 1)
 					continue
 				}
-				
+
 				// Validate
 				err = validator.Validate(annotationCopy, schema)
 				if err != nil {
@@ -540,13 +540,13 @@ func TestConcurrentValidation(t *testing.T) {
 			}
 		}(i)
 	}
-	
+
 	wg.Wait()
-	
+
 	if validationErrors > 0 {
 		t.Errorf("had %d validation errors during concurrent operations", validationErrors)
 	}
-	
+
 	t.Logf("Concurrent validation test completed with %d errors", validationErrors)
 }
 

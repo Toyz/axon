@@ -4,10 +4,10 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/toyz/axon/internal/cli"
+	"github.com/toyz/axon/internal/utils"
 )
 
 func main() {
@@ -15,6 +15,7 @@ func main() {
 	var (
 		moduleFlag  = flag.String("module", "", "Custom module name for imports (defaults to go.mod module)")
 		verboseFlag = flag.Bool("verbose", false, "Enable verbose output and detailed error reporting")
+		quietFlag   = flag.Bool("quiet", false, "Only show errors and final results")
 		cleanFlag   = flag.Bool("clean", false, "Delete all autogen_module.go files from the specified directories")
 		helpFlag    = flag.Bool("help", false, "Show help information")
 	)
@@ -38,6 +39,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  %s ./internal/controllers ./internal/services # Scan specific directories\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s --module github.com/myorg/myapp ./...      # Specify custom module name\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s --verbose ./internal/...                   # Enable detailed output\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --quiet ./...                              # Minimal output\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s --clean ./...                              # Delete all autogen_module.go files\n", os.Args[0])
 	}
 
@@ -49,168 +51,98 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Get directory paths from remaining arguments
-	directories := flag.Args()
-	if len(directories) == 0 {
+	// Validate arguments
+	args := flag.Args()
+	if len(args) == 0 {
 		fmt.Fprintf(os.Stderr, "Error: At least one directory path is required\n\n")
 		flag.Usage()
 		os.Exit(1)
 	}
 
-	// Validate directory paths (handle Go-style patterns like ./...)
-	for _, dir := range directories {
-		// Handle Go-style recursive patterns
-		if strings.HasSuffix(dir, "/...") {
-			baseDir := strings.TrimSuffix(dir, "/...")
-			if baseDir == "" {
-				baseDir = "."
-			}
-			// Validate the base directory exists
-			if _, err := os.Stat(baseDir); os.IsNotExist(err) {
-				fmt.Fprintf(os.Stderr, "Error: Base directory does not exist: %s (from pattern %s)\n", baseDir, dir)
-				os.Exit(1)
-			}
-		} else {
-			// Validate regular directory paths
-			if _, err := os.Stat(dir); os.IsNotExist(err) {
-				fmt.Fprintf(os.Stderr, "Error: Directory does not exist: %s\n", dir)
-				os.Exit(1)
-			}
-		}
+	// Create diagnostic system based on flags
+	var diagnostics *utils.DiagnosticSystem
+	if *quietFlag {
+		diagnostics = utils.NewQuietDiagnostics()
+	} else if *verboseFlag {
+		diagnostics = utils.NewVerboseDiagnostics()
+	} else {
+		diagnostics = utils.NewDiagnosticSystem(utils.DiagnosticInfo)
 	}
 
-	// Handle clean command
+	// Show startup banner
+	diagnostics.Section("Axon Code Generator")
+	
+	// Handle clean operation
 	if *cleanFlag {
-		if err := cleanAutogenFiles(directories, *verboseFlag); err != nil {
-			fmt.Fprintf(os.Stderr, "Error during cleanup: %v\n", err)
+		diagnostics.Info("Starting cleanup operation...")
+		diagnostics.StartProgress("Cleaning generated files")
+		
+		cleaner := cli.NewCleaner()
+		err := cleaner.CleanGeneratedFiles(args)
+		if err != nil {
+			diagnostics.EndProgress(false, "")
+			diagnostics.Error("Clean operation failed: %v", err)
 			os.Exit(1)
 		}
+		
+		diagnostics.EndProgress(true, "")
+		diagnostics.Success("All autogen_module.go files have been removed")
 		return
 	}
 
-	// Create CLI configuration
-	config := cli.Config{
-		Directories: directories,
-		ModuleName:  *moduleFlag,
-		Verbose:     *verboseFlag,
+	// Show configuration
+	if *verboseFlag {
+		diagnostics.Subsection("Configuration")
+		diagnostics.List("Target directories: %s", strings.Join(args, ", "))
+		if *moduleFlag != "" {
+			diagnostics.List("Custom module: %s", *moduleFlag)
+		}
+		diagnostics.List("Verbose mode: enabled")
 	}
 
-	// Run the generator
-	generator := cli.NewGenerator(*verboseFlag)
-	if err := generator.Run(config); err != nil {
-		// Use diagnostic reporter for better error output
-		reporter := cli.NewDiagnosticReporter(*verboseFlag)
-		reporter.ReportError(err)
+	// Create and configure generator
+	diagnostics.StartProgress("Initializing generator")
+	generator := cli.NewGeneratorWithDiagnostics(*verboseFlag, diagnostics)
+	
+	if *moduleFlag != "" {
+		generator.SetCustomModule(*moduleFlag)
+		diagnostics.Debug("Using custom module: %s", *moduleFlag)
+	}
+	diagnostics.EndProgress(true, "")
+
+	// Run the generation process
+	diagnostics.Subsection("Code Generation")
+	diagnostics.StartProgress("Processing directories")
+	
+	err := generator.Generate(args)
+	if err != nil {
+		diagnostics.EndProgress(false, "")
+		diagnostics.Error("Generation failed: %v", err)
 		os.Exit(1)
 	}
-
-	// Report success with summary
-	generator.ReportSuccess()
-}
-
-// cleanAutogenFiles removes all autogen_module.go files from the specified directories
-func cleanAutogenFiles(directories []string, verbose bool) error {
-	var deletedFiles []string
-	var errors []error
-
-	for _, dir := range directories {
-		if strings.HasSuffix(dir, "/...") {
-			// Handle recursive patterns
-			baseDir := strings.TrimSuffix(dir, "/...")
-			if baseDir == "" {
-				baseDir = "."
-			}
-			
-			files, err := findAutogenFilesRecursive(baseDir)
-			if err != nil {
-				errors = append(errors, fmt.Errorf("failed to scan directory %s: %w", baseDir, err))
-				continue
-			}
-			
-			for _, file := range files {
-				if err := os.Remove(file); err != nil {
-					errors = append(errors, fmt.Errorf("failed to delete %s: %w", file, err))
-				} else {
-					deletedFiles = append(deletedFiles, file)
-					if verbose {
-						fmt.Printf("Deleted: %s\n", file)
-					}
-				}
-			}
-		} else {
-			// Handle specific directory
-			autogenFile := filepath.Join(dir, "autogen_module.go")
-			if _, err := os.Stat(autogenFile); err == nil {
-				if err := os.Remove(autogenFile); err != nil {
-					errors = append(errors, fmt.Errorf("failed to delete %s: %w", autogenFile, err))
-				} else {
-					deletedFiles = append(deletedFiles, autogenFile)
-					if verbose {
-						fmt.Printf("Deleted: %s\n", autogenFile)
-					}
-				}
-			}
-		}
-	}
-
-	// Report results
-	if len(deletedFiles) > 0 {
-		fmt.Printf("Successfully deleted %d autogen_module.go file(s):\n", len(deletedFiles))
-		if !verbose {
-			for _, file := range deletedFiles {
-				fmt.Printf("  - %s\n", file)
-			}
-		}
-	} else {
-		fmt.Println("No autogen_module.go files found to delete.")
-	}
-
-	if len(errors) > 0 {
-		fmt.Fprintf(os.Stderr, "\nEncountered %d error(s) during cleanup:\n", len(errors))
-		for _, err := range errors {
-			fmt.Fprintf(os.Stderr, "  - %v\n", err)
-		}
-		return fmt.Errorf("cleanup completed with %d error(s)", len(errors))
-	}
-
-	return nil
-}
-
-// findAutogenFilesRecursive recursively finds all autogen_module.go files in a directory
-func findAutogenFilesRecursive(rootDir string) ([]string, error) {
-	var autogenFiles []string
 	
-	// Convert to absolute path for consistency
-	absRootDir, err := filepath.Abs(rootDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get absolute path for %s: %w", rootDir, err)
+	diagnostics.EndProgress(true, "")
+
+	// Show final summary
+	summary := generator.GetSummary()
+	stats := map[string]interface{}{
+		"Packages processed":   summary.PackagesProcessed,
+		"Modules generated":    len(summary.GeneratedFiles),
+		"Controllers found":    summary.ControllersFound,
+		"Services found":       summary.ServicesFound,
+		"Middlewares found":    summary.MiddlewaresFound,
+		"Custom parsers found": summary.ParsersDiscovered,
 	}
 	
-	err = filepath.Walk(absRootDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		
-		// Skip hidden directories and files
-		if strings.HasPrefix(info.Name(), ".") {
-			if info.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		
-		// Skip vendor directory
-		if info.IsDir() && info.Name() == "vendor" {
-			return filepath.SkipDir
-		}
-		
-		// Check if this is an autogen_module.go file
-		if !info.IsDir() && info.Name() == "autogen_module.go" {
-			autogenFiles = append(autogenFiles, path)
-		}
-		
-		return nil
-	})
+	diagnostics.Summary("Generation Complete!", stats)
 	
-	return autogenFiles, err
+	// Show generated files in verbose mode
+	if *verboseFlag && len(summary.GeneratedFiles) > 0 {
+		diagnostics.Subsection("Generated Files")
+		for _, file := range summary.GeneratedFiles {
+			diagnostics.List("%s", file)
+		}
+	}
+	
+	diagnostics.Success("Your Axon application is ready to use!")
 }

@@ -78,6 +78,13 @@ var RouteAnnotationSchema = AnnotationSchema{
 			Type:        StringType,
 			Required:    true,
 			Description: "URL path pattern (e.g., /users, /users/{id:int})",
+			Validator: func(v interface{}) error {
+				path := v.(string)
+				if !strings.HasPrefix(path, "/") {
+					return fmt.Errorf("path must start with '/', got '%s'", path)
+				}
+				return nil
+			},
 		},
 		"Middleware": {
 			Type:        StringSliceType,
@@ -110,26 +117,29 @@ var ControllerAnnotationSchema = AnnotationSchema{
 		"Prefix": {
 			Type:        StringType,
 			Required:    false,
-			Description: "URL prefix to apply to all routes in this controller (e.g., /api/v1)",
+			Description: "URL prefix to apply to all routes in this controller. Supports parameters (e.g., /api/v1, /users/{id:int})",
 		},
 		"Middleware": {
 			Type:        StringSliceType,
 			Required:    false,
 			Description: "Comma-separated list of middleware names to apply to all routes in this controller",
 		},
-		"Tags": {
-			Type:        StringSliceType,
-			Required:    false,
-			Description: "Comma-separated list of tags for API documentation",
+		"Priority": {
+			Type:         IntType,
+			Required:     false,
+			DefaultValue: 100,
+			Description:  "Registration priority (lower numbers register first, higher numbers last). Default: 100. Use higher values (e.g., 999) for catch-all routes.",
 		},
 	},
 	Examples: []string{
 		"//axon::controller",
 		"//axon::controller -Prefix=/api/v1",
+		"//axon::controller -Prefix=/users/{id:int}",
 		"//axon::controller -Middleware=Auth",
 		"//axon::controller -Prefix=/api/v1 -Middleware=Auth,Logging",
-		"//axon::controller -Tags=Users,Management",
-		"//axon::controller -Prefix=/admin -Middleware=Auth,AdminOnly -Tags=Admin",
+		"//axon::controller -Priority=50",
+		"//axon::controller -Priority=999 -Prefix=/ // Catch-all route, loads last",
+		"//axon::controller -Prefix=/users/{userId:int} -Middleware=Auth",
 	},
 }
 
@@ -143,22 +153,17 @@ var MiddlewareAnnotationSchema = AnnotationSchema{
 			Required:    false,
 			Description: "Name for the middleware (can be provided as positional parameter)",
 		},
-		"Priority": {
-			Type:         IntType,
-			Required:     false,
-			DefaultValue: 0,
-			Description:  "Execution priority (lower numbers execute first)",
-		},
 		"Global": {
 			Type:         BoolType,
 			Required:     false,
 			DefaultValue: false,
 			Description:  "Whether to apply this middleware globally to all routes",
 		},
-		"Routes": {
-			Type:        StringSliceType,
-			Required:    false,
-			Description: "Comma-separated list of route patterns to apply this middleware to",
+		"Priority": {
+			Type:         IntType,
+			Required:     false,
+			DefaultValue: 100,
+			Description:  "Priority for global middleware ordering (lower numbers = higher priority)",
 		},
 	},
 	Examples: []string{
@@ -182,26 +187,10 @@ var InterfaceAnnotationSchema = AnnotationSchema{
 			Required:    false,
 			Description: "Custom interface name (defaults to struct name without 'Impl' suffix)",
 		},
-		"Singleton": {
-			Type:         BoolType,
-			Required:     false,
-			DefaultValue: true,
-			Description:  "Whether to register as singleton (true) or transient (false)",
-		},
-		"Primary": {
-			Type:         BoolType,
-			Required:     false,
-			DefaultValue: false,
-			Description:  "Whether this is the primary implementation when multiple implementations exist",
-		},
 	},
 	Examples: []string{
 		"//axon::interface",
 		"//axon::interface -Name=UserRepository",
-		"//axon::interface -Singleton=false",
-		"//axon::interface -Primary",
-		"//axon::interface -Name=CacheService -Primary",
-		"//axon::interface -Name=DatabaseRepo -Singleton=false -Primary",
 	},
 }
 
@@ -209,24 +198,9 @@ var InterfaceAnnotationSchema = AnnotationSchema{
 var InjectAnnotationSchema = AnnotationSchema{
 	Type:        InjectAnnotation,
 	Description: "Marks a field for dependency injection",
-	Parameters: map[string]ParameterSpec{
-		"Name": {
-			Type:        StringType,
-			Required:    false,
-			Description: "Custom name for the dependency",
-		},
-		"Optional": {
-			Type:         BoolType,
-			Required:     false,
-			DefaultValue: false,
-			Description:  "Whether the dependency is optional",
-		},
-	},
+	Parameters: map[string]ParameterSpec{},
 	Examples: []string{
 		"//axon::inject",
-		"//axon::inject -Name=CustomService",
-		"//axon::inject -Optional",
-		"//axon::inject -Name=CacheService -Optional",
 	},
 }
 
@@ -234,25 +208,9 @@ var InjectAnnotationSchema = AnnotationSchema{
 var InitAnnotationSchema = AnnotationSchema{
 	Type:        InitAnnotation,
 	Description: "Marks a function for initialization",
-	Parameters: map[string]ParameterSpec{
-		"Priority": {
-			Type:         IntType,
-			Required:     false,
-			DefaultValue: 0,
-			Description:  "Initialization priority (lower numbers execute first)",
-		},
-		"Async": {
-			Type:         BoolType,
-			Required:     false,
-			DefaultValue: false,
-			Description:  "Whether to run initialization asynchronously",
-		},
-	},
+	Parameters: map[string]ParameterSpec{},
 	Examples: []string{
 		"//axon::init",
-		"//axon::init -Priority=10",
-		"//axon::init -Async",
-		"//axon::init -Priority=5 -Async",
 	},
 }
 
@@ -279,7 +237,7 @@ var RouteParserAnnotationSchema = AnnotationSchema{
 	},
 	Examples: []string{
 		"//axon::route_parser UUID",
-		"//axon::route_parser CustomID", 
+		"//axon::route_parser CustomID",
 		"//axon::route_parser time.Time",
 		"//axon::route_parser MyCustomType",
 	},

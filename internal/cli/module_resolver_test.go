@@ -107,7 +107,7 @@ require (
 
 		_, err = resolver.parseGoModFile(goModPath)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "module declaration not found")
+		assert.Contains(t, err.Error(), "no module declaration found")
 	})
 
 	t.Run("nonexistent file", func(t *testing.T) {

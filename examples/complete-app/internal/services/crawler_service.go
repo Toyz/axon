@@ -1,7 +1,6 @@
 package services
 
 import (
-	"fmt"
 	"time"
 	"context"
 )
@@ -18,7 +17,6 @@ func (s *CrawlerService) Start(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		default:
-			fmt.Println("Crawling...")
 			time.Sleep(1 * time.Second)
 		}
 	}

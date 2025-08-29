@@ -5,13 +5,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/toyz/axon/internal/models"
+	"github.com/toyz/axon/pkg/axon"
 )
 
 func TestParserRegistry_RegisterParser(t *testing.T) {
 	registry := NewParserRegistry()
 
-	parser := models.RouteParserMetadata{
+	parser := axon.RouteParserMetadata{
 		TypeName:     "UUID",
 		FunctionName: "ParseUUID",
 		PackagePath:  "/test/parsers",
@@ -24,7 +24,7 @@ func TestParserRegistry_RegisterParser(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Test duplicate registration
-	duplicate := models.RouteParserMetadata{
+	duplicate := axon.RouteParserMetadata{
 		TypeName:     "UUID",
 		FunctionName: "ParseUUID2",
 		PackagePath:  "/test/parsers2",
@@ -41,7 +41,7 @@ func TestParserRegistry_RegisterParser(t *testing.T) {
 func TestParserRegistry_GetParser(t *testing.T) {
 	registry := NewParserRegistry()
 
-	parser := models.RouteParserMetadata{
+	parser := axon.RouteParserMetadata{
 		TypeName:     "CustomType",
 		FunctionName: "ParseCustomType",
 		PackagePath:  "/test/parsers",
@@ -86,11 +86,11 @@ func TestParserRegistry_ListParsers(t *testing.T) {
 	assert.Contains(t, parsers, "float32")
 
 	// Add custom parsers
-	parser1 := models.RouteParserMetadata{
+	parser1 := axon.RouteParserMetadata{
 		TypeName:     "CustomUUID",
 		FunctionName: "ParseCustomUUID",
 	}
-	parser2 := models.RouteParserMetadata{
+	parser2 := axon.RouteParserMetadata{
 		TypeName:     "CompositeID",
 		FunctionName: "ParseCompositeID",
 	}
@@ -114,7 +114,7 @@ func TestParserRegistry_HasParser(t *testing.T) {
 	assert.False(t, registry.HasParser("UUID"))
 
 	// Register parser
-	parser := models.RouteParserMetadata{
+	parser := axon.RouteParserMetadata{
 		TypeName:     "UUID",
 		FunctionName: "ParseUUID",
 	}
@@ -130,7 +130,7 @@ func TestParserRegistry_Clear(t *testing.T) {
 	registry := NewParserRegistry()
 
 	// Add custom parser
-	parser := models.RouteParserMetadata{
+	parser := axon.RouteParserMetadata{
 		TypeName:     "CustomType",
 		FunctionName: "ParseCustomType",
 	}
@@ -152,7 +152,7 @@ func TestParserRegistry_ClearCustomParsers(t *testing.T) {
 	registry := NewParserRegistry()
 
 	// Register a custom parser
-	customParser := models.RouteParserMetadata{
+	customParser := axon.RouteParserMetadata{
 		TypeName:     "CustomType",
 		FunctionName: "ParseCustomType",
 		PackagePath:  "test",
@@ -184,11 +184,11 @@ func TestParserRegistry_GetAllParsers(t *testing.T) {
 	assert.Contains(t, all, "uuid.UUID")
 
 	// Add custom parsers
-	parser1 := models.RouteParserMetadata{
+	parser1 := axon.RouteParserMetadata{
 		TypeName:     "CustomUUID",
 		FunctionName: "ParseCustomUUID",
 	}
-	parser2 := models.RouteParserMetadata{
+	parser2 := axon.RouteParserMetadata{
 		TypeName:     "CompositeID",
 		FunctionName: "ParseCompositeID",
 	}
@@ -218,7 +218,7 @@ func TestParserRegistry_ThreadSafety(t *testing.T) {
 	// Goroutine 1: Register parsers
 	go func() {
 		for i := 0; i < 100; i++ {
-			parser := models.RouteParserMetadata{
+			parser := axon.RouteParserMetadata{
 				TypeName:     fmt.Sprintf("Type%d", i),
 				FunctionName: fmt.Sprintf("ParseType%d", i),
 			}
