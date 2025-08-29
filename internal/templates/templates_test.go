@@ -206,8 +206,8 @@ func TestGenerateRouteRegistration(t *testing.T) {
 			controllerVar: "controller",
 			middlewares:   []string{"Auth"},
 			expectedContains: []string{
-				`e.POST("/users", handler_controllercreateuser)`,
-				`handler_controllercreateuser := wrapcontrollerCreateUser(controller, auth)`,
+				`e.POST("/users", handler_controllercreateuser, auth.Handle)`,
+				`handler_controllercreateuser := wrapcontrollerCreateUser(controller)`,
 				`Middlewares:         []string{"Auth"}`,
 				`MiddlewareInstances: []axon.MiddlewareInstance{{`,
 				`Name:     "Auth"`,
@@ -228,8 +228,8 @@ func TestGenerateRouteRegistration(t *testing.T) {
 			controllerVar: "controller",
 			middlewares:   []string{"Auth", "Logging", "RateLimit"},
 			expectedContains: []string{
-				`e.PUT("/users/:id", handler_controllerupdateuser)`,
-				`handler_controllerupdateuser := wrapcontrollerUpdateUser(controller, auth, logging, ratelimit)`,
+				`e.PUT("/users/:id", handler_controllerupdateuser, auth.Handle, logging.Handle, ratelimit.Handle)`,
+				`handler_controllerupdateuser := wrapcontrollerUpdateUser(controller)`,
 				`Middlewares:         []string{"Auth", "Logging", "RateLimit"}`,
 				`MiddlewareInstances: []axon.MiddlewareInstance{{`,
 				`Name:     "Auth"`,
@@ -249,8 +249,8 @@ func TestGenerateRouteRegistration(t *testing.T) {
 			controllerVar: "controller",
 			middlewares:   []string{"Auth", "AdminOnly"},
 			expectedContains: []string{
-				`e.DELETE("/users/:id", handler_controllerdeleteuser)`,
-				`handler_controllerdeleteuser := wrapcontrollerDeleteUser(controller, auth, adminonly)`,
+				`e.DELETE("/users/:id", handler_controllerdeleteuser, auth.Handle, adminonly.Handle)`,
+				`handler_controllerdeleteuser := wrapcontrollerDeleteUser(controller)`,
 				`Middlewares:         []string{"Auth", "AdminOnly"}`,
 				`MiddlewareInstances: []axon.MiddlewareInstance{{`,
 				`Name:     "Auth"`,
