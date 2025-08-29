@@ -28,7 +28,7 @@ type Parser struct {
 	goModParser             *utils.GoModParser
 }
 
-// DiagnosticReporter interface for debug logging
+// DiagnosticReporter interface for debug logging (wrapper for new diagnostic system)
 type DiagnosticReporter interface {
 	Debug(format string, args ...interface{})
 	DebugSection(section string)
@@ -1060,6 +1060,8 @@ func (p *Parser) analyzeHandlerSignature(file *ast.File, controllerName, methodN
 											// Check if this is an echo.Context parameter
 											if paramType == "echo.Context" {
 												source = models.ParameterSourceContext
+											} else if paramType == "axon.QueryMap" {
+												source = models.ParameterSourceQuery
 											}
 
 											p := models.Parameter{

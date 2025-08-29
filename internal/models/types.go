@@ -25,6 +25,7 @@ const (
 	ParameterSourcePath ParameterSource = iota
 	ParameterSourceBody
 	ParameterSourceContext
+	ParameterSourceQuery
 )
 
 // ReturnType represents the type of return signature for handlers

@@ -81,6 +81,13 @@ func generateHandlerCall(route models.RouteMetadata, controllerName string) stri
 				position: param.Position,
 				source:   param.Source,
 			})
+		case models.ParameterSourceQuery:
+			// For query parameters (like axon.QueryMap), use the parameter name
+			orderedParams = append(orderedParams, paramWithPosition{
+				name:     param.Name,
+				position: param.Position,
+				source:   param.Source,
+			})
 		}
 	}
 
