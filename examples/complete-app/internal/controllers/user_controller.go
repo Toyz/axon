@@ -20,7 +20,7 @@ func (c *UserController) GetAllUsers() ([]*models.User, error) {
 	return c.UserService.GetAllUsers()
 }
 
-//axon::route GET /search
+//axon::route GET /search -Priority=10
 func (c *UserController) SearchUsers(ctx echo.Context, query axon.QueryMap) ([]*models.User, error) {
 	// Access query parameters easily
 	name := query.Get("name")
@@ -30,7 +30,7 @@ func (c *UserController) SearchUsers(ctx echo.Context, query axon.QueryMap) ([]*
 	return c.UserService.SearchUsers(name, age, active)
 }
 
-//axon::route GET /{userId:int}
+//axon::route GET /{userId:int} -Priority=50
 func (c *UserController) GetUser(userId int) (*models.User, error) {
 	user, err := c.UserService.GetUser(userId)
 	if err != nil {

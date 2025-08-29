@@ -74,6 +74,13 @@ func (g *Generator) GenerateModuleWithPackagePaths(metadata *models.PackageMetad
 		return metadata.Controllers[i].Priority < metadata.Controllers[j].Priority
 	})
 
+	// Sort routes within each controller by priority (lower priority numbers first, higher numbers last)
+	for i := range metadata.Controllers {
+		sort.Slice(metadata.Controllers[i].Routes, func(j, k int) bool {
+			return metadata.Controllers[i].Routes[j].Priority < metadata.Controllers[i].Routes[k].Priority
+		})
+	}
+
 	// Determine the output file path
 	filePath := filepath.Join(metadata.PackagePath, "autogen_module.go")
 

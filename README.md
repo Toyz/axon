@@ -1,187 +1,730 @@
 # Axon Framework
 
-Axon is an annotation-driven web framework for Go that uses code generation to create dependency injection modules, HTTP route handlers, and middleware chains. It leverages Uber FX for dependency injection and Echo for HTTP routing.
+**Build powerful Go web APIs with annotations and zero boilerplate**
+
+Axon is a modern, annotation-driven web framework for Go that eliminates boilerplate through intelligent code generation. It seamlessly integrates **Uber FX** for dependency injection and **Echo** for high-performance HTTP routing, letting you focus on business logic instead of wiring.
+
+## Why Axon?
+
+- **Annotation-Driven**: Define controllers, routes, and middleware with simple comments
+- **Zero Boilerplate**: Automatic code generation for DI, routing, and middleware chains  
+- **High Performance**: Built on Echo with optimized route registration and middleware application
+- **Type-Safe**: Full type safety for parameters, responses, and dependency injection
+- **Modular**: Clean separation with auto-generated FX modules
+- **Developer-Friendly**: Hot reload support and comprehensive error reporting
 
 ## Quick Start
 
-1. **Install Axon CLI**:
-   ```bash
-   go install github.com/toyz/axon/cmd/axon@latest
-   ```
+### 1. Install Axon CLI
+```bash
+go install github.com/toyz/axon/cmd/axon@latest
+```
 
-2. **Create a controller**:
-   ```go
-   //axon::controller -Prefix=/api/v1/users -Middleware=AuthMiddleware
-   type UserController struct {
-       //axon::inject
-       UserService *services.UserService
-   }
+### 2. Create Your First Controller
+```go
+//axon::controller -Prefix=/api/v1/users -Middleware=AuthMiddleware -Priority=10
+type UserController struct {
+    //axon::inject
+    UserService *services.UserService
+}
 
-   //axon::route GET /{id:int}
-   func (c *UserController) GetUser(id int) (*User, error) {
-       return c.UserService.GetUser(id)
-   }
+//axon::route GET /search -Priority=10
+func (c *UserController) SearchUsers(ctx echo.Context, query axon.QueryMap) ([]*User, error) {
+    name := query.Get("name")
+    return c.UserService.SearchUsers(name)
+}
 
-   //axon::route GET /search
-   func (c *UserController) SearchUsers(ctx echo.Context, query axon.QueryMap) ([]*User, error) {
-       name := query.Get("name")
-       return c.UserService.SearchUsers(name)
-   }
-   ```
+//axon::route GET /{id:int} -Priority=50
+func (c *UserController) GetUser(id int) (*User, error) {
+    return c.UserService.GetUser(id)
+}
+```
 
-3. **Generate code**:
-   ```bash
-   axon ./internal/...
-   ```
+### 3. Generate Code & Run
+```bash
+# Generate all the magic
+axon ./internal/...
 
-4. **Use the generated modules**:
-   ```go
-   fx.New(
-       controllers.AutogenModule,
-       services.AutogenModule,
-   ).Run()
-   ```
+# Use in your main.go
+fx.New(
+    controllers.AutogenModule,
+    services.AutogenModule,
+    middleware.AutogenModule,
+).Run()
+```
 
-## Annotations Reference
+That's it! Axon handles routing, middleware, dependency injection, and parameter parsing automatically.
+
+## Core Concepts
+
+### Controllers with Smart Routing
+
+Controllers are the heart of your API. Axon automatically generates route handlers, applies middleware, and manages dependencies.
+
+```go
+//axon::controller -Prefix=/api/v1/products -Middleware=AuthMiddleware -Priority=20
+type ProductController struct {
+    //axon::inject
+    ProductService *services.ProductService
+    //axon::inject  
+    Logger *slog.Logger
+}
+
+//axon::route GET / -Priority=10
+func (c *ProductController) ListProducts(ctx echo.Context, query axon.QueryMap) ([]*Product, error) {
+    limit := query.GetIntDefault("limit", 10)
+    return c.ProductService.List(limit)
+}
+
+//axon::route GET /{id:uuid.UUID} -Priority=50
+func (c *ProductController) GetProduct(id uuid.UUID) (*Product, error) {
+    return c.ProductService.GetByID(id)
+}
+```
+
+**What Axon generates:**
+- Echo route registration with proper middleware chains
+- Type-safe parameter extraction and validation
+- Automatic JSON serialization/deserialization
+- FX dependency injection providers
+- Route priority ordering (lower numbers = higher priority)
+
+### Middleware Made Simple
+
+Define middleware once, apply everywhere with perfect ordering control.
+
+```go
+//axon::middleware AuthMiddleware
+type AuthMiddleware struct {
+    //axon::inject
+    JWTService *services.JWTService
+}
+
+func (m *AuthMiddleware) Handle(next echo.HandlerFunc) echo.HandlerFunc {
+    return func(c echo.Context) error {
+        token := c.Request().Header.Get("Authorization")
+        if !m.JWTService.ValidateToken(token) {
+            return echo.NewHTTPError(http.StatusUnauthorized, "Invalid token")
+        }
+        return next(c)
+    }
+}
+
+//axon::middleware LoggingMiddleware -Global -Priority=50
+type LoggingMiddleware struct {
+    //axon::inject
+    Logger *slog.Logger
+}
+```
+
+**Apply middleware at any level:**
+- **Global**: `//axon::middleware -Global -Priority=1` (Priority only works with -Global)
+- **Controller**: `//axon::controller -Middleware=AuthMiddleware`  
+- **Route**: `//axon::route GET /admin -Middleware=AdminMiddleware`
+
+**Important Middleware Restrictions:**
+- **Priority**: Only works when combined with `-Global` flag
+- **Routes**: Middleware do not support the `-Routes` parameter (use controller/route level instead)
+
+### Services with Lifecycle Management
+
+Build robust services with automatic dependency injection and lifecycle hooks.
+
+```go
+//axon::core -Init
+type DatabaseService struct {
+    //axon::inject
+    Config *config.Config
+    connected bool
+}
+
+func (s *DatabaseService) Start(ctx context.Context) error {
+    fmt.Printf("Connecting to database: %s\n", s.Config.DatabaseURL)
+    s.connected = true
+    return nil
+}
+
+func (s *DatabaseService) Stop(ctx context.Context) error {
+    s.connected = false
+    return nil
+}
+
+//axon::core -Init=Background -Mode=Transient
+type BackgroundWorker struct {
+    //axon::inject
+    DatabaseService *DatabaseService
+}
+
+func (s *BackgroundWorker) Start(ctx context.Context) error {
+    // This will run in its own goroutine
+    go s.processJobs()
+    return nil
+}
+// Injected as: func() *BackgroundWorker (new instance per request)
+```
+
+## Advanced Features
+
+### Priority-Based Ordering
+
+Control the exact order of controllers, routes, and middleware with priorities:
+
+```go
+// Routes with priorities (lower = registered first)
+//axon::route GET /users/profile -Priority=10    // Matches before /{id}
+//axon::route GET /users/admin -Priority=20      // Matches before /{id}  
+//axon::route GET /users/{id:int} -Priority=50   // Catch-all for IDs
+
+// Controllers with priorities
+//axon::controller -Priority=10                  // API controllers first
+//axon::controller -Priority=999                 // Catch-all controllers last
+
+// Global middleware with priorities (Priority only works with -Global)
+//axon::middleware SecurityMiddleware -Global -Priority=1    // Security first
+//axon::middleware LoggingMiddleware -Global -Priority=50    // Logging later
+```
+
+### Type-Safe Query Parameters
+
+No more manual parameter parsing or type conversion errors:
+
+```go
+//axon::route GET /search
+func (c *Controller) Search(ctx echo.Context, query axon.QueryMap) (*SearchResult, error) {
+    // All type-safe with automatic defaults
+    term := query.Get("q")                        // string
+    page := query.GetIntDefault("page", 1)        // int, defaults to 1
+    limit := query.GetIntDefault("limit", 10)     // int, defaults to 10
+    active := query.GetBool("active")             // bool, defaults to false
+    price := query.GetFloat64("max_price")        // float64, defaults to 0.0
+    
+    return c.SearchService.Search(term, page, limit, active, price)
+}
+```
+
+### Flexible Response Handling
+
+Return data in the most natural way for your use case:
+
+```go
+// Simple data + error (most common)
+func (c *Controller) GetUser(id int) (*User, error) {
+    return c.UserService.GetUser(id) // Auto JSON + status codes
+}
+
+// Custom responses with full control
+func (c *Controller) CreateUser(user User) (*axon.Response, error) {
+    created, err := c.UserService.Create(user)
+    if err != nil {
+        return nil, err
+    }
+    
+    return axon.Created(created).
+        WithHeader("Location", fmt.Sprintf("/users/%d", created.ID)).
+        WithSecureCookie("session", sessionID, "/", 3600), nil
+}
+
+// Error-only for operations
+func (c *Controller) DeleteUser(id int) error {
+    return c.UserService.Delete(id) // Auto 204 No Content
+}
+```
+
+### Custom Parameter Parsers
+
+Extend Axon with your own parameter types:
+
+```go
+//axon::route_parser ProductCode
+func ParseProductCode(c echo.Context, value string) (ProductCode, error) {
+    if !strings.HasPrefix(value, "PROD-") {
+        return "", fmt.Errorf("invalid product code format")
+    }
+    return ProductCode(value), nil
+}
+
+// Use in routes
+//axon::route GET /products/{code:ProductCode}
+func (c *Controller) GetByCode(code ProductCode) (*Product, error) {
+    return c.ProductService.GetByCode(string(code))
+}
+```
+
+## Annotation Reference
 
 ### Controller Annotations
 
 #### `//axon::controller [flags]`
-Marks a struct as an HTTP controller. Generates FX providers and route registration.
+Transform structs into powerful HTTP controllers.
 
 **Flags:**
-- `-Prefix=/path` - Sets a URL prefix for all routes in this controller
-- `-Middleware=MiddlewareName` - Applies middleware to all routes in this controller
+- `-Prefix=/path` - URL prefix for all routes (creates Echo groups)
+- `-Middleware=Name1,Name2` - Apply middleware to all routes  
+- `-Priority=N` - Registration order (lower = first, default: 100)
 
 ```go
-//axon::controller
-type UserController struct {
-    //axon::inject
-    UserService *services.UserService
-}
-
-// Controller with prefix and middleware
-//axon::controller -Prefix=/api/v1/users/{userId:int} -Middleware=AuthMiddleware
+//axon::controller -Prefix=/api/v1/users -Middleware=AuthMiddleware -Priority=10
 type UserController struct {
     //axon::inject
     UserService *services.UserService
 }
 ```
-
-**Generated:**
-- `NewUserController()` provider function
-- Route wrapper functions for each handler
-- `RegisterRoutes()` function for Echo integration (using Echo groups for prefixed controllers)
-- FX module with all providers
-- Middleware application (controller-level or route-level)
 
 #### `//axon::route METHOD /path [flags]`
-Defines an HTTP route handler method.
+Define HTTP route handlers with automatic parameter binding.
 
-**Syntax:**
+**Flags:**
+- `-Middleware=Name1,Name2` - Route-specific middleware
+- `-Priority=N` - Route registration order (lower = first, default: 100)
+- `-PassContext` - Inject `echo.Context` as first parameter
+
 ```go
-//axon::route METHOD /path [flags]
-func (c *Controller) HandlerName(params...) (response, error) {}
+//axon::route GET /search -Priority=10 -Middleware=LoggingMiddleware
+func (c *Controller) SearchUsers(ctx echo.Context, query axon.QueryMap) ([]*User, error) {}
+
+//axon::route GET /{id:int} -Priority=50
+func (c *Controller) GetUser(id int) (*User, error) {}
+
+//axon::route POST / -PassContext -Middleware=ValidationMiddleware
+func (c *Controller) CreateUser(ctx echo.Context, user User) (*axon.Response, error) {}
 ```
 
-**Parameters:**
-- `METHOD`: HTTP method (GET, POST, PUT, DELETE, etc.)
-- `/path`: URL path with optional parameters
-- `flags`: Optional flags (see Route Flags section)
+### Middleware Annotations
 
-**Path Parameters:**
+#### `//axon::middleware Name [flags]`
+Create reusable middleware components.
+
+**Flags:**
+- `-Priority=N` - Execution order for global middleware (lower = first, **only works with -Global**)
+- `-Global` - Apply to all routes automatically
+
+**Note**: Middleware do not support `-Routes` parameter. Use controller or route-level middleware instead.
+
+```go
+//axon::middleware AuthMiddleware
+type AuthMiddleware struct {
+    //axon::inject
+    JWTService *services.JWTService
+}
+
+func (m *AuthMiddleware) Handle(next echo.HandlerFunc) echo.HandlerFunc {
+    return func(c echo.Context) error {
+        // Middleware logic here
+        return next(c)
+    }
+}
+
+// Global middleware with priority ordering
+//axon::middleware SecurityMiddleware -Global -Priority=1
+type SecurityMiddleware struct {}
+
+//axon::middleware LoggingMiddleware -Global -Priority=50
+type LoggingMiddleware struct {}
+```
+
+### Service Annotations
+
+#### `//axon::core [flags]`
+Define business services with lifecycle management.
+
+**Flags:**
+- `-Init[=Same|Background]` - Enable lifecycle hooks with execution mode
+  - `Same`: Start/Stop runs on the same thread (blocking) - default if no value specified
+  - `Background`: Start/Stop runs in its own goroutine (non-blocking)
+- `-Mode=Singleton|Transient` - Instance lifecycle (default: Singleton)
+- `-Manual=ModuleName` - Reference existing FX module
+
+```go
+//axon::core -Init
+type DatabaseService struct {
+    //axon::inject
+    Config *config.Config
+    connected bool
+}
+
+//axon::core -Init=Background
+type CrawlerService struct {
+    // Background service for async operations
+}
+
+//axon::core -Mode=Transient
+type SessionService struct {
+    //axon::inject
+    DatabaseService *DatabaseService
+    sessionID string
+}
+
+func (s *DatabaseService) Start(ctx context.Context) error {
+    // Runs on same thread (blocking)
+    var err error
+    s.db, err = sql.Open("postgres", s.Config.DatabaseURL)
+    return err
+}
+
+func (s *DatabaseService) Stop(ctx context.Context) error {
+    return s.db.Close()
+}
+
+//axon::core -Init=Background -Mode=Singleton
+type BackgroundWorker struct {
+    //axon::inject
+    DatabaseService *DatabaseService
+}
+
+func (s *BackgroundWorker) Start(ctx context.Context) error {
+    // Runs in its own goroutine (non-blocking)
+    s.processJobs()
+    return nil
+}
+```
+
+### Dependency Injection
+
+#### `//axon::inject`
+Mark fields for dependency injection.
+
+#### `//axon::init`  
+Mark fields for initialization (not injection).
+
+```go
+type UserService struct {
+    //axon::inject
+    DatabaseService *DatabaseService  // Injected dependency
+    //axon::inject
+    Logger *slog.Logger              // Injected dependency
+    //axon::init
+    cache map[string]*User           // Initialized field
+    //axon::init
+    mutex sync.RWMutex               // Initialized field
+}
+```
+
+## CLI Commands
+
+```bash
+# Generate code for all packages
+axon ./internal/...
+
+# Generate specific packages  
+axon ./internal/controllers ./internal/services
+
+# Clean generated files
+axon --clean ./...
+
+# Verbose output for debugging
+axon --verbose ./internal/...
+
+# Custom module name
+axon -module=github.com/your-org/app ./internal/...
+```
+
+## Project Structure
+
+```
+your-app/
+├── cmd/
+│   └── server/
+│       └── main.go          # Application entry point
+├── internal/
+│   ├── controllers/         # HTTP controllers
+│   │   ├── user_controller.go
+│   │   └── autogen_module.go    # Generated
+│   ├── services/           # Business logic
+│   │   ├── user_service.go
+│   │   └── autogen_module.go    # Generated
+│   ├── middleware/         # HTTP middleware
+│   │   ├── auth_middleware.go
+│   │   └── autogen_module.go    # Generated
+│   ├── models/             # Data models
+│   ├── config/             # Configuration
+│   └── parsers/            # Custom parameter parsers
+├── pkg/                    # Public packages
+├── go.mod
+└── README.md
+```
+
+## Best Practices
+
+### Use Priorities Strategically
+```go
+// Global middleware with priority (Priority ONLY works with -Global)
+//axon::middleware SecurityMiddleware -Global -Priority=1
+
+// Local middleware (no Priority support)
+//axon::middleware AuthMiddleware
+
+// Specific routes before parameterized ones
+//axon::route GET /users/me -Priority=10
+//axon::route GET /users/{id:int} -Priority=50
+
+// Catch-all controllers last
+//axon::controller -Priority=999
+```
+
+### Layer Your Middleware
+```go
+// Global: Security, CORS, Rate Limiting (with -Global flag)
+//axon::middleware SecurityMiddleware -Global -Priority=1
+
+// Controller: Authentication, Authorization  
+//axon::controller -Middleware=AuthMiddleware
+
+// Route: Validation, Caching
+//axon::route POST /users -Middleware=ValidationMiddleware
+```
+
+### Design for Testing
+```go
+//axon::core
+//axon::interface  // Generates interface for easy mocking
+type UserService struct {
+    //axon::inject
+    UserRepo UserRepositoryInterface  // Use interface for testability
+}
+```
+
+### Service Lifecycle Best Practices
+```go
+// Use -Init for services that need startup/shutdown logic
+//axon::core -Init
+type DatabaseService struct {}
+
+// Use -Init=Background for non-blocking services
+//axon::core -Init=Background  
+type CrawlerService struct {}
+
+// Use -Mode=Transient for request-scoped services
+//axon::core -Mode=Transient
+type SessionService struct {}
+
+// Simple services don't need lifecycle hooks
+//axon::core
+type UtilityService struct {}
+```
+
+### Lifecycle Management
+```go
+// Blocking initialization (database connections, etc.)
+//axon::core -Init
+type DatabaseService struct {
+    //axon::inject
+    Config *config.Config
+}
+
+// Non-blocking initialization (background workers, etc.)
+//axon::core -Init=Background
+type CrawlerService struct {}
+```
+
+## Examples
+
+### Complete REST API
+```go
+//axon::controller -Prefix=/api/v1/products -Middleware=AuthMiddleware -Priority=20
+type ProductController struct {
+    //axon::inject
+    ProductService *services.ProductService
+}
+
+//axon::route GET / -Priority=10
+func (c *ProductController) ListProducts(ctx echo.Context, query axon.QueryMap) ([]*Product, error) {
+    limit := query.GetIntDefault("limit", 10)
+    offset := query.GetIntDefault("offset", 0)
+    category := query.Get("category")
+    
+    return c.ProductService.List(limit, offset, category)
+}
+
+//axon::route GET /featured -Priority=20
+func (c *ProductController) GetFeatured() ([]*Product, error) {
+    return c.ProductService.GetFeatured()
+}
+
+//axon::route GET /{id:uuid.UUID} -Priority=50
+func (c *ProductController) GetProduct(id uuid.UUID) (*Product, error) {
+    return c.ProductService.GetByID(id)
+}
+
+//axon::route POST / -Middleware=ValidationMiddleware
+func (c *ProductController) CreateProduct(product CreateProductRequest) (*axon.Response, error) {
+    created, err := c.ProductService.Create(product)
+    if err != nil {
+        return nil, err
+    }
+    
+    return axon.Created(created).
+        WithHeader("Location", fmt.Sprintf("/api/v1/products/%s", created.ID)), nil
+}
+
+//axon::route PUT /{id:uuid.UUID}
+func (c *ProductController) UpdateProduct(id uuid.UUID, product UpdateProductRequest) (*Product, error) {
+    return c.ProductService.Update(id, product)
+}
+
+//axon::route DELETE /{id:uuid.UUID} -Middleware=AdminMiddleware
+func (c *ProductController) DeleteProduct(id uuid.UUID) error {
+    return c.ProductService.Delete(id)
+}
+```
+
+### Advanced Middleware Chain
+```go
+// Global middleware with priorities (Priority only works with -Global)
+//axon::middleware SecurityMiddleware -Global -Priority=1
+type SecurityMiddleware struct {}
+
+//axon::middleware CORSMiddleware -Global -Priority=5  
+type CORSMiddleware struct {}
+
+// Local middleware (no Priority support)
+//axon::middleware AuthMiddleware
+type AuthMiddleware struct {}
+
+//axon::middleware RateLimitMiddleware
+type RateLimitMiddleware struct {}
+
+//axon::middleware LoggingMiddleware -Global -Priority=50
+type LoggingMiddleware struct {}
+```
+
+**Global middleware execution order:** Security → CORS → Logging → Handler
+**Route-specific middleware:** Applied in the order specified on the route/controller
+
+### Service Lifecycle Examples
+```go
+// Database service - blocking initialization (default Same mode)
+//axon::core -Init
+type DatabaseService struct {
+    //axon::inject
+    Config *config.Config
+    connected bool
+}
+
+func (s *DatabaseService) Start(ctx context.Context) error {
+    // Blocks application startup until database is connected
+    fmt.Printf("Connecting to database: %s\n", s.Config.DatabaseURL)
+    s.connected = true
+    return nil
+}
+
+// Background worker - non-blocking initialization  
+//axon::core -Init=Background
+type CrawlerService struct {}
+
+func (s *CrawlerService) Start(ctx context.Context) error {
+    // Starts in background, doesn't block application startup
+    go func() {
+        for {
+            select {
+            case <-ctx.Done():
+                return
+            default:
+                // Background processing
+                time.Sleep(time.Second)
+            }
+        }
+    }()
+    return nil
+}
+
+// Transient service - new instance per request
+//axon::core -Mode=Transient
+type SessionService struct {
+    //axon::inject
+    DatabaseService *DatabaseService
+    sessionID   string
+    createdAt   time.Time
+}
+
+func (s *MetricsCollector) Start(ctx context.Context) error {
+    // Runs in background, doesn't block application startup
+    go s.collectMetrics()
+    return nil
+}
+```
+
+## Parameter Types and Parsing
+
+### Built-in Parameter Types
 ```go
 //axon::route GET /users/{id:int}/posts/{slug:string}
 func (c *Controller) GetUserPost(id int, slug string) (*Post, error) {}
-```
 
-**Supported parameter types:**
-- `int` - Integer conversion with validation
-- `string` - Direct string value
-- `float64`, `float32` - Floating point conversion
-- `uuid.UUID` - UUID parsing (requires custom parser)
-- `axon.QueryMap` - Type-safe query parameter access
-- `echo.Context` - Echo context (when using `-PassContext`)
-- Custom types via `//axon::route_parser`
+//axon::route GET /products/{id:uuid.UUID}
+func (c *Controller) GetProduct(id uuid.UUID) (*Product, error) {}
 
-**Query Parameters with QueryMap:**
-```go
 //axon::route GET /search
-func (c *Controller) SearchUsers(ctx echo.Context, query axon.QueryMap) ([]*User, error) {
-    name := query.Get("name")           // string
-    age := query.GetInt("age")          // int with default 0
-    active := query.GetBool("active")   // bool with default false
-    limit := query.GetIntDefault("limit", 10) // int with custom default
-    
-    return c.UserService.SearchUsers(name, age, active, limit)
+func (c *Controller) Search(ctx echo.Context, query axon.QueryMap) (*SearchResult, error) {
+    term := query.Get("q")                    // string
+    page := query.GetIntDefault("page", 1)    // int with default
+    active := query.GetBool("active")         // bool
+    price := query.GetFloat64("max_price")    // float64
 }
 ```
 
-**Route Flags:**
+### Custom Parameter Parsers
+```go
+//axon::route_parser DateRange
+func ParseDateRange(c echo.Context, value string) (DateRange, error) {
+    parts := strings.Split(value, "_")
+    if len(parts) != 2 {
+        return DateRange{}, fmt.Errorf("invalid date range format")
+    }
+    
+    start, err := time.Parse("2006-01-02", parts[0])
+    if err != nil {
+        return DateRange{}, err
+    }
+    
+    end, err := time.Parse("2006-01-02", parts[1])
+    if err != nil {
+        return DateRange{}, err
+    }
+    
+    return DateRange{Start: start, End: end}, nil
+}
 
-- **`-Middleware=Name1,Name2`**: Apply middleware to route
-  ```go
-  //axon::route POST /users -Middleware=AuthMiddleware,LoggingMiddleware
-  func (c *Controller) CreateUser(user User) error {}
-  ```
+// Usage
+//axon::route GET /sales/{period:DateRange}
+func (c *Controller) GetSales(period DateRange) ([]*Sale, error) {
+    return c.SalesService.GetSalesInRange(period.Start, period.End)
+}
+```
 
-- **`-PassContext`**: Inject Echo context as first parameter
-  ```go
-  //axon::route GET /custom -PassContext
-  func (c *Controller) CustomHandler(ctx echo.Context) error {}
-  ```
+## Response Handling
 
-**Response Types:**
+### Standard Response Types
 
-1. **Data + Error**: `(T, error)`
-   ```go
-   func (c *Controller) GetUser(id int) (*User, error) {
-       user, err := c.UserService.GetUser(id)
-       if err != nil {
-           return nil, axon.ErrNotFound("User not found")
-       }
-       return user, nil
-   }
-   // Returns: 200 OK with JSON body, or custom HTTP status on axon.HttpError
-   ```
+```go
+// Data + Error (most common)
+func (c *Controller) GetUser(id int) (*User, error) {
+    user, err := c.UserService.GetUser(id)
+    if err != nil {
+        return nil, axon.ErrNotFound("User not found")
+    }
+    return user, nil
+}
+// Returns: 200 OK with JSON body, or custom HTTP status on axon.HttpError
 
-2. **Custom Response**: `(*axon.Response, error)`
-   ```go
-   func (c *Controller) CreateUser(user User) (*axon.Response, error) {
-       return &axon.Response{
-           StatusCode: 201,
-           Body:       user,
-           Headers: map[string]string{
-               "Location": "/users/123",
-               "X-Custom-Header": "value",
-           },
-           ContentType: "application/json", // optional, defaults to JSON
-           Cookies: []*axon.Cookie{
-               {Name: "session", Value: "abc123", HttpOnly: true},
-           },
-       }, nil
-   }
-   
-   // Or use fluent API
-   return axon.Created(user).
-       WithHeader("Location", "/users/123").
-       WithSecureCookie("session", "abc123", "/", 3600), nil
-   ```
+// Custom Response with full control
+func (c *Controller) CreateUser(user User) (*axon.Response, error) {
+    return &axon.Response{
+        StatusCode: 201,
+        Body:       user,
+        Headers: map[string]string{
+            "Location": "/users/123",
+        },
+    }, nil
+}
 
-3. **Error Only**: `error`
-   ```go
-   func (c *Controller) DeleteUser(id int) error {
-       if !c.UserService.Exists(id) {
-           return axon.ErrNotFound("User not found")
-       }
-       return c.UserService.Delete(id)
-   }
-   // Returns: 204 No Content on success, custom HTTP status on axon.HttpError
-   ```
+// Error Only (for operations)
+func (c *Controller) DeleteUser(id int) error {
+    return c.UserService.Delete(id)
+}
+// Returns: 204 No Content on success, custom HTTP status on axon.HttpError
+```
 
-**HTTP Error Handling:**
-
-Axon provides `axon.HttpError` for structured HTTP error responses:
+### HTTP Error Handling
 
 ```go
 // Common HTTP errors
@@ -190,273 +733,29 @@ return axon.ErrUnauthorized("Authentication required")
 return axon.ErrForbidden("Access denied")
 return axon.ErrNotFound("Resource not found")
 return axon.ErrConflict("Resource already exists")
-return axon.ErrUnprocessableEntity("Validation failed")
-
-// With additional details
-return axon.ErrBadRequestWithDetails("Validation failed", map[string]string{
-    "email": "Invalid email format",
-    "age": "Must be at least 18",
-})
 
 // Custom HTTP error
 return axon.NewHttpError(418, "I'm a teapot")
 ```
 
-**Advanced Response Control:**
-
-For complete control over HTTP responses, use `*axon.Response`:
+### Response Builder API
 
 ```go
-// Basic response
+// Fluent response building
+return axon.Created(user).
+    WithHeader("Location", "/users/123").
+    WithSecureCookie("session", "token", "/", 3600), nil
+
+// Common responses
 return axon.OK(data)
 return axon.Created(user)
 return axon.NoContent()
-
-// With headers
-return axon.Created(user).WithHeader("Location", "/users/123")
-
-// With multiple headers
-return axon.OK(data).WithHeaders(map[string]string{
-    "Cache-Control": "max-age=3600",
-    "ETag": "\"abc123\"",
-})
-
-// With cookies
-return axon.OK(data).WithSimpleCookie("preference", "dark-mode")
-
-// With secure cookies
-return axon.OK(data).WithSecureCookie("session", "token", "/", 3600)
-
-// Custom content type
-return axon.NewResponse(200, xmlData).WithContentType("application/xml")
-
-// Redirects
 return axon.RedirectTo("/login")
-return axon.RedirectPermanent("/new-url")
-
-// Fluent API chaining
-return axon.Created(user).
-    WithHeader("Location", "/users/123").
-    WithCacheControl("no-cache").
-    WithSecureCookie("session", sessionID, "/", 3600)
 ```
 
-### Service Annotations
+## Generated Code Structure
 
-#### `//axon::core [flags]`
-Marks a struct as a core service. Generates FX providers with optional lifecycle management.
-
-```go
-//axon::core
-type UserService struct {
-    //axon::inject
-    DatabaseService *DatabaseService
-    //axon::init
-    cache map[string]*User
-}
-```
-
-**Service Flags:**
-
-- **`-Init`**: Enable lifecycle management
-  ```go
-  //axon::core -Init
-  type DatabaseService struct {}
-
-  func (s *DatabaseService) Start(ctx context.Context) error {
-      // Initialization logic
-      return nil
-  }
-
-  func (s *DatabaseService) Stop(ctx context.Context) error {
-      // Cleanup logic
-      return nil
-  }
-  ```
-
-- **`-Mode=Singleton`**: Singleton lifecycle (default)
-  ```go
-  //axon::core -Mode=Singleton
-  type ConfigService struct {}
-  // Injected as: *ConfigService
-  ```
-
-- **`-Mode=Transient`**: Transient lifecycle
-  ```go
-  //axon::core -Mode=Transient
-  type SessionService struct {}
-  // Injected as: func() *SessionService
-  ```
-
-- **`-Manual=ModuleName`**: Reference existing FX module
-  ```go
-  //axon::core -Manual=CustomModule
-  type ExternalService struct {}
-  // References existing CustomModule instead of generating provider
-  ```
-
-#### `//axon::logger [flags]`
-Marks a struct as a logger service with special FX integration.
-
-```go
-//axon::logger
-type AppLogger struct {
-    //axon::inject
-    Config *config.Config
-    //axon::init
-    logger *slog.Logger
-}
-```
-
-**Logger Features:**
-- Automatic `fx.WithLogger()` integration
-- Immediate initialization for FX logging
-- Lifecycle management support with `-Init` flag
-
-### Dependency Injection Annotations
-
-#### `//axon::inject`
-Marks a struct field for dependency injection. The field will become a parameter in the generated provider function.
-
-```go
-type UserController struct {
-    //axon::inject
-    UserService *services.UserService
-    //axon::inject
-    DatabaseService *services.DatabaseService
-}
-```
-
-**Generated provider:**
-```go
-func NewUserController(userService *services.UserService, databaseService *services.DatabaseService) *UserController {
-    return &UserController{
-        UserService: userService,
-        DatabaseService: databaseService,
-    }
-}
-```
-
-#### `//axon::init`
-Marks a struct field for initialization (not injection). The field will be initialized with generated code.
-
-```go
-type UserService struct {
-    //axon::inject
-    Config *config.Config
-    //axon::init
-    cache map[string]*User
-    //axon::init
-    mutex sync.RWMutex
-}
-```
-
-**Generated provider:**
-```go
-func NewUserService(config *config.Config) *UserService {
-    return &UserService{
-        Config: config,
-        cache:  make(map[string]*User),
-        mutex:  sync.RWMutex{},
-    }
-}
-```
-
-### Middleware Annotations
-
-#### `//axon::middleware Name`
-Defines a named middleware component.
-
-```go
-//axon::middleware AuthMiddleware
-type AuthMiddleware struct {
-    //axon::inject
-    Config *config.Config
-}
-
-func (m *AuthMiddleware) Handle(next echo.HandlerFunc) echo.HandlerFunc {
-    return func(c echo.Context) error {
-        // Authentication logic
-        if !m.isAuthenticated(c) {
-            return echo.NewHTTPError(http.StatusUnauthorized)
-        }
-        return next(c)
-    }
-}
-```
-
-**Generated:**
-- `NewAuthMiddleware()` provider function
-- Middleware registration with Axon registry
-- FX module with middleware provider
-
-**Usage in routes:**
-```go
-//axon::route POST /users -Middleware=AuthMiddleware
-func (c *Controller) CreateUser(user User) error {}
-```
-
-### Interface Generation
-
-#### `//axon::interface`
-Generates an interface from a struct's public methods.
-
-```go
-//axon::core
-//axon::interface
-type UserRepository struct {
-    //axon::inject
-    DB *sql.DB
-}
-
-func (r *UserRepository) GetUser(id int) (*User, error) {}
-func (r *UserRepository) CreateUser(user *User) error {}
-```
-
-**Generated interface:**
-```go
-type UserRepositoryInterface interface {
-    GetUser(id int) (*User, error)
-    CreateUser(user *User) error
-}
-```
-
-**Generated providers:**
-```go
-func NewUserRepository(db *sql.DB) *UserRepository {}
-func NewUserRepositoryInterface(impl *UserRepository) UserRepositoryInterface {
-    return impl
-}
-```
-
-### Custom Parameter Parsers
-
-#### `//axon::route_parser Type`
-Defines a custom parameter parser for route parameters.
-
-```go
-//axon::route_parser uuid.UUID
-func ParseUUID(c echo.Context, value string) (uuid.UUID, error) {
-    return uuid.Parse(value)
-}
-```
-
-**Usage in routes:**
-```go
-//axon::route GET /users/{id:uuid.UUID}
-func (c *Controller) GetUser(id uuid.UUID) (*User, error) {}
-```
-
-**Parser Requirements:**
-- Function signature: `func(echo.Context, string) (T, error)`
-- Must return the target type and an error
-- Registered globally for the specified type
-
-## Code Generation
-
-### Generated Files
-
-Axon generates `autogen_module.go` files in each package containing annotations:
+Axon generates `autogen_module.go` files in each package:
 
 ```go
 // Code generated by Axon framework. DO NOT EDIT.
@@ -471,10 +770,14 @@ import (
 func NewUserController(userService *services.UserService) *UserController {}
 
 // Route wrappers
-func userControllerGetUserWrapper(controller *UserController) echo.HandlerFunc {}
+func wrapUserControllerGetUser(controller *UserController) echo.HandlerFunc {}
 
-// Route registration
-func RegisterRoutes(e *echo.Echo, userController *UserController) {}
+// Route registration with middleware
+func RegisterRoutes(e *echo.Echo, userController *UserController, authMiddleware *AuthMiddleware) {
+    userGroup := e.Group("/api/v1/users")
+    userGroup.GET("/search", wrapUserControllerSearchUsers(userController), authMiddleware.Handle)
+    userGroup.GET("/:id", wrapUserControllerGetUser(userController), authMiddleware.Handle)
+}
 
 // FX Module
 var AutogenModule = fx.Module("controllers",
@@ -483,7 +786,7 @@ var AutogenModule = fx.Module("controllers",
 )
 ```
 
-### Module Integration
+## Integration
 
 Use generated modules in your application:
 
@@ -516,197 +819,20 @@ func main() {
 }
 ```
 
-## Advanced Features
-
-### Controller Prefixes and Echo Groups
-
-When using controller prefixes, Axon automatically creates Echo groups for better performance and organization:
-
-```go
-//axon::controller -Prefix=/api/v1/users/{userId:int} -Middleware=AuthMiddleware
-type UserController struct {
-    //axon::inject
-    UserService *services.UserService
-}
-
-//axon::route GET /profile
-func (c *UserController) GetProfile(userId int) (*User, error) {
-    return c.UserService.GetUser(userId)
-}
-
-//axon::route GET /posts
-func (c *UserController) GetUserPosts(userId int) ([]*Post, error) {
-    return c.UserService.GetUserPosts(userId)
-}
-```
-
-**Generated Echo registration:**
-```go
-// Creates Echo group with prefix and middleware
-userGroup := e.Group("/api/v1/users/:userId")
-userGroup.Use(authMiddleware.Handle)
-
-// Routes registered on the group (relative paths)
-userGroup.GET("/profile", handler_usercontrollergetprofile)
-userGroup.GET("/posts", handler_usercontrollergetuserposts)
-```
-
-**Benefits:**
-- **Performance**: Middleware applied once per group instead of per route
-- **Organization**: Related routes grouped together
-- **Parameter Extraction**: Both `userId` (from prefix) and route parameters work seamlessly
-- **Flexibility**: Mix prefixed and non-prefixed controllers in the same application
-
-### Type-Safe Query Parameters
-
-The `axon.QueryMap` provides type-safe access to query parameters with automatic conversion and default values:
-
-```go
-//axon::route GET /search
-func (c *Controller) Search(ctx echo.Context, query axon.QueryMap) (*SearchResult, error) {
-    // Type-safe parameter extraction
-    term := query.Get("q")                    // string, empty if missing
-    page := query.GetIntDefault("page", 1)    // int, defaults to 1
-    limit := query.GetIntDefault("limit", 10) // int, defaults to 10
-    active := query.GetBool("active")         // bool, defaults to false
-    
-    // Optional parameters with validation
-    if category := query.Get("category"); category != "" {
-        // Handle optional category filter
-    }
-    
-    return c.SearchService.Search(term, page, limit, active)
-}
-```
-
-**Available Methods:**
-- `Get(key) string` - Get string value or empty string
-- `GetInt(key) int` - Get int value or 0
-- `GetIntDefault(key, defaultValue) int` - Get int with custom default
-- `GetBool(key) bool` - Get bool value or false
-- `GetFloat64(key) float64` - Get float64 value or 0.0
-
-## Best Practices
-
-### Project Structure
-```
-your-app/
-├── internal/
-│   ├── controllers/     # HTTP controllers
-│   ├── services/        # Business logic
-│   ├── middleware/      # HTTP middleware
-│   ├── interfaces/      # Interface definitions
-│   ├── parsers/         # Custom parameter parsers
-│   └── config/          # Configuration
-├── pkg/                 # Public packages
-├── cmd/                 # Application entrypoints
-└── main.go
-```
-
-### Dependency Organization
-- Use `//axon::inject` for external dependencies
-- Use `//axon::init` for internal state (maps, slices, etc.)
-- Prefer interfaces for better testability
-- Use transient services for stateful, per-request logic
-
-### Error Handling
-- Return structured errors from handlers
-- Use `echo.NewHTTPError()` for HTTP-specific errors
-- Implement proper error logging in middleware
-
-### Testing
-- Generate interfaces for easy mocking
-- Test business logic in services separately from HTTP handlers
-- Use integration tests for full request/response cycles
-
-## Examples
-
-### Complete Example with New Features
-
-```go
-// User API with prefix and middleware
-//axon::controller -Prefix=/api/v1/users/{userId:int} -Middleware=AuthMiddleware
-type UserController struct {
-    //axon::inject
-    UserService *services.UserService
-}
-
-//axon::route GET /profile
-func (c *UserController) GetProfile(userId int) (*User, error) {
-    return c.UserService.GetUser(userId)
-}
-
-//axon::route GET /search
-func (c *UserController) SearchUsers(ctx echo.Context, query axon.QueryMap) ([]*User, error) {
-    name := query.Get("name")
-    age := query.GetIntDefault("age", 0)
-    active := query.GetBool("active")
-    
-    return c.UserService.SearchUsers(name, age, active)
-}
-
-// Public API without prefix
-//axon::controller
-type PublicController struct {}
-
-//axon::route GET /health
-func (c *PublicController) Health() map[string]string {
-    return map[string]string{"status": "ok"}
-}
-```
-
-**Generated Routes:**
-- `GET /api/v1/users/:userId/profile` (with AuthMiddleware)
-- `GET /api/v1/users/:userId/search` (with AuthMiddleware)  
-- `GET /health` (no middleware)
-
-See the [complete example application](./examples/complete-app/) for a comprehensive demonstration of all Axon features.
-
-## CLI Usage
-
-```bash
-# Generate code for specific packages
-axon ./internal/controllers ./internal/services
-
-# Generate code for all packages recursively
-axon ./internal/...
-
-# Generate with custom module name
-axon -module=github.com/your-org/your-app ./internal/...
-
-# Clean all generated autogen_module.go files
-axon --clean ./...
-
-# Clean specific directories
-axon --clean ./internal/controllers ./internal/services
-
-# Enable verbose output
-axon --verbose ./internal/...
-
-# Clean with verbose output
-axon --clean --verbose ./...
-```
-
-### CLI Options
-
-- `--clean`: Delete all `autogen_module.go` files from specified directories
-- `--verbose`: Enable detailed output and error reporting  
-- `--module`: Specify custom module name for imports (defaults to go.mod module)
-- `--help`: Show help information
-
-The `--clean` flag is useful for:
-- Cleaning up before regeneration
-- Troubleshooting generation issues
-- Removing generated files when switching branches
-
 ## Contributing
 
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+
 1. Fork the repository
-2. Create a feature branch
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Add tests for new functionality
-4. Ensure all tests pass
+4. Ensure all tests pass (`go test ./...`)
 5. Submit a pull request
 
 ## License
 
-MIT License - see LICENSE file for details.
+MIT License - see [LICENSE](LICENSE) file for details.
+
+---
+
+**Ready to build something amazing?** Check out our [complete example application](./examples/complete-app/) to see Axon in action!

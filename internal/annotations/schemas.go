@@ -97,6 +97,12 @@ var RouteAnnotationSchema = AnnotationSchema{
 			DefaultValue: false,
 			Description:  "Whether to pass echo.Context as the first parameter to the handler",
 		},
+		"Priority": {
+			Type:         IntType,
+			Required:     false,
+			DefaultValue: 100,
+			Description:  "Route registration priority (lower numbers = higher priority, registered first)",
+		},
 	},
 	Examples: []string{
 		"//axon::route GET /users",
@@ -106,6 +112,7 @@ var RouteAnnotationSchema = AnnotationSchema{
 		"//axon::route DELETE /users/{id:int} -Middleware=Auth,Logging",
 		"//axon::route GET /health -PassContext",
 		"//axon::route POST /users -Middleware=Auth,Validation -PassContext",
+		"//axon::route GET /users/profile -Priority=10  // Higher priority than /users/{id}",
 	},
 }
 

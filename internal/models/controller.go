@@ -20,6 +20,7 @@ type RouteMetadata struct {
 	ReturnType  ReturnTypeInfo // information about return signature
 	Middlewares []string       // middleware names to apply
 	Flags       []string       // flags like -PassContext
+	Priority    int            // route registration priority (lower = first, higher = last)
 }
 
 // Parameter represents a route parameter

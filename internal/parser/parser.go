@@ -387,6 +387,7 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				Method:      annotation.GetString("method"),
 				Path:        annotation.GetString("path"),
 				HandlerName: annotation.Target, // Keep full target for now, will be processed later
+				Priority:    annotation.GetInt("Priority", 100), // Default priority 100
 			}
 
 			// Parse path parameters from the route path
