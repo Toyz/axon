@@ -25,6 +25,7 @@ func GenerateResponseHandling(route models.RouteMetadata, controllerName string)
 	switch route.ReturnType.Type {
 	case models.ReturnTypeDataError:
 		return generateDataErrorResponse(handlerCall, errAlreadyDeclared), nil
+		return generateDataErrorResponse(handlerCall, errAlreadyDeclared), nil
 	case models.ReturnTypeResponseError:
 		return generateResponseErrorResponse(handlerCall, errAlreadyDeclared), nil
 	case models.ReturnTypeError:
@@ -217,48 +218,21 @@ func GenerateRouteWrapper(route models.RouteMetadata, controllerName string, par
 		return "", fmt.Errorf("failed to generate response handling: %w", err)
 	}
 
-	// Generate middleware application code
-	middlewareCode := generateMiddlewareApplication(route.Middlewares)
-
-	var template string
-	if len(route.Middlewares) > 0 {
-		// Template with middleware application
-		template = `func %s(handler *%s, %s) echo.HandlerFunc {
-	baseHandler := func(c echo.Context) error {
-%s%s
-%s
-	}
-%s
-	return finalHandler
-}`
-	} else {
-		// Template without middleware
-		template = `func %s(handler *%s) echo.HandlerFunc {
+	// Middleware is now applied at Echo route level, not in wrapper
+	// So we always use the simple template without middleware parameters
+	template := `func %s(handler *%s) echo.HandlerFunc {
 	return func(c echo.Context) error {
 %s%s
 %s
 	}
 }`
-	}
 
-	if len(route.Middlewares) > 0 {
-		middlewareParams := generateMiddlewareParameters(route.Middlewares)
-		return fmt.Sprintf(template,
-			wrapperName,
-			controllerName,
-			middlewareParams,
-			paramBindingCode,
-			bodyBindingCode,
-			responseHandlingCode,
-			middlewareCode), nil
-	} else {
-		return fmt.Sprintf(template,
-			wrapperName,
-			controllerName,
-			paramBindingCode,
-			bodyBindingCode,
-			responseHandlingCode), nil
-	}
+	return fmt.Sprintf(template,
+		wrapperName,
+		controllerName,
+		paramBindingCode,
+		bodyBindingCode,
+		responseHandlingCode), nil
 }
 
 // generateBodyBindingCode generates body parameter binding code
@@ -311,14 +285,8 @@ func generateMiddlewareApplication(middlewares []string) string {
 
 // GenerateRouteRegistration generates the Echo route registration line with registry integration
 func GenerateRouteRegistration(route models.RouteMetadata, controllerVar string, middlewares []string) (string, error) {
-	// Build the handler call
-	handlerCall := fmt.Sprintf("wrap%s%s(%s", controllerVar, route.HandlerName, controllerVar)
-
-	// Add middleware parameters
-	for _, middleware := range middlewares {
-		handlerCall += fmt.Sprintf(", %s", strings.ToLower(middleware))
-	}
-	handlerCall += ")"
+	// Build the handler call (middleware is now applied at Echo route level)
+	handlerCall := fmt.Sprintf("wrap%s%s(%s)", controllerVar, route.HandlerName, controllerVar)
 
 	// Convert Axon route syntax to Echo syntax
 	echoPath := convertAxonPathToEcho(route.Path)
@@ -373,9 +341,22 @@ func GenerateRouteRegistration(route models.RouteMetadata, controllerVar string,
 	}
 	middlewareInstancesArray += "}"
 
+	// Generate the Echo route registration (same logic as generateGroupRouteRegistration)
+	var echoRegistration string
+	if len(middlewares) > 0 {
+		// Build middleware list for Echo route
+		middlewareList := make([]string, len(middlewares))
+		for i, mw := range middlewares {
+			middlewareList[i] = fmt.Sprintf("%s.Handle", strings.ToLower(mw))
+		}
+		echoRegistration = fmt.Sprintf("e.%s(\"%s\", %s, %s)", route.Method, echoPath, handlerVarName, strings.Join(middlewareList, ", "))
+	} else {
+		echoRegistration = fmt.Sprintf("e.%s(\"%s\", %s)", route.Method, echoPath, handlerVarName)
+	}
+
 	// Generate the complete registration code
-	template := `%s := %s
-	e.%s("%s", %s)
+	result := fmt.Sprintf(`%s := %s
+	%s
 	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
 		Method:              "%s",
 		Path:                "%s",
@@ -387,13 +368,13 @@ func GenerateRouteRegistration(route models.RouteMetadata, controllerVar string,
 		MiddlewareInstances: %s,
 		ParameterTypes:      %s,
 		Handler:             %s,
-	})`
-
-	return fmt.Sprintf(template,
+	})`,
 		handlerVarName, handlerCall,
-		route.Method, echoPath, handlerVarName,
+		echoRegistration,
 		route.Method, route.Path, echoPath, route.HandlerName, controllerVar,
-		middlewaresArray, middlewareInstancesArray, paramTypesMap, handlerVarName), nil
+		middlewaresArray, middlewareInstancesArray, paramTypesMap, handlerVarName)
+
+	return result, nil
 }
 
 // convertAxonPathToEcho converts Axon route syntax to Echo route syntax

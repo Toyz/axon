@@ -14,6 +14,8 @@ type GlobalMiddleware struct {
 func (m *GlobalMiddleware) Handle(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		// Pre-processing logic
+		m.logger.Info("GlobalMiddleware: Pre-processing logic")
+
 		return next(c)
 	}
 }

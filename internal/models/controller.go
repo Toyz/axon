@@ -6,6 +6,7 @@ type ControllerMetadata struct {
 	StructName   string            // name of the struct
 	Prefix       string            // URL prefix for all routes in this controller
 	Middlewares  []string          // middleware names to apply to all routes in this controller
+	Priority     int               // registration priority (lower = first, higher = last)
 	Routes       []RouteMetadata   // all routes defined on this controller
 	Dependencies []Dependency      // dependencies injected via fx.In
 }

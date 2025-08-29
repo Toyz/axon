@@ -5,7 +5,7 @@ import (
 	"github.com/toyz/axon/pkg/axon"
 )
 
-// axon::controller
+// axon::controller -Priority=999
 type IndexController struct{}
 
 // axon::route GET / -PassContext

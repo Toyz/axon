@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -21,6 +22,8 @@ type AuthMiddleware struct {
 // Handle implements the middleware logic for authentication
 func (m *AuthMiddleware) Handle(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
+		fmt.Println("AuthMiddleware: Handle")
+
 		// Check for Authorization header
 		auth := c.Request().Header.Get("Authorization")
 		if auth == "" {

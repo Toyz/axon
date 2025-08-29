@@ -345,6 +345,7 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				StructName:   annotation.Target,
 				Prefix:       annotation.GetString("Prefix", ""),
 				Middlewares:  annotation.GetStringSlice("Middleware"),
+				Priority:     annotation.GetInt("Priority", 100), // Default priority is 100
 				Dependencies: annotation.Dependencies,
 			}
 			metadata.Controllers = append(metadata.Controllers, controller)

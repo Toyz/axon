@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/toyz/axon/internal/models"
@@ -67,6 +68,11 @@ func (g *Generator) GenerateModuleWithPackagePaths(metadata *models.PackageMetad
 	if metadata == nil {
 		return nil, fmt.Errorf("metadata cannot be nil")
 	}
+
+	// Sort controllers by priority (lower priority numbers first, higher numbers last)
+	sort.Slice(metadata.Controllers, func(i, j int) bool {
+		return metadata.Controllers[i].Priority < metadata.Controllers[j].Priority
+	})
 
 	// Determine the output file path
 	filePath := filepath.Join(metadata.PackagePath, "autogen_module.go")
@@ -562,46 +568,25 @@ func (g *Generator) generateRouteRegistrationFunction(metadata *models.PackageMe
 	for _, controller := range metadata.Controllers {
 		controllerVar := strings.ToLower(controller.StructName)
 		
-		// If controller has prefix and/or middleware, use Echo group
-		if controller.Prefix != "" || len(controller.Middlewares) > 0 {
-			// Create Echo group
-			groupVar := fmt.Sprintf("%sGroup", controllerVar)
-			
-			if controller.Prefix != "" {
-				// Convert Axon path format to Echo format for group
-				echoPrefix := g.convertToEchoPath(controller.Prefix)
-				funcBuilder.WriteString(fmt.Sprintf("\t%s := e.Group(\"%s\")\n", groupVar, echoPrefix))
-			} else {
-				funcBuilder.WriteString(fmt.Sprintf("\t%s := e.Group(\"\")\n", groupVar))
-			}
-			
-			// Apply controller middleware to group
-			for _, middlewareName := range controller.Middlewares {
-				middlewareVar := strings.ToLower(middlewareName)
-				funcBuilder.WriteString(fmt.Sprintf("\t%s.Use(%s.Handle)\n", groupVar, middlewareVar))
-			}
-			
-			// Register routes on the group
-			for _, route := range controller.Routes {
-				registration, err := g.generateGroupRouteRegistration(route, controller, groupVar, metadata.PackageName)
-				if err != nil {
-					return "", fmt.Errorf("failed to generate registration for route %s: %w", route.HandlerName, err)
-				}
-				funcBuilder.WriteString(registration)
-			}
+		// Treat all controllers uniformly - use group approach
+		var groupVar string
+		if controller.Prefix != "" {
+			// Create Echo group with prefix
+			groupVar = fmt.Sprintf("%sGroup", controllerVar)
+			echoPrefix := g.convertToEchoPath(controller.Prefix)
+			funcBuilder.WriteString(fmt.Sprintf("\t%s := e.Group(\"%s\")\n", groupVar, echoPrefix))
 		} else {
-			// No prefix or middleware, register directly on Echo
-			for _, route := range controller.Routes {
-				registration, err := templates.GenerateRouteRegistration(route, controller.StructName, route.Middlewares)
-				if err != nil {
-					return "", fmt.Errorf("failed to generate registration for route %s: %w", route.HandlerName, err)
-				}
-				// Replace PACKAGE_NAME placeholder with actual package name
-				registration = strings.ReplaceAll(registration, "PACKAGE_NAME", metadata.PackageName)
-				// Replace the controller variable name in the function call
-				registration = strings.ReplaceAll(registration, fmt.Sprintf("(%s", controller.StructName), fmt.Sprintf("(%s", controllerVar))
-				funcBuilder.WriteString(fmt.Sprintf("\t%s\n", registration))
+			// No prefix, use base Echo instance as the "group"
+			groupVar = "e"
+		}
+		
+		// Register routes on the group (or base Echo instance)
+		for _, route := range controller.Routes {
+			registration, err := g.generateGroupRouteRegistration(route, controller, groupVar, metadata.PackageName)
+			if err != nil {
+				return "", fmt.Errorf("failed to generate registration for route %s: %w", route.HandlerName, err)
 			}
+			funcBuilder.WriteString(registration)
 		}
 	}
 
@@ -847,18 +832,12 @@ func (g *Generator) generateGroupRouteRegistration(route models.RouteMetadata, c
 	// Generate handler wrapper
 	wrapperFunc := fmt.Sprintf("wrap%s%s", controller.StructName, route.HandlerName)
 	
-	// Determine if route has its own middleware
-	if len(route.Middlewares) > 0 {
-		// Route has middleware - pass middleware to wrapper
-		middlewareParams := ""
-		for _, mw := range route.Middlewares {
-			middlewareParams += fmt.Sprintf(", %s", strings.ToLower(mw))
-		}
-		regBuilder.WriteString(fmt.Sprintf("\t%s := %s(%s%s)\n", handlerVar, wrapperFunc, controllerVar, middlewareParams))
-	} else {
-		// No route middleware
-		regBuilder.WriteString(fmt.Sprintf("\t%s := %s(%s)\n", handlerVar, wrapperFunc, controllerVar))
-	}
+	// Combine controller middleware and route middleware
+	allMiddlewares := append([]string{}, controller.Middlewares...)
+	allMiddlewares = append(allMiddlewares, route.Middlewares...)
+	
+	// Generate handler wrapper (middleware is passed to Echo route, not wrapper)
+	regBuilder.WriteString(fmt.Sprintf("\t%s := %s(%s)\n", handlerVar, wrapperFunc, controllerVar))
 	
 	// Register route on group (path is relative to group prefix)
 	routePath := route.Path
@@ -873,7 +852,17 @@ func (g *Generator) generateGroupRouteRegistration(route models.RouteMetadata, c
 	}
 	
 	echoPath := g.convertToEchoPath(routePath)
-	regBuilder.WriteString(fmt.Sprintf("\t%s.%s(\"%s\", %s)\n", groupVar, route.Method, echoPath, handlerVar))
+	
+	// Build middleware list for this route
+	if len(allMiddlewares) > 0 {
+		middlewareList := make([]string, len(allMiddlewares))
+		for i, mw := range allMiddlewares {
+			middlewareList[i] = fmt.Sprintf("%s.Handle", strings.ToLower(mw))
+		}
+		regBuilder.WriteString(fmt.Sprintf("\t%s.%s(\"%s\", %s, %s)\n", groupVar, route.Method, echoPath, handlerVar, strings.Join(middlewareList, ", ")))
+	} else {
+		regBuilder.WriteString(fmt.Sprintf("\t%s.%s(\"%s\", %s)\n", groupVar, route.Method, echoPath, handlerVar))
+	}
 	
 	// Generate route registry registration
 	regBuilder.WriteString(fmt.Sprintf("\taxon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{\n"))
@@ -884,10 +873,10 @@ func (g *Generator) generateGroupRouteRegistration(route models.RouteMetadata, c
 	regBuilder.WriteString(fmt.Sprintf("\t\tControllerName: \"%s\",\n", controller.StructName))
 	regBuilder.WriteString(fmt.Sprintf("\t\tPackageName:    \"%s\",\n", packageName))
 	
-	// Add middleware info
-	if len(route.Middlewares) > 0 {
+	// Add middleware info (controller + route middlewares)
+	if len(allMiddlewares) > 0 {
 		regBuilder.WriteString("\t\tMiddlewares:    []string{")
-		for i, mw := range route.Middlewares {
+		for i, mw := range allMiddlewares {
 			if i > 0 {
 				regBuilder.WriteString(", ")
 			}

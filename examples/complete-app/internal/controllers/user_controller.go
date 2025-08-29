@@ -9,7 +9,7 @@ import (
 	"github.com/toyz/axon/pkg/axon"
 )
 
-//axon::controller -Prefix=/api/v1/users/{userId:int} -Middleware=AuthMiddleware
+//axon::controller -Prefix=/api/v1/users -Middleware=AuthMiddleware
 type UserController struct {
 	//axon::inject
 	UserService *services.UserService
@@ -30,7 +30,7 @@ func (c *UserController) SearchUsers(ctx echo.Context, query axon.QueryMap) ([]*
 	return c.UserService.SearchUsers(name, age, active)
 }
 
-//axon::route GET /profile
+//axon::route GET /{userId:int}
 func (c *UserController) GetUser(userId int) (*models.User, error) {
 	user, err := c.UserService.GetUser(userId)
 	if err != nil {
@@ -40,7 +40,7 @@ func (c *UserController) GetUser(userId int) (*models.User, error) {
 	return user, nil
 }
 
-//axon::route POST /users -Middleware=AuthMiddleware
+//axon::route POST /
 func (c *UserController) CreateUser(req models.CreateUserRequest) (*axon.Response, error) {
 	user, err := c.UserService.CreateUser(req)
 	if err != nil {
@@ -54,7 +54,7 @@ func (c *UserController) CreateUser(req models.CreateUserRequest) (*axon.Respons
 		WithSimpleCookie("last-created-user", string(rune(user.ID))), nil
 }
 
-//axon::route PUT /users/{id:int} -Middleware=AuthMiddleware
+//axon::route PUT /{id:int}
 func (c *UserController) UpdateUser(id int, req models.UpdateUserRequest) (*axon.Response, error) {
 	user, err := c.UserService.UpdateUser(id, req)
 	if err != nil {
@@ -70,7 +70,7 @@ func (c *UserController) UpdateUser(id int, req models.UpdateUserRequest) (*axon
 	}, nil
 }
 
-//axon::route DELETE /users/{id:int} -Middleware=AuthMiddleware -PassContext
+//axon::route DELETE /{id:int}
 func (c *UserController) DeleteUser(ctx echo.Context, id int) error {
 	err := c.UserService.DeleteUser(id)
 	if err != nil {

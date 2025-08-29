@@ -124,6 +124,12 @@ var ControllerAnnotationSchema = AnnotationSchema{
 			Required:    false,
 			Description: "Comma-separated list of middleware names to apply to all routes in this controller",
 		},
+		"Priority": {
+			Type:         IntType,
+			Required:     false,
+			DefaultValue: 100,
+			Description:  "Registration priority (lower numbers register first, higher numbers last). Default: 100. Use higher values (e.g., 999) for catch-all routes.",
+		},
 	},
 	Examples: []string{
 		"//axon::controller",
@@ -131,6 +137,8 @@ var ControllerAnnotationSchema = AnnotationSchema{
 		"//axon::controller -Prefix=/users/{id:int}",
 		"//axon::controller -Middleware=Auth",
 		"//axon::controller -Prefix=/api/v1 -Middleware=Auth,Logging",
+		"//axon::controller -Priority=50",
+		"//axon::controller -Priority=999 -Prefix=/ // Catch-all route, loads last",
 		"//axon::controller -Prefix=/users/{userId:int} -Middleware=Auth",
 	},
 }
