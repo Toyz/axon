@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/toyz/axon/internal/utils"
@@ -472,6 +473,15 @@ func (im *ImportManager) isImportUsed(imp Import, code string) bool {
 		// Handle special cases like "log/slog" -> "slog"
 		if strings.Contains(packageName, ".") {
 			packageName = strings.Split(packageName, ".")[0]
+		}
+
+		// Handle versioned packages like "github.com/labstack/echo/v4" -> "echo"
+		if strings.HasPrefix(packageName, "v") && len(packageName) > 1 {
+			// Check if it's a version (v1, v2, etc.)
+			if _, err := strconv.Atoi(packageName[1:]); err == nil && len(parts) >= 2 {
+				// Use the second-to-last part as package name
+				packageName = parts[len(parts)-2]
+			}
 		}
 	}
 

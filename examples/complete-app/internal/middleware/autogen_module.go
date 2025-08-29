@@ -4,31 +4,34 @@
 package middleware
 
 import (
-	"go.uber.org/fx"
 	"github.com/labstack/echo/v4"
-	"github.com/toyz/axon/pkg/axon"
-
 	"github.com/toyz/axon/examples/complete-app/internal/config"
+	"github.com/toyz/axon/examples/complete-app/internal/logging"
+	"github.com/toyz/axon/examples/complete-app/internal/services"
+	"github.com/toyz/axon/pkg/axon"
+	"go.uber.org/fx"
 )
 
-func NewAuthMiddleware(Config *config.Config) *AuthMiddleware {
-	return &AuthMiddleware{
-		Config: Config,
-	}
-}
-func NewGlobalMiddleware() *GlobalMiddleware {
-	return &GlobalMiddleware{
-	}
-}
 func NewLoggingMiddleware() *LoggingMiddleware {
 	return &LoggingMiddleware{
 	}
 }
+func NewAuthMiddleware(sessionFactory func() *services.SessionService, Config *config.Config) *AuthMiddleware {
+	return &AuthMiddleware{
+		sessionFactory: sessionFactory,
+		Config: Config,
+	}
+}
+func NewGlobalMiddleware(logger *logging.AppLogger) *GlobalMiddleware {
+	return &GlobalMiddleware{
+		logger: logger,
+	}
+}
 // RegisterMiddlewares registers all middleware with the axon middleware registry
-func RegisterMiddlewares(AuthMiddleware *AuthMiddleware, GlobalMiddleware *GlobalMiddleware, LoggingMiddleware *LoggingMiddleware) {
+func RegisterMiddlewares(LoggingMiddleware *LoggingMiddleware, AuthMiddleware *AuthMiddleware, GlobalMiddleware *GlobalMiddleware) {
+	axon.RegisterMiddlewareHandler("LoggingMiddleware", LoggingMiddleware)
 	axon.RegisterMiddlewareHandler("AuthMiddleware", AuthMiddleware)
 	axon.RegisterMiddlewareHandler("GlobalMiddleware", GlobalMiddleware)
-	axon.RegisterMiddlewareHandler("LoggingMiddleware", LoggingMiddleware)
 }
 // RegisterGlobalMiddleware registers all global middleware with Echo
 func RegisterGlobalMiddleware(e *echo.Echo, GlobalMiddleware *GlobalMiddleware) {
@@ -36,9 +39,9 @@ func RegisterGlobalMiddleware(e *echo.Echo, GlobalMiddleware *GlobalMiddleware) 
 }
 // AutogenModule provides all middleware in this package
 var AutogenModule = fx.Module("middleware",
+	fx.Provide(NewLoggingMiddleware),
 	fx.Provide(NewAuthMiddleware),
 	fx.Provide(NewGlobalMiddleware),
-	fx.Provide(NewLoggingMiddleware),
 	fx.Invoke(RegisterMiddlewares),
 	fx.Invoke(RegisterGlobalMiddleware),
 )

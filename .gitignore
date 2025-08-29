@@ -8,6 +8,23 @@
 # Test binary, built with `go test -c`
 *.test
 
+# Go binaries (no extension on Linux/macOS)
+/axon
+examples/complete-app/complete-app
+examples/simple-app/simple-app
+
+# Common Go binary names
+main
+app
+server
+client
+
+# Pattern: ignore any file that matches its parent directory name
+# This catches Go binaries built with default names
+*/complete-app
+*/simple-app
+*/axon
+
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 

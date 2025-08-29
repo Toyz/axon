@@ -6,10 +6,14 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/toyz/axon/examples/complete-app/internal/config"
+	"github.com/toyz/axon/examples/complete-app/internal/services"
 )
 
 //axon::middleware AuthMiddleware
 type AuthMiddleware struct {
+	// axon::inject
+	sessionFactory func() *services.SessionService 
+
 	//axon::inject
 	Config *config.Config
 }

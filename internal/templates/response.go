@@ -75,8 +75,10 @@ func generateHandlerCall(route models.RouteMetadata, controllerName string) stri
 				source:   param.Source,
 			})
 		case models.ParameterSourceBody:
+			// Use the actual parameter name instead of hardcoded "body"
+			paramName := param.Name
 			orderedParams = append(orderedParams, paramWithPosition{
-				name:     "body", // Always use 'body' for body parameters in wrapper
+				name:     paramName,
 				position: param.Position,
 				source:   param.Source,
 			})
@@ -262,11 +264,11 @@ func generateBodyBindingCode(parameters []models.Parameter, method string) strin
 
 	for _, param := range parameters {
 		if param.Source == models.ParameterSourceBody {
-			return fmt.Sprintf(`		var body %s
-		if err := c.Bind(&body); err != nil {
+			return fmt.Sprintf(`		var %s %s
+		if err := c.Bind(&%s); err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
-`, param.Type)
+`, param.Name, param.Type, param.Name)
 		}
 	}
 	return ""
