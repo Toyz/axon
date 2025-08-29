@@ -1,4 +1,4 @@
-rm name: Tests
+name: Tests
 
 on:
   push:
