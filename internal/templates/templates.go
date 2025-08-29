@@ -9,6 +9,7 @@ import (
 	"text/template"
 
 	"github.com/toyz/axon/internal/models"
+	"github.com/toyz/axon/internal/utils"
 	"github.com/toyz/axon/pkg/axon"
 )
 
@@ -233,63 +234,6 @@ type ImportAnalysis struct {
 	ThirdParty   []string        // third-party imports needed
 }
 
-// analyzeRequiredImports analyzes metadata to determine what imports are needed
-func analyzeRequiredImports(metadata *models.PackageMetadata) ImportAnalysis {
-	analysis := ImportAnalysis{
-		Dependencies: make(map[string]bool),
-		StandardLib:  []string{},
-		ThirdParty:   []string{},
-	}
-
-	// Analyze core services
-	for _, service := range metadata.CoreServices {
-		if service.HasLifecycle {
-			analysis.NeedsContext = true
-		}
-
-		// Analyze dependencies for imports
-		for _, dep := range service.Dependencies {
-			if packagePath := extractPackageFromType(dep.Type); packagePath != "" {
-				analysis.Dependencies[packagePath] = true
-			}
-		}
-	}
-
-	// Analyze loggers
-	for _, logger := range metadata.Loggers {
-		if logger.HasLifecycle {
-			analysis.NeedsContext = true
-		}
-		analysis.NeedsLogger = true
-
-		// Analyze dependencies for imports
-		for _, dep := range logger.Dependencies {
-			if packagePath := extractPackageFromType(dep.Type); packagePath != "" {
-				analysis.Dependencies[packagePath] = true
-			}
-		}
-	}
-
-	// Analyze interfaces
-	for _, iface := range metadata.Interfaces {
-		for _, method := range iface.Methods {
-			// Analyze parameters
-			for _, param := range method.Parameters {
-				if packagePath := extractPackageFromType(param.Type); packagePath != "" {
-					analysis.Dependencies[packagePath] = true
-				}
-			}
-			// Analyze return types
-			for _, ret := range method.Returns {
-				if packagePath := extractPackageFromType(ret); packagePath != "" {
-					analysis.Dependencies[packagePath] = true
-				}
-			}
-		}
-	}
-
-	return analysis
-}
 
 // Note: Removed resolveImportPath and buildModuleImportPath functions
 // These were making assumptions about project structure.
@@ -362,70 +306,7 @@ func isStandardLibraryPackage(packageName string) bool {
 	return false
 }
 
-// extractPackageFromType extracts the package name from a type string like "*config.Config"
-func extractPackageFromType(typeStr string) string {
-	// Remove pointer prefix
-	typeStr = strings.TrimPrefix(typeStr, "*")
-
-	// Handle complex types like maps, slices, channels
-	if strings.HasPrefix(typeStr, "map[") {
-		// For maps, extract package from the value type
-		// Find the closing bracket of the key type
-		bracketCount := 0
-		valueStart := -1
-		for i, char := range typeStr {
-			if char == '[' {
-				bracketCount++
-			} else if char == ']' {
-				bracketCount--
-				if bracketCount == 0 {
-					valueStart = i + 1
-					break
-				}
-			}
-		}
-		if valueStart > 0 && valueStart < len(typeStr) {
-			valueType := typeStr[valueStart:]
-			return extractPackageFromType(valueType) // Recursive call for value type
-		}
-	} else if strings.HasPrefix(typeStr, "[]") {
-		// For slices, extract package from the element type
-		elementType := typeStr[2:]
-		return extractPackageFromType(elementType) // Recursive call for element type
-	} else if strings.HasPrefix(typeStr, "chan ") {
-		// For channels, extract package from the element type
-		elementType := typeStr[5:]
-		return extractPackageFromType(elementType) // Recursive call for element type
-	} else if strings.HasPrefix(typeStr, "func(") {
-		// For function types, extract package from return types
-		// Example: "func() *services.SessionService" -> "services"
-		// Find the return type after the closing parenthesis
-		parenCount := 0
-		returnStart := -1
-		for i, char := range typeStr {
-			if char == '(' {
-				parenCount++
-			} else if char == ')' {
-				parenCount--
-				if parenCount == 0 && i+1 < len(typeStr) {
-					returnStart = i + 1
-					break
-				}
-			}
-		}
-		if returnStart > 0 && returnStart < len(typeStr) {
-			returnType := strings.TrimSpace(typeStr[returnStart:])
-			return extractPackageFromType(returnType) // Recursive call for return type
-		}
-	}
-
-	// For simple types, check if it contains a package qualifier
-	if dotIndex := strings.Index(typeStr, "."); dotIndex != -1 {
-		return typeStr[:dotIndex]
-	}
-
-	return ""
-}
+// extractPackageFromType is now available as utils.ExtractPackageFromType
 
 // extractParameterName extracts a parameter name from a type string
 func extractParameterName(typeStr string) string {
@@ -782,18 +663,7 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 }
 
 // extractDependencyName extracts a variable name from a dependency type
-func extractDependencyName(depType string) string {
-	// Remove pointer prefix
-	name := strings.TrimPrefix(depType, "*")
-
-	// Handle package-qualified types (e.g., "pkg.Type" -> "type")
-	if dotIndex := strings.LastIndex(name, "."); dotIndex != -1 {
-		name = name[dotIndex+1:]
-	}
-
-	// Keep the original case for field names - Go struct fields are exported (PascalCase)
-	return name
-}
+// extractDependencyName is now available as utils.ExtractDependencyName
 
 // InterfaceData represents data needed for interface generation
 type InterfaceData struct {
@@ -1122,7 +992,7 @@ func GenerateMiddlewareModule(metadata *models.PackageMetadata) (string, error) 
 	// Add dependency imports from middleware dependencies
 	for _, middleware := range metadata.Middlewares {
 		for _, dep := range middleware.Dependencies {
-			if packageName := extractPackageFromType(dep.Type); packageName != "" {
+			if packageName := utils.ExtractPackageFromType(dep.Type); packageName != "" {
 				// Resolve the import path for this dependency
 				importPath := resolveDependencyImportPath(packageName, metadata)
 				if importPath != "" {

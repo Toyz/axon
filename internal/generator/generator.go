@@ -273,7 +273,7 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 	servicePackages := make(map[string]bool)
 	for _, controller := range metadata.Controllers {
 		for _, dep := range controller.Dependencies {
-			if packageName := g.extractPackageFromType(dep.Type); packageName != "" {
+			if packageName := utils.ExtractPackageFromType(dep.Type); packageName != "" {
 				servicePackages[packageName] = true
 			}
 		}
@@ -366,7 +366,7 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 					}
 				}
 
-				if packageName := g.extractPackageFromType(resolvedType); packageName != "" {
+				if packageName := utils.ExtractPackageFromType(resolvedType); packageName != "" {
 					// Skip well-known packages that are already imported
 					if !g.isWellKnownPackage(packageName) {
 						modelPackages[packageName] = true
@@ -447,31 +447,7 @@ func (g *Generator) analyzeRequiredImports(metadata *models.PackageMetadata, mod
 	return analysis
 }
 
-// extractPackageFromType extracts the package name from a type string like "*services.DatabaseService"
-func (g *Generator) extractPackageFromType(typeStr string) string {
-	// Handle function types by extracting packages from return types
-	if strings.HasPrefix(typeStr, "func(") {
-		// Find the return type part after the closing parenthesis
-		if parenIndex := strings.Index(typeStr, ")"); parenIndex != -1 {
-			returnPart := strings.TrimSpace(typeStr[parenIndex+1:])
-			if returnPart != "" {
-				// Recursively extract package from return type
-				return g.extractPackageFromType(returnPart)
-			}
-		}
-		return ""
-	}
-
-	// Remove pointer prefix
-	typeStr = strings.TrimPrefix(typeStr, "*")
-
-	// Check if it contains a package qualifier
-	if dotIndex := strings.Index(typeStr, "."); dotIndex != -1 {
-		return typeStr[:dotIndex]
-	}
-
-	return ""
-}
+// extractPackageFromType is now available as utils.ExtractPackageFromType
 
 // isWellKnownPackage checks if a package is already imported or is a well-known package
 func (g *Generator) isWellKnownPackage(packageName string) bool {
@@ -554,48 +530,6 @@ func extractModuleNameFromGoMod(goModPath string) string {
 	return moduleName
 }
 
-// analyzeMiddlewareImports analyzes imports needed for middleware module generation
-func (g *Generator) analyzeMiddlewareImports(metadata *models.PackageMetadata) ImportAnalysis {
-	analysis := ImportAnalysis{
-		StandardLibrary: []string{},
-		ThirdParty:      []string{},
-		Local:           []ImportSpec{},
-		TypeAliases:     make(map[string]string),
-	}
-
-	// Always needed for middleware modules
-	analysis.ThirdParty = append(analysis.ThirdParty,
-		"go.uber.org/fx",
-		"github.com/toyz/axon/pkg/axon")
-
-	// Always add echo import for middleware packages since they may need it for global middleware
-	if len(metadata.Middlewares) > 0 {
-		analysis.ThirdParty = append(analysis.ThirdParty, "github.com/labstack/echo/v4")
-	}
-
-	// Analyze middleware dependencies for service imports
-	addedPaths := make(map[string]bool) // Track added paths to avoid duplicates
-	for _, middleware := range metadata.Middlewares {
-		for _, dep := range middleware.Dependencies {
-			if packageName := g.extractPackageFromType(dep.Type); packageName != "" {
-				// Skip well-known packages that are already imported
-				if !g.isWellKnownPackage(packageName) {
-					// Resolve import path for the dependency package
-					importPath := g.resolvePackageImportPath("", metadata.PackagePath, packageName)
-					if !addedPaths[importPath] {
-						analysis.Local = append(analysis.Local, ImportSpec{
-							Alias: "", // No alias for dependencies
-							Path:  importPath,
-						})
-						addedPaths[importPath] = true
-					}
-				}
-			}
-		}
-	}
-
-	return analysis
-}
 
 // generateRouteRegistrationFunction generates a function that registers all routes with Echo
 func (g *Generator) generateRouteRegistrationFunction(metadata *models.PackageMetadata) (string, error) {
@@ -822,7 +756,14 @@ func (g *Generator) GenerateRootModule(packageName string, subModules []models.M
 		return fmt.Errorf("failed to create directory for root module file: %w", err)
 	}
 
-	err = os.WriteFile(outputPath, []byte(rootBuilder.String()), 0644)
+	// Format the generated code before writing
+	formattedCode, err := utils.FormatGoCodeString(rootBuilder.String())
+	if err != nil {
+		// If formatting fails, write the unformatted code with a warning
+		formattedCode = rootBuilder.String()
+	}
+
+	err = os.WriteFile(outputPath, []byte(formattedCode), 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write root module file: %w", err)
 	}
@@ -830,19 +771,6 @@ func (g *Generator) GenerateRootModule(packageName string, subModules []models.M
 	return nil
 }
 
-// extractDependencyName extracts a variable name from a dependency type
-func extractDependencyName(depType string) string {
-	// Remove pointer prefix
-	name := strings.TrimPrefix(depType, "*")
-
-	// Handle package-qualified types (e.g., "pkg.Type" -> "type")
-	if dotIndex := strings.LastIndex(name, "."); dotIndex != -1 {
-		name = name[dotIndex+1:]
-	}
-
-	// Keep the original case for field names - Go struct fields are exported (PascalCase)
-	return name
-}
 
 // generateResponseHelperFunctions generates shared helper functions for response handling
 func (g *Generator) generateResponseHelperFunctions() string {

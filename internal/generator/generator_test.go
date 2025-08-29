@@ -431,6 +431,23 @@ func TestGenerateRootModule_NoSubModules(t *testing.T) {
 	}
 }
 
+// extractDependencyName extracts the dependency name from a type string
+func extractDependencyName(depType string) string {
+	if depType == "" {
+		return ""
+	}
+	
+	// Remove pointer prefix
+	name := strings.TrimPrefix(depType, "*")
+	
+	// Extract name after last dot (for package.Type format)
+	if lastDot := strings.LastIndex(name, "."); lastDot != -1 {
+		name = name[lastDot+1:]
+	}
+	
+	return name
+}
+
 func TestExtractDependencyName(t *testing.T) {
 	tests := []struct {
 		depType  string
