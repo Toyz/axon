@@ -7,6 +7,7 @@ type CodeGenerator interface {
 	GenerateModule(metadata *models.PackageMetadata) (*models.GeneratedModule, error)
 	GenerateModuleWithModule(metadata *models.PackageMetadata, moduleName string) (*models.GeneratedModule, error)
 	GenerateModuleWithPackagePaths(metadata *models.PackageMetadata, moduleName string, packagePaths map[string]string) (*models.GeneratedModule, error)
+	GenerateModuleWithRequiredPackages(metadata *models.PackageMetadata, moduleName string, packagePaths map[string]string, requiredPackages []string) (*models.GeneratedModule, error)
 	GetParserRegistry() ParserRegistryInterface
 }
 

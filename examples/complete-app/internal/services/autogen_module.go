@@ -7,21 +7,18 @@ import (
 	"context"
 	"log"
 
-	"go.uber.org/fx"
-
 	"github.com/toyz/axon/examples/complete-app/internal/config"
+	"go.uber.org/fx"
 )
 
 // CrawlerServiceInterface is the interface for CrawlerService
 type CrawlerServiceInterface interface {
-	Start(ctx context.Context) (error)
-	Stop(ctx context.Context) (error)
+	Start(ctx context.Context) error
+	Stop(ctx context.Context) error
 }
 
 func NewCrawlerService() *CrawlerService {
-	return &CrawlerService{
-
-	}
+	return &CrawlerService{}
 }
 
 func initCrawlerServiceLifecycle(lc fx.Lifecycle, service *CrawlerService) {
