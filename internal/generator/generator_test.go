@@ -149,20 +149,6 @@ func TestGenerateModule_Controllers(t *testing.T) {
 		t.Errorf("expected package declaration")
 	}
 	
-	// Check imports
-	expectedImports := []string{
-		"\"net/http\"",
-		"\"fmt\"",
-		"\"github.com/labstack/echo/v4\"",
-		"\"go.uber.org/fx\"",
-		"\"github.com/toyz/axon/pkg/axon\"",
-	}
-	
-	for _, imp := range expectedImports {
-		if !strings.Contains(result.Content, imp) {
-			t.Errorf("expected import %s", imp)
-		}
-	}
 	
 	// Check controller provider
 	if !strings.Contains(result.Content, "func NewUserController(") {
@@ -259,7 +245,7 @@ func TestCollectMiddlewareDependencies(t *testing.T) {
 	// Check that all expected middlewares are present
 	middlewareSet := make(map[string]bool)
 	for _, middleware := range result {
-		middlewareSet[middleware] = true
+		middlewareSet[middleware.Name] = true
 	}
 	
 	expected := []string{"Auth", "Logging", "RateLimit"}

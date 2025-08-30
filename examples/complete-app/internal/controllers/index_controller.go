@@ -1,6 +1,9 @@
 package controllers
 
 import (
+	"fmt"
+	"net/http"
+	
 	"github.com/labstack/echo/v4"
 	"github.com/toyz/axon/pkg/axon"
 )
@@ -33,4 +36,12 @@ func (*IndexController) ShowFish(ctx echo.Context) (*axon.Response, error) {
 // axon::route GET /{id:string}/test
 func (*IndexController) ShowTest(ctx echo.Context, id string) (*axon.Response, error) {
 	return axon.OK(map[string]string{"message": "Test resource found", "id": id}), nil
+}
+
+// axon::route GET /{*} -Priority=999
+func (i *IndexController) CatchAll(ctx echo.Context, path string) (*axon.Response, error) {
+	return axon.NewResponse(http.StatusNotFound, map[string]interface{}{
+		"error":   "Not Found",
+		"message": fmt.Sprintf("Route not found: %s", path),
+	}), nil
 }

@@ -2,13 +2,19 @@ package cli
 
 import (
 	"fmt"
+	"go/format"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"time"
+
+	"golang.org/x/tools/imports"
 
 	"github.com/toyz/axon/internal/generator"
 	"github.com/toyz/axon/internal/models"
 	"github.com/toyz/axon/internal/parser"
+	"github.com/toyz/axon/internal/templates"
 	"github.com/toyz/axon/internal/utils"
 	"github.com/toyz/axon/pkg/axon"
 )
@@ -376,8 +382,11 @@ func (g *Generator) Run(config Config) error {
 		// Keep the original directory path for file generation
 		metadata.PackagePath = packageDir
 
-		// Generate module for this package with package path mappings
-		generatedModule, err := g.codeGenerator.GenerateModuleWithPackagePaths(metadata, moduleName, packagePathMappings)
+		// Determine required user packages for this module
+		requiredPackages := g.determineRequiredUserPackages(metadata, moduleName)
+		
+		// Generate module for this package with package path mappings and required packages
+		generatedModule, err := g.codeGenerator.GenerateModuleWithRequiredPackages(metadata, moduleName, packagePathMappings, requiredPackages)
 		if err != nil {
 			return &models.GeneratorError{
 				Type:    models.ErrorTypeGeneration,
@@ -395,7 +404,7 @@ func (g *Generator) Run(config Config) error {
 			}
 		}
 
-		// Write the generated module file
+		// Write the generated module file (Phase 1: Generate all files first)
 		err = g.writeModuleFile(generatedModule)
 		if err != nil {
 			return &models.GeneratorError{
@@ -427,6 +436,20 @@ func (g *Generator) Run(config Config) error {
 
 	// Users control their own main.go files - we just generate the modules
 	
+	// Phase 2: Post-process all generated files with goimports
+	if len(g.summary.GeneratedFiles) > 0 {
+		fmt.Printf("--- Post-Processing ---\n")
+		fmt.Printf("> Running goimports on %d generated files... ", len(g.summary.GeneratedFiles))
+		
+		if err := g.postProcessGeneratedFiles(); err != nil {
+			fmt.Printf("FAILED\n")
+			fmt.Printf("Warning: Failed to post-process generated files: %v\n", err)
+			fmt.Printf("Generated files may have missing imports. Run 'goimports -w .' to fix.\n")
+		} else {
+			fmt.Printf("OK\n")
+		}
+	}
+
 	if config.Verbose {
 		duration := time.Since(startTime)
 		fmt.Printf("\nGeneration completed in %v\n", duration)
@@ -652,6 +675,123 @@ func (g *Generator) collectSummaryInfo(metadata *models.PackageMetadata) {
 	g.summary.ControllersFound += len(metadata.Controllers)
 	g.summary.ServicesFound += len(metadata.CoreServices) + len(metadata.Loggers)
 	g.summary.MiddlewaresFound += len(metadata.Middlewares)
+}
+
+// postProcessGeneratedFiles runs goimports on all generated files
+func (g *Generator) postProcessGeneratedFiles() error {
+	for _, filePath := range g.summary.GeneratedFiles {
+		if err := g.processFileImports(filePath); err != nil {
+			return fmt.Errorf("failed to process imports for %s: %w", filePath, err)
+		}
+	}
+	return nil
+}
+
+// processFileImports runs goimports on a single file
+func (g *Generator) processFileImports(filePath string) error {
+	// Read the generated file
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read file: %w", err)
+	}
+	
+	// Process with goimports - the filePath is crucial for context
+	formatted, err := imports.Process(filePath, content, &imports.Options{
+		Fragment:  false,    // Complete Go file
+		AllErrors: true,     // Report all errors
+		Comments:  true,     // Preserve comments
+		TabIndent: true,     // Use tabs
+		TabWidth:  8,        // Standard Go tab width
+	})
+	if err != nil {
+		// Fallback to gofmt if goimports fails
+		formatted, fmtErr := format.Source(content)
+		if fmtErr != nil {
+			return fmt.Errorf("goimports failed: %v, gofmt also failed: %v", err, fmtErr)
+		}
+		// Write the gofmt result and continue
+		return os.WriteFile(filePath, formatted, 0644)
+	}
+	
+	// Fix imports to use correct versions
+	formattedString := string(formatted)
+	formattedString = fixAxonImports(formattedString)
+	formattedString = templates.FixEchoImports(formattedString)
+	
+	// Write the processed file back
+	return os.WriteFile(filePath, []byte(formattedString), 0644)
+}
+
+// fixAxonImports ensures axon imports always use the canonical path
+func fixAxonImports(content string) string {
+	// Pattern to match any axon import that's not already the canonical one
+	axonImportPattern := regexp.MustCompile(`"[^"]+/pkg/axon"`)
+	
+	// Replace with the canonical axon import
+	return axonImportPattern.ReplaceAllString(content, `"github.com/toyz/axon/pkg/axon"`)
+}
+
+// determineRequiredUserPackages analyzes what user packages need to be imported
+func (g *Generator) determineRequiredUserPackages(metadata *models.PackageMetadata, moduleName string) []string {
+	packageSet := make(map[string]bool)
+	
+	// Check for middleware references in controllers
+	for _, controller := range metadata.Controllers {
+		// Check route-level middleware
+		for _, route := range controller.Routes {
+			for _, middlewareName := range route.Middlewares {
+				if middleware, exists := g.globalMiddleware[middlewareName]; exists {
+					if relPath := g.getRelativePackagePath(middleware.PackagePath, moduleName); relPath != "" {
+						packageSet[relPath] = true
+					}
+				}
+			}
+		}
+		// Check controller-level middleware
+		for _, middlewareName := range controller.Middlewares {
+			if middleware, exists := g.globalMiddleware[middlewareName]; exists {
+				if relPath := g.getRelativePackagePath(middleware.PackagePath, moduleName); relPath != "" {
+					packageSet[relPath] = true
+				}
+			}
+		}
+	}
+	
+	// Check for service dependencies
+	if len(metadata.CoreServices) > 0 {
+		packageSet["internal/services"] = true
+	}
+	
+	// Check for model references (common in controllers)
+	if len(metadata.Controllers) > 0 {
+		packageSet["internal/models"] = true
+	}
+	
+	// Check for custom parsers
+	if len(metadata.RouteParsers) > 0 {
+		packageSet["internal/parsers"] = true
+	}
+	
+	// Convert set to slice
+	var packages []string
+	for pkg := range packageSet {
+		packages = append(packages, pkg)
+	}
+	
+	return packages
+}
+
+// getRelativePackagePath converts an absolute package path to a relative one for imports
+func (g *Generator) getRelativePackagePath(absolutePath, moduleName string) string {
+	// Convert something like "/home/user/project/internal/middleware" 
+	// to "internal/middleware" for the import
+	if strings.Contains(absolutePath, "internal/") {
+		parts := strings.Split(absolutePath, "internal/")
+		if len(parts) > 1 {
+			return "internal/" + parts[len(parts)-1]
+		}
+	}
+	return ""
 }
 
 // ReportSuccess reports successful generation using the diagnostic reporter
