@@ -5,6 +5,86 @@ import (
 	"testing"
 )
 
+// ErrorCollector provides error recovery and multiple error collection (test-only utility)
+type ErrorCollector struct {
+	errors    []AnnotationError
+	maxErrors int
+}
+
+// NewErrorCollector creates a new error collector with optional max error limit
+func NewErrorCollector(maxErrors ...int) *ErrorCollector {
+	max := 10 // default max errors
+	if len(maxErrors) > 0 && maxErrors[0] > 0 {
+		max = maxErrors[0]
+	}
+	return &ErrorCollector{
+		errors:    make([]AnnotationError, 0),
+		maxErrors: max,
+	}
+}
+
+// Add adds an error to the collection if under the limit
+func (ec *ErrorCollector) Add(err AnnotationError) {
+	if len(ec.errors) < ec.maxErrors {
+		ec.errors = append(ec.errors, err)
+	}
+}
+
+// AddSyntaxError creates and adds a syntax error
+func (ec *ErrorCollector) AddSyntaxError(msg string, loc SourceLocation, suggestion string) {
+	ec.Add(&SyntaxError{
+		Msg:  msg,
+		Loc:  loc,
+		Hint: suggestion,
+	})
+}
+
+// AddValidationError creates and adds a validation error
+func (ec *ErrorCollector) AddValidationError(parameter, expected, actual string, loc SourceLocation, suggestion string) {
+	ec.Add(&ValidationError{
+		Parameter: parameter,
+		Expected:  expected,
+		Actual:    actual,
+		Loc:       loc,
+		Hint:      suggestion,
+	})
+}
+
+// AddSchemaError creates and adds a schema error
+func (ec *ErrorCollector) AddSchemaError(msg string, loc SourceLocation, suggestion string) {
+	ec.Add(&SchemaError{
+		Msg:  msg,
+		Loc:  loc,
+		Hint: suggestion,
+	})
+}
+
+// HasErrors returns true if any errors have been collected
+func (ec *ErrorCollector) HasErrors() bool {
+	return len(ec.errors) > 0
+}
+
+// Count returns the number of errors collected
+func (ec *ErrorCollector) Count() int {
+	return len(ec.errors)
+}
+
+// Errors returns all collected errors
+func (ec *ErrorCollector) Errors() []AnnotationError {
+	return ec.errors
+}
+
+// ToError converts collected errors to a single error, or nil if no errors
+func (ec *ErrorCollector) ToError() error {
+	if len(ec.errors) == 0 {
+		return nil
+	}
+	if len(ec.errors) == 1 {
+		return ec.errors[0]
+	}
+	return &MultipleAnnotationErrors{Errors: ec.errors}
+}
+
 func TestAnnotationError_Interface(t *testing.T) {
 	loc := SourceLocation{File: "test.go", Line: 10, Column: 5}
 

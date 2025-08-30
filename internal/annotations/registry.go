@@ -2,7 +2,6 @@ package annotations
 
 import (
 	"fmt"
-	"sync"
 
 	"github.com/toyz/axon/internal/utils"
 )
@@ -34,19 +33,11 @@ func NewRegistry() AnnotationRegistry {
 	}
 }
 
-// defaultRegistry is the global registry instance
-var (
-	defaultRegistry     AnnotationRegistry
-	defaultRegistryOnce sync.Once
-)
 
-// DefaultRegistry returns the global annotation registry
-func DefaultRegistry() AnnotationRegistry {
-	defaultRegistryOnce.Do(func() {
-		defaultRegistry = NewRegistry()
-	})
-	return defaultRegistry
-}
+
+
+
+
 
 // Register adds a new annotation type with its schema to the registry
 func (r *registry) Register(annotationType AnnotationType, schema AnnotationSchema) error {

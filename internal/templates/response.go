@@ -40,7 +40,6 @@ func GenerateResponseHandling(route models.RouteMetadata, controllerName string)
 	switch route.ReturnType.Type {
 	case models.ReturnTypeDataError:
 		return generateDataErrorResponse(handlerCall, errAlreadyDeclared), nil
-		return generateDataErrorResponse(handlerCall, errAlreadyDeclared), nil
 	case models.ReturnTypeResponseError:
 		return generateResponseErrorResponse(handlerCall, errAlreadyDeclared), nil
 	case models.ReturnTypeError:

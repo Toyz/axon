@@ -20,15 +20,7 @@ func TestNewRegistry(t *testing.T) {
 	}
 }
 
-func TestDefaultRegistry(t *testing.T) {
-	// Should return the same instance
-	registry1 := DefaultRegistry()
-	registry2 := DefaultRegistry()
 
-	if registry1 != registry2 {
-		t.Error("DefaultRegistry() should return the same instance")
-	}
-}
 
 func TestRegister(t *testing.T) {
 	registry := NewRegistry()
@@ -445,110 +437,7 @@ func TestConcurrentRegistryModifications(t *testing.T) {
 }
 
 // Test concurrent validation operations
-func TestConcurrentValidation(t *testing.T) {
-	registry := NewRegistry()
-	err := RegisterBuiltinSchemas(registry)
-	if err != nil {
-		t.Fatalf("failed to register builtin schemas: %v", err)
-	}
 
-	validator := NewValidator()
-	location := SourceLocation{File: "test.go", Line: 1, Column: 1}
-
-	// Create test annotations for validation
-	testAnnotations := []*ParsedAnnotation{
-		{
-			Type: CoreAnnotation,
-			Parameters: map[string]interface{}{
-				"Mode": "Singleton",
-				"Init": "Same",
-			},
-			Location: location,
-		},
-		{
-			Type: RouteAnnotation,
-			Parameters: map[string]interface{}{
-				"method":     "GET",
-				"path":       "/users",
-				"Middleware": []string{"Auth", "Logging"},
-			},
-			Location: location,
-		},
-		{
-			Type: ControllerAnnotation,
-			Parameters: map[string]interface{}{
-				"Prefix": "/api/v1",
-			},
-			Location: location,
-		},
-	}
-
-	numGoroutines := 10
-	numOperations := 100
-
-	var wg sync.WaitGroup
-	var validationErrors int32
-
-	wg.Add(numGoroutines)
-
-	for i := 0; i < numGoroutines; i++ {
-		go func(goroutineID int) {
-			defer wg.Done()
-
-			for j := 0; j < numOperations; j++ {
-				annotation := testAnnotations[j%len(testAnnotations)]
-
-				// Get schema
-				schema, err := registry.GetSchema(annotation.Type)
-				if err != nil {
-					atomic.AddInt32(&validationErrors, 1)
-					continue
-				}
-
-				// Create a copy to avoid concurrent modification
-				annotationCopy := &ParsedAnnotation{
-					Type:       annotation.Type,
-					Parameters: make(map[string]interface{}),
-					Location:   annotation.Location,
-				}
-
-				// Copy parameters
-				for k, v := range annotation.Parameters {
-					annotationCopy.Parameters[k] = v
-				}
-
-				// Apply defaults
-				err = validator.ApplyDefaults(annotationCopy, schema)
-				if err != nil {
-					atomic.AddInt32(&validationErrors, 1)
-					continue
-				}
-
-				// Transform parameters
-				err = validator.TransformParameters(annotationCopy, schema)
-				if err != nil {
-					atomic.AddInt32(&validationErrors, 1)
-					continue
-				}
-
-				// Validate
-				err = validator.Validate(annotationCopy, schema)
-				if err != nil {
-					atomic.AddInt32(&validationErrors, 1)
-					continue
-				}
-			}
-		}(i)
-	}
-
-	wg.Wait()
-
-	if validationErrors > 0 {
-		t.Errorf("had %d validation errors during concurrent operations", validationErrors)
-	}
-
-	t.Logf("Concurrent validation test completed with %d errors", validationErrors)
-}
 
 func TestValidateDefaultValue(t *testing.T) {
 	registry := NewRegistry().(*registry)

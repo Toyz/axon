@@ -194,24 +194,3 @@ func ValidateConstructor(value interface{}) error {
 	return nil
 }
 
-// isValidGoIdentifier checks if a string is a valid Go identifier
-func isValidGoIdentifier(name string) bool {
-	if name == "" {
-		return false
-	}
-
-	// First character must be a letter or underscore
-	first := rune(name[0])
-	if !((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') || first == '_') {
-		return false
-	}
-
-	// Remaining characters must be letters, digits, or underscores
-	for _, r := range name[1:] {
-		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_') {
-			return false
-		}
-	}
-
-	return true
-}

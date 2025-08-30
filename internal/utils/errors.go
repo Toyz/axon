@@ -39,3 +39,4 @@ func WrapValidateError(item string, err error) error {
 func WrapProcessError(item string, err error) error {
 	return fmt.Errorf("failed to process %s: %w", item, err)
 }
+
