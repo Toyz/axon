@@ -32,6 +32,7 @@ type Parser struct {
 type DiagnosticReporter interface {
 	Debug(format string, args ...interface{})
 	DebugSection(section string)
+	ReportWarning(message string, suggestions ...string)
 }
 
 // NewParser creates a new annotation parser using the new annotations package
@@ -75,8 +76,9 @@ func NewParserWithReporter(reporter DiagnosticReporter) *Parser {
 // noOpReporter is a no-op implementation of DiagnosticReporter for backward compatibility
 type noOpReporter struct{}
 
-func (n *noOpReporter) Debug(format string, args ...interface{}) {}
-func (n *noOpReporter) DebugSection(section string)              {}
+func (n *noOpReporter) Debug(format string, args ...interface{})         {}
+func (n *noOpReporter) DebugSection(section string)                      {}
+func (n *noOpReporter) ReportWarning(message string, suggestions ...string) {}
 
 // ParseSource parses source code from a string for testing purposes
 func (p *Parser) ParseSource(filename, source string) (*models.PackageMetadata, error) {
@@ -237,6 +239,7 @@ func (p *Parser) ExtractAnnotations(file *ast.File, fileName string) ([]models.A
 										if annotation.Type == models.AnnotationTypeController ||
 											annotation.Type == models.AnnotationTypeMiddleware ||
 											annotation.Type == models.AnnotationTypeCore ||
+											annotation.Type == models.AnnotationTypeService ||
 											annotation.Type == models.AnnotationTypeLogger {
 											deps := p.extractDependencies(structType)
 											annotation.Dependencies = deps
@@ -463,7 +466,16 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 			}
 			metadata.Middlewares = append(metadata.Middlewares, middleware)
 
-		case models.AnnotationTypeCore:
+		case models.AnnotationTypeService, models.AnnotationTypeCore:
+			// Add deprecation warning for axon::core
+			if annotation.Type == models.AnnotationTypeCore {
+				p.reporter.ReportWarning(
+					fmt.Sprintf("//axon::core is deprecated, use //axon::service instead (%s:%d)", annotation.Location.File, annotation.Location.Line),
+					"Replace //axon::core with //axon::service in your annotations",
+					"Both annotations work the same way, but //axon::service is the preferred syntax",
+				)
+			}
+			
 			service := models.CoreServiceMetadata{
 				Name:         annotation.Target,
 				StructName:   annotation.Target,
@@ -514,6 +526,12 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				service.Mode = mode
 			} else {
 				return fmt.Errorf("service %s has invalid mode '%s': must be 'Singleton' or 'Transient'", annotation.Target, mode)
+			}
+
+			// Check for Constructor parameter (custom constructor function)
+			constructor := annotation.GetString("Constructor", "")
+			if constructor != "" {
+				service.Constructor = constructor
 			}
 
 			metadata.CoreServices = append(metadata.CoreServices, service)

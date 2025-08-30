@@ -18,6 +18,7 @@ type CoreServiceMetadata struct {
 	IsManual     bool         // whether service uses manual module
 	ModuleName   string       // name of manual module (if applicable)
 	Mode         string       // lifecycle mode: "Singleton" (default) or "Transient"
+	Constructor  string       // custom constructor function name (if provided)
 	Dependencies []Dependency // dependencies injected via fx.In
 }
 

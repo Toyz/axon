@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/fatih/color"
 )
 
 // DiagnosticLevel represents the level of diagnostic output
@@ -22,13 +24,12 @@ const (
 
 // DiagnosticSystem provides structured, user-friendly output
 type DiagnosticSystem struct {
-	level      DiagnosticLevel
-	useColors  bool
-	showTime   bool
-	output     io.Writer
-	errorOut   io.Writer
-	indent     int
-	inProgress bool
+	level     DiagnosticLevel
+	useColors bool
+	showTime  bool
+	output    io.Writer
+	errorOut  io.Writer
+	indent    int
 }
 
 // NewDiagnosticSystem creates a new diagnostic system
@@ -113,69 +114,23 @@ func (d *DiagnosticSystem) Debug(format string, args ...interface{}) {
 func (d *DiagnosticSystem) Progress(format string, args ...interface{}) {
 	if d.level >= DiagnosticInfo {
 		message := fmt.Sprintf(format, args...)
-		d.writeProgress(message)
+		fmt.Fprintf(d.output, "✓ %s\n", message)
 	}
 }
 
-// StartProgress begins a progress indication
-func (d *DiagnosticSystem) StartProgress(format string, args ...interface{}) {
-	if d.level >= DiagnosticInfo {
-		message := fmt.Sprintf(format, args...)
-		d.inProgress = true
-		if d.useColors {
-			fmt.Fprintf(d.output, "%s%s> %s...%s", d.getIndent(), ColorCyan, message, ColorReset)
-		} else {
-			fmt.Fprintf(d.output, "%s> %s...", d.getIndent(), message)
-		}
-	}
-}
 
-// EndProgress completes a progress indication
-func (d *DiagnosticSystem) EndProgress(success bool, message string) {
-	if d.level >= DiagnosticInfo && d.inProgress {
-		d.inProgress = false
-		if success {
-			if d.useColors {
-				fmt.Fprintf(d.output, " %sOK%s", ColorGreen, ColorReset)
-			} else {
-				fmt.Fprint(d.output, " OK")
-			}
-		} else {
-			if d.useColors {
-				fmt.Fprintf(d.output, " %sFAILED%s", ColorRed, ColorReset)
-			} else {
-				fmt.Fprint(d.output, " FAILED")
-			}
-		}
-		if message != "" {
-			fmt.Fprintf(d.output, " %s", message)
-		}
-		fmt.Fprintln(d.output)
-	}
-}
 
 // Section creates a prominent section header
 func (d *DiagnosticSystem) Section(title string) {
 	if d.level >= DiagnosticInfo {
-		fmt.Fprintln(d.output)
-		if d.useColors {
-			fmt.Fprintf(d.output, "%s%s%s=== %s ===%s\n", 
-				d.getIndent(), ColorBold, ColorCyan, title, ColorReset)
-		} else {
-			fmt.Fprintf(d.output, "%s=== %s ===\n", d.getIndent(), title)
-		}
+		fmt.Fprintf(d.output, "%s\n", title)
 	}
 }
 
 // Subsection creates a subsection header
 func (d *DiagnosticSystem) Subsection(title string) {
 	if d.level >= DiagnosticInfo {
-		if d.useColors {
-			fmt.Fprintf(d.output, "%s%s--- %s ---%s\n", 
-				d.getIndent(), ColorBlue, title, ColorReset)
-		} else {
-			fmt.Fprintf(d.output, "%s--- %s ---\n", d.getIndent(), title)
-		}
+		fmt.Fprintf(d.output, "\n%s:\n", title)
 	}
 }
 
@@ -183,12 +138,7 @@ func (d *DiagnosticSystem) Subsection(title string) {
 func (d *DiagnosticSystem) List(format string, args ...interface{}) {
 	if d.level >= DiagnosticInfo {
 		message := fmt.Sprintf(format, args...)
-		if d.useColors {
-			fmt.Fprintf(d.output, "%s  %s-%s %s\n", 
-				d.getIndent(), ColorBlue, ColorReset, message)
-		} else {
-			fmt.Fprintf(d.output, "%s  - %s\n", d.getIndent(), message)
-		}
+		fmt.Fprintf(d.output, "- %s\n", message)
 	}
 }
 
@@ -207,23 +157,74 @@ func (d *DiagnosticSystem) Unindent() {
 // Summary outputs a final summary with statistics
 func (d *DiagnosticSystem) Summary(title string, stats map[string]interface{}) {
 	if d.level >= DiagnosticInfo {
-		fmt.Fprintln(d.output)
-		if d.useColors {
-			fmt.Fprintf(d.output, "%s%s%s\n", 
-				ColorBold, title, ColorReset)
-		} else {
-			fmt.Fprintf(d.output, "%s\n", title)
-		}
+		fmt.Fprintf(d.output, "\n%s\n", title)
 		
 		for key, value := range stats {
-			if d.useColors {
-				fmt.Fprintf(d.output, "   %s%s:%s %v\n", 
-					ColorBlue, key, ColorReset, value)
-			} else {
-				fmt.Fprintf(d.output, "   %s: %v\n", key, value)
-			}
+			fmt.Fprintf(d.output, "   %s: %v\n", key, value)
 		}
 		fmt.Fprintln(d.output)
+	}
+}
+
+// Category outputs a category header like [Controllers]
+func (d *DiagnosticSystem) Category(title string) {
+	if d.level >= DiagnosticInfo {
+		fmt.Fprintf(d.output, "\n[%s]\n", title)
+	}
+}
+
+// AxonHeader outputs the main Axon header
+func (d *DiagnosticSystem) AxonHeader(message string) {
+	if d.level >= DiagnosticInfo {
+		cyan := color.New(color.FgCyan)
+		cyan.Printf("Axon: %s\n", message)
+	}
+}
+
+// SourcePath outputs the source path
+func (d *DiagnosticSystem) SourcePath(path string) {
+	if d.level >= DiagnosticInfo {
+		fmt.Printf("Source Path: %s\n\n", path)
+	}
+}
+
+// PhaseHeader outputs a phase header
+func (d *DiagnosticSystem) PhaseHeader(phase string) {
+	if d.level >= DiagnosticInfo {
+		blue := color.New(color.FgBlue)
+		blue.Printf("%s:\n", phase)
+	}
+}
+
+// PhaseItem outputs a phase item with checkmark
+func (d *DiagnosticSystem) PhaseItem(message string) {
+	if d.level >= DiagnosticInfo {
+		green := color.New(color.FgGreen)
+		green.Print("✓ ")
+		fmt.Printf("%s\n", message)
+	}
+}
+
+// PhaseProgress outputs a phase progress item
+func (d *DiagnosticSystem) PhaseProgress(message string) {
+	if d.level >= DiagnosticInfo {
+		// Special formatting for writing operations
+		if strings.Contains(message, "Writing") {
+			magenta := color.New(color.FgMagenta)
+			magenta.Print("✏ ")
+			fmt.Printf("%s\n", message)
+		} else {
+			fmt.Printf("- %s\n", message)
+		}
+	}
+}
+
+// GenerationComplete outputs the completion message
+func (d *DiagnosticSystem) GenerationComplete() {
+	if d.level >= DiagnosticInfo {
+		fmt.Println()
+		green := color.New(color.FgGreen)
+		green.Println("Axon: Generation complete!")
 	}
 }
 
@@ -253,15 +254,7 @@ func (d *DiagnosticSystem) writeMessage(writer io.Writer, level, color, format s
 	fmt.Fprint(writer, output.String())
 }
 
-// writeProgress writes a progress message
-func (d *DiagnosticSystem) writeProgress(message string) {
-	if d.useColors {
-		fmt.Fprintf(d.output, "%s%s> %s%s\n", 
-			d.getIndent(), ColorCyan, message, ColorReset)
-	} else {
-		fmt.Fprintf(d.output, "%s> %s\n", d.getIndent(), message)
-	}
-}
+
 
 // getIndent returns the current indentation string
 func (d *DiagnosticSystem) getIndent() string {

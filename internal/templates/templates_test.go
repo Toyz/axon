@@ -765,3 +765,85 @@ func TestGenerateParameterBindingCode_WithContextParameters(t *testing.T) {
 		})
 	}
 }
+
+// TestGenerateCoreServiceProviderWithCustomConstructor tests custom constructor functionality
+func TestGenerateCoreServiceProviderWithCustomConstructor(t *testing.T) {
+	tests := []struct {
+		name        string
+		service     models.CoreServiceMetadata
+		expectEmpty bool
+		expectError bool
+	}{
+		{
+			name: "service without custom constructor should generate provider",
+			service: models.CoreServiceMetadata{
+				Name:       "UserService",
+				StructName: "UserService",
+				Dependencies: []models.Dependency{
+					{Name: "Config", Type: "*config.Config", IsInit: false},
+				},
+				Constructor: "", // No custom constructor
+			},
+			expectEmpty: false,
+			expectError: false,
+		},
+		{
+			name: "service with custom constructor should not generate provider",
+			service: models.CoreServiceMetadata{
+				Name:       "NotificationService",
+				StructName: "NotificationService",
+				Dependencies: []models.Dependency{
+					{Name: "Logger", Type: "*slog.Logger", IsInit: false},
+				},
+				Constructor: "NewCustomNotificationService", // Custom constructor
+			},
+			expectEmpty: true,
+			expectError: false,
+		},
+		{
+			name: "manual service should not generate provider",
+			service: models.CoreServiceMetadata{
+				Name:       "ManualService",
+				StructName: "ManualService",
+				IsManual:   true,
+				Constructor: "", // No custom constructor but manual
+			},
+			expectEmpty: true,
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := GenerateCoreServiceProvider(tt.service)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			if tt.expectEmpty && result != "" {
+				t.Errorf("expected empty result but got: %s", result)
+			}
+
+			if !tt.expectEmpty && result == "" {
+				t.Errorf("expected non-empty result but got empty string")
+			}
+
+			// For non-custom constructor services, verify the generated function name
+			if !tt.expectEmpty && tt.service.Constructor == "" {
+				expectedFunc := "func New" + tt.service.StructName
+				if !strings.Contains(result, expectedFunc) {
+					t.Errorf("expected result to contain %s, got: %s", expectedFunc, result)
+				}
+			}
+		})
+	}
+}

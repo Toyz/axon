@@ -17,6 +17,13 @@ type CrawlerServiceInterface interface {
 	Stop(ctx context.Context) error
 }
 
+// NotificationServiceInterface is the interface for NotificationService
+type NotificationServiceInterface interface {
+	SendNotification(ctx context.Context, message string, channel string) error
+	EnableChannel(channel string)
+	DisableChannel(channel string)
+}
+
 func NewCrawlerService() *CrawlerService {
 	return &CrawlerService{}
 }
@@ -84,14 +91,20 @@ func NewCrawlerServiceInterface(impl *CrawlerService) CrawlerServiceInterface {
 	return impl
 }
 
+func NewNotificationServiceInterface(impl *NotificationService) NotificationServiceInterface {
+	return impl
+}
+
 // AutogenModule provides all core services in this package
 var AutogenModule = fx.Module("services",
 	fx.Provide(NewCrawlerService),
 	fx.Invoke(initCrawlerServiceLifecycle),
 	fx.Provide(NewDatabaseService),
 	fx.Invoke(initDatabaseServiceLifecycle),
+	fx.Provide(NewCustomNotificationService),
 	fx.Provide(NewSessionServiceFactory),
 	fx.Provide(NewUserService),
 	fx.Invoke(initUserServiceLifecycle),
 	fx.Provide(NewCrawlerServiceInterface),
+	fx.Provide(NewNotificationServiceInterface),
 )

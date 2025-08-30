@@ -369,6 +369,13 @@ func GenerateCoreServiceProvider(service models.CoreServiceMetadata) (string, er
 		return "", nil
 	}
 
+	// If a custom constructor is provided, use it instead of generating one
+	if service.Constructor != "" {
+		// For custom constructors, we just need to provide the existing function
+		// The user has already defined the constructor function
+		return "", nil // No generated provider needed - use the custom constructor directly
+	}
+
 	// Convert Dependency models to DependencyData for templates
 	var dependencies []DependencyData
 	var injectedDeps []DependencyData
@@ -636,7 +643,13 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 			contentBuilder.WriteString(fmt.Sprintf("\tfx.Provide(New%sFactory),\n", service.StructName))
 		} else {
 			// Singleton services (default) use fx.Provide to make them available for dependency injection
-			contentBuilder.WriteString(fmt.Sprintf("\tfx.Provide(New%s),\n", service.StructName))
+			if service.Constructor != "" {
+				// Use custom constructor
+				contentBuilder.WriteString(fmt.Sprintf("\tfx.Provide(%s),\n", service.Constructor))
+			} else {
+				// Use generated constructor
+				contentBuilder.WriteString(fmt.Sprintf("\tfx.Provide(New%s),\n", service.StructName))
+			}
 
 			// Add fx.Invoke for services with -Init flag
 			if service.HasLifecycle {

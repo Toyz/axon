@@ -10,6 +10,43 @@ import (
 	"github.com/toyz/axon/internal/models"
 )
 
+func TestDiagnosticReporter_ReportWarning(t *testing.T) {
+	// Capture stderr output
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	reporter := NewDiagnosticReporter(false)
+
+	// Test warning without suggestions
+	reporter.ReportWarning("This is a test warning")
+
+	// Test warning with suggestions
+	reporter.ReportWarning("This is another warning", 
+		"First suggestion",
+		"Second suggestion",
+	)
+
+	// Close writer and read output
+	w.Close()
+	os.Stderr = oldStderr
+
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	output := buf.String()
+
+	// Verify output contains expected elements (new clean format)
+	if !strings.Contains(output, "! This is a test warning") {
+		t.Errorf("Expected warning message not found in output")
+	}
+
+	if !strings.Contains(output, "! This is another warning") {
+		t.Errorf("Expected second warning message not found in output")
+	}
+
+	// Note: Suggestions are no longer displayed in the clean format
+}
+
 func TestDiagnosticReporter_ReportGeneratorError(t *testing.T) {
 	// Capture stderr output
 	oldStderr := os.Stderr

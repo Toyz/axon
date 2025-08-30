@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/toyz/axon/internal/cli"
 	"github.com/toyz/axon/internal/utils"
@@ -69,80 +68,36 @@ func main() {
 		diagnostics = utils.NewDiagnosticSystem(utils.DiagnosticInfo)
 	}
 
-	// Show startup banner
-	diagnostics.Section("Axon Code Generator")
+	// Clean startup - no banner needed, generator will handle output
 	
 	// Handle clean operation
 	if *cleanFlag {
 		diagnostics.Info("Starting cleanup operation...")
-		diagnostics.StartProgress("Cleaning generated files")
 		
 		cleaner := cli.NewCleaner()
 		err := cleaner.CleanGeneratedFiles(args)
 		if err != nil {
-			diagnostics.EndProgress(false, "")
 			diagnostics.Error("Clean operation failed: %v", err)
 			os.Exit(1)
 		}
 		
-		diagnostics.EndProgress(true, "")
 		diagnostics.Success("All autogen_module.go files have been removed")
 		return
 	}
 
-	// Show configuration
-	if *verboseFlag {
-		diagnostics.Subsection("Configuration")
-		diagnostics.List("Target directories: %s", strings.Join(args, ", "))
-		if *moduleFlag != "" {
-			diagnostics.List("Custom module: %s", *moduleFlag)
-		}
-		diagnostics.List("Verbose mode: enabled")
-	}
-
-	// Create and configure generator
-	diagnostics.StartProgress("Initializing generator")
+	// Create and configure generator (no extra output)
 	generator := cli.NewGeneratorWithDiagnostics(*verboseFlag, diagnostics)
 	
 	if *moduleFlag != "" {
 		generator.SetCustomModule(*moduleFlag)
-		diagnostics.Debug("Using custom module: %s", *moduleFlag)
 	}
-	diagnostics.EndProgress(true, "")
-
-	// Run the generation process
-	diagnostics.Subsection("Code Generation")
-	diagnostics.StartProgress("Processing directories")
 	
+	// Run the generation process
 	err := generator.Generate(args)
 	if err != nil {
-		diagnostics.EndProgress(false, "")
 		diagnostics.Error("Generation failed: %v", err)
 		os.Exit(1)
 	}
-	
-	diagnostics.EndProgress(true, "")
 
-	// Show final summary
-	summary := generator.GetSummary()
-	stats := map[string]interface{}{
-		"Packages processed":   summary.PackagesProcessed,
-		"Modules generated":    len(summary.GeneratedFiles),
-		"Controllers found":    summary.ControllersFound,
-		"Services found":       summary.ServicesFound,
-		"Middlewares found":    summary.MiddlewaresFound,
-		"Custom parsers found": summary.ParsersDiscovered,
-	}
-	
-	diagnostics.Summary("Generation Complete!", stats)
-	
-	// Show generated files in verbose mode
-	if *verboseFlag && len(summary.GeneratedFiles) > 0 {
-		diagnostics.Subsection("Generated Files")
-		for _, file := range summary.GeneratedFiles {
-			diagnostics.List("%s", file)
-		}
-	}
-	
-	diagnostics.Success("Your Axon application is ready to use!")
+	// Generator handles its own completion message
 }

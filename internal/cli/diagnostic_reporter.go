@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/fatih/color"
 	"github.com/toyz/axon/internal/models"
 )
 
@@ -18,6 +19,14 @@ func NewDiagnosticReporter(verbose bool) *DiagnosticReporter {
 	return &DiagnosticReporter{
 		verbose: verbose,
 	}
+}
+
+// ReportWarning provides user-friendly warning reporting
+func (r *DiagnosticReporter) ReportWarning(message string, suggestions ...string) {
+	// Clean warning format with orange color
+	orange := color.New(color.FgYellow, color.Bold) // Orange-ish color using yellow + bold
+	orange.Fprint(os.Stderr, "! ")
+	fmt.Fprintf(os.Stderr, "%s\n", message)
 }
 
 // ReportError provides comprehensive error reporting with user-friendly output

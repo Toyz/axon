@@ -7,19 +7,38 @@ import (
 
 // Built-in annotation schemas
 
-// CoreAnnotationSchema defines the schema for //axon::core annotations
-var CoreAnnotationSchema = AnnotationSchema{
-	Type:        CoreAnnotation,
-	Description: "Marks a struct as a core service for dependency injection",
+// ServiceAnnotationSchema defines the schema for //axon::service annotations
+var ServiceAnnotationSchema = AnnotationSchema{
+	Type:        ServiceAnnotation,
+	Description: "Marks a struct as a service for dependency injection",
 	Parameters: map[string]ParameterSpec{
-		"Mode":   ModeParameterSpec(),
-		"Init":   InitParameterSpec(),
-		"Manual": ManualParameterSpec(),
+		"Mode":        ModeParameterSpec(),
+		"Init":        InitParameterSpec(),
+		"Manual":      ManualParameterSpec(),
+		"Constructor": ConstructorParameterSpec(),
 	},
 	Examples: []string{
+		"//axon::service",
+		"//axon::service -Mode=Transient",
+		"//axon::service -Init=Background",
+		"//axon::service -Constructor=NewCustomUserService",
+		"//axon::service -Mode=Singleton -Init=Same",
+		"//axon::service -Manual=\"CustomModule\"",
+		"//axon::service -Mode=Transient -Init=Background -Manual=\"AsyncService\"",
+		"//axon::service -Constructor=NewCustomService -Mode=Transient",
+	},
+}
+
+// CoreAnnotationSchema is an alias to ServiceAnnotationSchema for backward compatibility (DEPRECATED: use ServiceAnnotationSchema)
+var CoreAnnotationSchema = AnnotationSchema{
+	Type:        CoreAnnotation,
+	Description: ServiceAnnotationSchema.Description + " (DEPRECATED: use //axon::service)",
+	Parameters:  ServiceAnnotationSchema.Parameters, // Same parameters as ServiceAnnotationSchema
+	Examples: []string{
 		"//axon::core",
-		"//axon::core -Mode=Transient",
+		"//axon::core -Mode=Transient", 
 		"//axon::core -Init=Background",
+		"//axon::core -Constructor=NewCustomService",
 		"//axon::core -Mode=Singleton -Init=Same",
 		"//axon::core -Manual=\"CustomModule\"",
 		"//axon::core -Mode=Transient -Init=Background -Manual=\"AsyncService\"",
@@ -162,7 +181,8 @@ func RegisterBuiltinSchemas(registry AnnotationRegistry) error {
 // GetBuiltinSchemas returns all built-in annotation schemas
 func GetBuiltinSchemas() []AnnotationSchema {
 	return []AnnotationSchema{
-		CoreAnnotationSchema,
+		ServiceAnnotationSchema,
+		CoreAnnotationSchema, // Deprecated: kept for backward compatibility
 		RouteAnnotationSchema,
 		ControllerAnnotationSchema,
 		MiddlewareAnnotationSchema,

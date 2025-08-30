@@ -8,7 +8,8 @@ import (
 type AnnotationType int
 
 const (
-	CoreAnnotation AnnotationType = iota
+	CoreAnnotation AnnotationType = iota // Deprecated: use ServiceAnnotation
+	ServiceAnnotation
 	RouteAnnotation
 	ControllerAnnotation
 	MiddlewareAnnotation
@@ -24,6 +25,8 @@ func (a AnnotationType) String() string {
 	switch a {
 	case CoreAnnotation:
 		return "core"
+	case ServiceAnnotation:
+		return "service"
 	case RouteAnnotation:
 		return "route"
 	case ControllerAnnotation:
@@ -50,6 +53,8 @@ func ParseAnnotationType(s string) (AnnotationType, error) {
 	switch s {
 	case "core":
 		return CoreAnnotation, nil
+	case "service":
+		return ServiceAnnotation, nil
 	case "route":
 		return RouteAnnotation, nil
 	case "controller":

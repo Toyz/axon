@@ -10,7 +10,8 @@ const (
 	AnnotationTypeController  = annotations.ControllerAnnotation
 	AnnotationTypeRoute       = annotations.RouteAnnotation
 	AnnotationTypeMiddleware  = annotations.MiddlewareAnnotation
-	AnnotationTypeCore        = annotations.CoreAnnotation
+	AnnotationTypeCore        = annotations.CoreAnnotation        // Deprecated: use AnnotationTypeService
+	AnnotationTypeService     = annotations.ServiceAnnotation
 	AnnotationTypeInterface   = annotations.InterfaceAnnotation
 	AnnotationTypeInject      = annotations.InjectAnnotation
 	AnnotationTypeInit        = annotations.InitAnnotation

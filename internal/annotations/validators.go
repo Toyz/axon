@@ -99,6 +99,16 @@ func URLPathParameterSpec() ParameterSpec {
 	}
 }
 
+// ConstructorParameterSpec returns a standard constructor parameter specification
+func ConstructorParameterSpec() ParameterSpec {
+	return ParameterSpec{
+		Type:        StringType,
+		Required:    false,
+		Description: "Custom constructor function name (e.g., NewCustomUserService)",
+		Validator:   ValidateConstructor,
+	}
+}
+
 // MiddlewareParameterSpec returns a standard Middleware parameter specification
 func MiddlewareParameterSpec() ParameterSpec {
 	return ParameterSpec{
@@ -154,4 +164,51 @@ func PrefixParameterSpec() ParameterSpec {
 		Required:    false,
 		Description: "URL prefix to apply. Supports parameters (e.g., /api/v1, /users/{id:int})",
 	}
+}
+
+// ValidateConstructor validates constructor function names
+func ValidateConstructor(value interface{}) error {
+	constructor, ok := value.(string)
+	if !ok {
+		return fmt.Errorf("constructor must be a string")
+	}
+
+	if constructor == "" {
+		return fmt.Errorf("constructor cannot be empty")
+	}
+
+	// Check if it's a valid Go function name
+	if !isValidGoIdentifier(constructor) {
+		return fmt.Errorf("constructor must be a valid Go function name")
+	}
+
+	// Convention: constructor functions should start with "New" or similar
+	if !strings.HasPrefix(constructor, "New") && !strings.HasPrefix(constructor, "Create") && !strings.HasPrefix(constructor, "Initialize") {
+		// This is just a warning, not an error - allow any valid identifier
+		// Users might have their own naming conventions
+	}
+
+	return nil
+}
+
+// isValidGoIdentifier checks if a string is a valid Go identifier
+func isValidGoIdentifier(name string) bool {
+	if name == "" {
+		return false
+	}
+
+	// First character must be a letter or underscore
+	first := rune(name[0])
+	if !((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') || first == '_') {
+		return false
+	}
+
+	// Remaining characters must be letters, digits, or underscores
+	for _, r := range name[1:] {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_') {
+			return false
+		}
+	}
+
+	return true
 }
