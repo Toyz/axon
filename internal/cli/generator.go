@@ -21,16 +21,16 @@ import (
 
 // Generator coordinates the CLI generation process
 type Generator struct {
-	scanner        *DirectoryScanner
-	moduleResolver *ModuleResolver
-	parser         parser.AnnotationParser
-	codeGenerator  generator.CodeGenerator
-	globalParsers     map[string]axon.RouteParserMetadata // Global parser registry for cross-package discovery
-	globalMiddleware  map[string]models.MiddlewareMetadata  // Global middleware registry for cross-package discovery
-	reporter          *DiagnosticReporter
-	diagnostics       *utils.DiagnosticSystem // Clean diagnostic system
-	customModule      string                   // Custom module name if set
-	summary           GenerationSummary
+	scanner          *DirectoryScanner
+	moduleResolver   *ModuleResolver
+	parser           parser.AnnotationParser
+	codeGenerator    generator.CodeGenerator
+	globalParsers    map[string]axon.RouteParserMetadata  // Global parser registry for cross-package discovery
+	globalMiddleware map[string]models.MiddlewareMetadata // Global middleware registry for cross-package discovery
+	reporter         *DiagnosticReporter
+	diagnostics      *utils.DiagnosticSystem // Clean diagnostic system
+	customModule     string                  // Custom module name if set
+	summary          GenerationSummary
 }
 
 // NewGenerator creates a new CLI generator
@@ -38,10 +38,10 @@ func NewGenerator(verbose bool) *Generator {
 	moduleResolver := NewModuleResolver()
 	reporter := NewDiagnosticReporter(verbose)
 	return &Generator{
-		scanner:        NewDirectoryScanner(),
-		moduleResolver: moduleResolver,
-		parser:         parser.NewParserWithReporter(reporter),
-		codeGenerator:  generator.NewGeneratorWithResolver(moduleResolver),
+		scanner:          NewDirectoryScanner(),
+		moduleResolver:   moduleResolver,
+		parser:           parser.NewParserWithReporter(reporter),
+		codeGenerator:    generator.NewGeneratorWithResolver(moduleResolver),
 		globalParsers:    make(map[string]axon.RouteParserMetadata),
 		globalMiddleware: make(map[string]models.MiddlewareMetadata),
 		reporter:         reporter,
@@ -54,10 +54,10 @@ func NewGeneratorWithDiagnostics(verbose bool, diagnostics *utils.DiagnosticSyst
 	moduleResolver := NewModuleResolver()
 	reporter := NewDiagnosticReporter(verbose)
 	return &Generator{
-		scanner:        NewDirectoryScanner(),
-		moduleResolver: moduleResolver,
-		parser:         parser.NewParserWithReporter(reporter),
-		codeGenerator:  generator.NewGeneratorWithResolver(moduleResolver),
+		scanner:          NewDirectoryScanner(),
+		moduleResolver:   moduleResolver,
+		parser:           parser.NewParserWithReporter(reporter),
+		codeGenerator:    generator.NewGeneratorWithResolver(moduleResolver),
 		globalParsers:    make(map[string]axon.RouteParserMetadata),
 		globalMiddleware: make(map[string]models.MiddlewareMetadata),
 		reporter:         reporter,
@@ -73,7 +73,7 @@ func (g *Generator) Generate(directories []string) error {
 		Verbose:     g.reporter != nil && g.reporter.verbose,
 		ModuleName:  g.customModule,
 	}
-	
+
 	return g.Run(config)
 }
 
@@ -91,16 +91,16 @@ func (g *Generator) GetSummary() GenerationSummary {
 // Run executes the complete generation process
 func (g *Generator) Run(config Config) error {
 	startTime := time.Now()
-	
+
 	// Initialize summary
 	g.summary = GenerationSummary{GeneratedFiles: make([]string, 0)}
-	
+
 	// Start with clean structured output
 	if g.diagnostics != nil {
 		g.diagnostics.AxonHeader("Starting code generation...")
 		g.diagnostics.SourcePath(strings.Join(config.Directories, ", "))
 	}
-	
+
 	// Resolve module name (silent)
 	moduleName, err := g.moduleResolver.ResolveModuleName(config.ModuleName)
 	if err != nil {
@@ -162,23 +162,23 @@ func (g *Generator) Run(config Config) error {
 		g.diagnostics.PhaseHeader("Discovery Phase")
 		g.diagnostics.PhaseProgress("Scanning for components...")
 	}
-	
+
 	g.summary.PackagesProcessed = len(packageDirs)
 
 	// First pass: Discover all parsers across packages
-	
+
 	// Skip parser and middleware validation during discovery phase
 	g.parser.SetSkipParserValidation(true)
 	g.parser.SetSkipMiddlewareValidation(true)
-	
+
 	var allPackageMetadata []*models.PackageMetadata
 	var totalControllers, totalServices, totalMiddlewares, totalParsers int
-	
+
 	for i, packageDir := range packageDirs {
 		if g.diagnostics != nil {
 			g.diagnostics.Debug("Parsing package %d/%d: %s", i+1, len(packageDirs), packageDir)
 		}
-		
+
 		// Parse the package
 		metadata, err := g.parser.ParseDirectory(packageDir)
 		if err != nil {
@@ -186,7 +186,7 @@ func (g *Generator) Run(config Config) error {
 			if genErr, ok := err.(*models.GeneratorError); ok {
 				genErr.Context = map[string]interface{}{
 					"package_directory": packageDir,
-					"module_name":      moduleName,
+					"module_name":       moduleName,
 				}
 				return genErr
 			}
@@ -200,17 +200,17 @@ func (g *Generator) Run(config Config) error {
 				},
 				Context: map[string]interface{}{
 					"package_directory": packageDir,
-					"module_name":      moduleName,
+					"module_name":       moduleName,
 				},
 			}
 		}
 
 		// Store metadata for second pass
 		allPackageMetadata = append(allPackageMetadata, metadata)
-		
+
 		// Collect summary information
 		g.collectSummaryInfo(metadata)
-		
+
 		// Count components
 		totalControllers += len(metadata.Controllers)
 		totalServices += len(metadata.CoreServices) + len(metadata.Loggers)
@@ -222,21 +222,21 @@ func (g *Generator) Run(config Config) error {
 		if err != nil {
 			return err // This already returns a GeneratorError
 		}
-		
+
 		// Collect middleware from this package
 		err = g.collectMiddlewareFromPackage(metadata, moduleName, packageDir)
 		if err != nil {
 			return err // This already returns a GeneratorError
 		}
 	}
-	
+
 	// Show discovery results
 	if g.diagnostics != nil {
 		g.diagnostics.PhaseItem(fmt.Sprintf("Found %d controller files.", totalControllers))
 		g.diagnostics.PhaseItem(fmt.Sprintf("Found %d middleware file.", totalMiddlewares))
 		g.diagnostics.PhaseItem(fmt.Sprintf("Found %d core service files.", totalServices))
 	}
-	
+
 	// Re-enable parser and middleware validation for second pass
 	g.parser.SetSkipParserValidation(false)
 	g.parser.SetSkipMiddlewareValidation(false)
@@ -255,10 +255,10 @@ func (g *Generator) Run(config Config) error {
 		g.diagnostics.PhaseHeader("Analysis Phase")
 		g.diagnostics.PhaseProgress("Building application schema...")
 	}
-	
+
 	// Show discovered components by category
 	var controllers, middlewares, coreServices, webServers []string
-	
+
 	for _, metadata := range allPackageMetadata {
 		for _, controller := range metadata.Controllers {
 			routeCount := len(controller.Routes)
@@ -268,23 +268,23 @@ func (g *Generator) Run(config Config) error {
 			}
 			controllers = append(controllers, fmt.Sprintf("Discovered Controller: %s (%d routes%s)", controller.Name, routeCount, groupPrefix))
 		}
-		
+
 		for _, middleware := range metadata.Middlewares {
 			middlewares = append(middlewares, fmt.Sprintf("Discovered Middleware: \"%s\" (in %s)", middleware.Name, middleware.StructName))
 		}
-		
+
 		for _, service := range metadata.CoreServices {
 			coreServices = append(coreServices, fmt.Sprintf("Discovered Core Service: %s (auto-generated provider)", service.Name))
 		}
-		
+
 		for _, logger := range metadata.Loggers {
 			coreServices = append(coreServices, fmt.Sprintf("Discovered Core Service: %s (manual module)", logger.Name))
 		}
 	}
-	
+
 	// Add web server info (this would be detected from adapters in a real implementation)
 	webServers = append(webServers, "Discovered Web Server: EchoAdapter (in internal/adapters/echo)")
-	
+
 	if g.diagnostics != nil {
 		if len(controllers) > 0 {
 			fmt.Println()
@@ -339,7 +339,7 @@ func (g *Generator) Run(config Config) error {
 	}
 
 	// Validate middleware references across all packages using global registry
-	
+
 	if config.Verbose {
 		fmt.Printf("Phase 2.5: Middleware validation\n")
 	}
@@ -354,7 +354,7 @@ func (g *Generator) Run(config Config) error {
 	if g.diagnostics != nil {
 		g.diagnostics.PhaseHeader("Generation Phase")
 	}
-	
+
 	// Build package path mappings for all discovered packages
 	packagePathMappings := make(map[string]string)
 	for i, metadata := range allPackageMetadata {
@@ -395,13 +395,13 @@ func (g *Generator) Run(config Config) error {
 		if err != nil {
 			return fmt.Errorf("failed to build package path for %s: %w", packageDir, err)
 		}
-		
+
 		// Keep the original directory path for file generation
 		metadata.PackagePath = packageDir
 
 		// Determine required user packages for this module
 		requiredPackages := g.determineRequiredUserPackages(metadata, moduleName)
-		
+
 		// Generate module for this package with package path mappings and required packages
 		generatedModule, err := g.codeGenerator.GenerateModuleWithRequiredPackages(metadata, moduleName, packagePathMappings, requiredPackages)
 		if err != nil {
@@ -454,7 +454,7 @@ func (g *Generator) Run(config Config) error {
 	}
 
 	// Users control their own main.go files - we just generate the modules
-	
+
 	// Phase 2: Post-process all generated files with goimports
 	if len(g.summary.GeneratedFiles) > 0 {
 		if g.diagnostics != nil {
@@ -462,7 +462,7 @@ func (g *Generator) Run(config Config) error {
 			g.diagnostics.PhaseProgress(fmt.Sprintf("Running goimports on %d generated files", len(g.summary.GeneratedFiles)))
 			g.diagnostics.PhaseProgress(fmt.Sprintf("Running gofmt on %d generated files", len(g.summary.GeneratedFiles)))
 		}
-		
+
 		if err := g.postProcessGeneratedFiles(); err != nil {
 			if g.diagnostics != nil {
 				g.diagnostics.Error("Failed to post-process generated files: %v", err)
@@ -636,8 +636,8 @@ func (g *Generator) validateMiddlewareReferences(metadata *models.PackageMetadat
 							"Verify the middleware name matches exactly (case-sensitive)",
 						},
 						Context: map[string]interface{}{
-							"route":           fmt.Sprintf("%s.%s", controller.Name, route.HandlerName),
-							"middleware_name": middlewareName,
+							"route":                fmt.Sprintf("%s.%s", controller.Name, route.HandlerName),
+							"middleware_name":      middlewareName,
 							"available_middleware": g.getAvailableMiddlewareNames(),
 						},
 					}
@@ -714,7 +714,7 @@ func (g *Generator) collectSummaryInfo(metadata *models.PackageMetadata) {
 // postProcessGeneratedFiles runs goimports on all generated files
 func (g *Generator) postProcessGeneratedFiles() error {
 	var failedFiles []string
-	
+
 	for _, filePath := range g.summary.GeneratedFiles {
 		if err := g.processFileImports(filePath); err != nil {
 			failedFiles = append(failedFiles, filePath)
@@ -724,7 +724,7 @@ func (g *Generator) postProcessGeneratedFiles() error {
 			}
 		}
 	}
-	
+
 	// If some files failed, return an error with context
 	if len(failedFiles) > 0 {
 		return &models.GeneratorError{
@@ -742,7 +742,7 @@ func (g *Generator) postProcessGeneratedFiles() error {
 			},
 		}
 	}
-	
+
 	return nil
 }
 
@@ -767,14 +767,14 @@ func (g *Generator) processFileImports(filePath string) error {
 			},
 		}
 	}
-	
+
 	// Phase 2: Process with goimports - the filePath is crucial for context
 	formatted, err := imports.Process(filePath, content, &imports.Options{
-		Fragment:  false,    // Complete Go file
-		AllErrors: true,     // Report all errors
-		Comments:  true,     // Preserve comments
-		TabIndent: true,     // Use tabs
-		TabWidth:  8,        // Standard Go tab width
+		Fragment:  false, // Complete Go file
+		AllErrors: true,  // Report all errors
+		Comments:  true,  // Preserve comments
+		TabIndent: true,  // Use tabs
+		TabWidth:  8,     // Standard Go tab width
 	})
 	if err != nil {
 		// Fallback to gofmt if goimports fails
@@ -813,12 +813,12 @@ func (g *Generator) processFileImports(filePath string) error {
 		}
 		return nil // Successfully wrote gofmt result
 	}
-	
+
 	// Fix imports to use correct versions (before final formatting)
 	formattedString := string(formatted)
 	formattedString = fixAxonImports(formattedString)
 	formattedString = templates.FixEchoImports(formattedString)
-	
+
 	// Phase 3: Final gofmt pass to ensure consistent formatting
 	finalFormatted, err := format.Source([]byte(formattedString))
 	if err != nil {
@@ -837,7 +837,7 @@ func (g *Generator) processFileImports(filePath string) error {
 			},
 		}
 	}
-	
+
 	// Write the final processed file back
 	if err := os.WriteFile(filePath, finalFormatted, 0644); err != nil {
 		return &models.GeneratorError{
@@ -856,7 +856,7 @@ func (g *Generator) processFileImports(filePath string) error {
 			},
 		}
 	}
-	
+
 	return nil
 }
 
@@ -864,7 +864,7 @@ func (g *Generator) processFileImports(filePath string) error {
 func fixAxonImports(content string) string {
 	// Pattern to match any axon import that's not already the canonical one
 	axonImportPattern := regexp.MustCompile(`"[^"]+/pkg/axon"`)
-	
+
 	// Replace with the canonical axon import
 	return axonImportPattern.ReplaceAllString(content, `"github.com/toyz/axon/pkg/axon"`)
 }
@@ -872,7 +872,7 @@ func fixAxonImports(content string) string {
 // determineRequiredUserPackages analyzes what user packages need to be imported
 func (g *Generator) determineRequiredUserPackages(metadata *models.PackageMetadata, moduleName string) []string {
 	packageSet := make(map[string]bool)
-	
+
 	// Check for middleware references in controllers
 	for _, controller := range metadata.Controllers {
 		// Check route-level middleware
@@ -894,34 +894,34 @@ func (g *Generator) determineRequiredUserPackages(metadata *models.PackageMetada
 			}
 		}
 	}
-	
+
 	// Check for service dependencies
 	if len(metadata.CoreServices) > 0 {
 		packageSet["internal/services"] = true
 	}
-	
+
 	// Check for model references (common in controllers)
 	if len(metadata.Controllers) > 0 {
 		packageSet["internal/models"] = true
 	}
-	
+
 	// Check for custom parsers
 	if len(metadata.RouteParsers) > 0 {
 		packageSet["internal/parsers"] = true
 	}
-	
+
 	// Convert set to slice
 	var packages []string
 	for pkg := range packageSet {
 		packages = append(packages, pkg)
 	}
-	
+
 	return packages
 }
 
 // getRelativePackagePath converts an absolute package path to a relative one for imports
 func (g *Generator) getRelativePackagePath(absolutePath, moduleName string) string {
-	// Convert something like "/home/user/project/internal/middleware" 
+	// Convert something like "/home/user/project/internal/middleware"
 	// to "internal/middleware" for the import
 	if strings.Contains(absolutePath, "internal/") {
 		parts := strings.Split(absolutePath, "internal/")

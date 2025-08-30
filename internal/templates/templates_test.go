@@ -167,8 +167,6 @@ func TestGetParameterSourceString(t *testing.T) {
 	}
 }
 
-
-
 // TestGenerateCoreServiceProvider tests the generation of FX providers for core services
 func TestGenerateCoreServiceProvider(t *testing.T) {
 	tests := []struct {
@@ -197,8 +195,8 @@ func TestGenerateCoreServiceProvider(t *testing.T) {
 			name: "core service with dependencies",
 			service: models.CoreServiceMetadata{
 				BaseMetadata: models.BaseMetadata{
-					Name:         "UserService",
-					StructName:   "UserService",
+					Name:       "UserService",
+					StructName: "UserService",
 					Dependencies: []models.Dependency{
 						{Name: "UserRepository", Type: "UserRepository"},
 						{Name: "Config", Type: "*Config"},
@@ -218,8 +216,8 @@ func TestGenerateCoreServiceProvider(t *testing.T) {
 			name: "lifecycle service with dependencies and Start method only",
 			service: models.CoreServiceMetadata{
 				BaseMetadata: models.BaseMetadata{
-					Name:         "DatabaseService",
-					StructName:   "DatabaseService",
+					Name:       "DatabaseService",
+					StructName: "DatabaseService",
 					Dependencies: []models.Dependency{
 						{Name: "Config", Type: "*Config"},
 					},
@@ -249,8 +247,8 @@ func TestGenerateCoreServiceProvider(t *testing.T) {
 			name: "lifecycle service with both Start and Stop methods",
 			service: models.CoreServiceMetadata{
 				BaseMetadata: models.BaseMetadata{
-					Name:         "MessageConsumer",
-					StructName:   "MessageConsumer",
+					Name:       "MessageConsumer",
+					StructName: "MessageConsumer",
 					Dependencies: []models.Dependency{
 						{Name: "Config", Type: "*Config"},
 						{Name: "Logger", Type: "Logger"},
@@ -317,7 +315,7 @@ func TestGenerateCoreServiceProvider(t *testing.T) {
 				}
 				return strings.Join(normalized, "\n")
 			}
-			
+
 			expected := normalizeWhitespace(tt.expected)
 			actual := normalizeWhitespace(result)
 
@@ -343,8 +341,8 @@ func TestGenerateCoreServiceModule(t *testing.T) {
 				CoreServices: []models.CoreServiceMetadata{
 					{
 						BaseMetadata: models.BaseMetadata{
-							Name:         "UserService",
-							StructName:   "UserService",
+							Name:       "UserService",
+							StructName: "UserService",
 							Dependencies: []models.Dependency{
 								{Name: "UserRepository", Type: "UserRepository"},
 							},
@@ -354,8 +352,8 @@ func TestGenerateCoreServiceModule(t *testing.T) {
 					},
 					{
 						BaseMetadata: models.BaseMetadata{
-							Name:         "DatabaseService",
-							StructName:   "DatabaseService",
+							Name:       "DatabaseService",
+							StructName: "DatabaseService",
 							Dependencies: []models.Dependency{
 								{Name: "Config", Type: "*Config"},
 							},
@@ -437,15 +435,15 @@ func extractDependencyName(depType string) string {
 	if depType == "" {
 		return ""
 	}
-	
+
 	// Remove pointer prefix
 	name := strings.TrimPrefix(depType, "*")
-	
+
 	// Extract name after last dot (for package.Type format)
 	if lastDot := strings.LastIndex(name, "."); lastDot != -1 {
 		name = name[lastDot+1:]
 	}
-	
+
 	return name
 }
 
@@ -654,8 +652,8 @@ func TestGenerateCoreServiceModuleWithInterfaces(t *testing.T) {
 		CoreServices: []models.CoreServiceMetadata{
 			{
 				BaseMetadata: models.BaseMetadata{
-					Name:         "UserService",
-					StructName:   "UserService",
+					Name:       "UserService",
+					StructName: "UserService",
 					Dependencies: []models.Dependency{
 						{Name: "UserRepository", Type: "UserRepository"},
 					},
@@ -752,7 +750,7 @@ func TestGenerateParameterBindingCode_WithContextParameters(t *testing.T) {
 					Position: 0,
 				},
 			},
-			expected: "",
+			expected:    "",
 			expectError: false,
 		},
 		{

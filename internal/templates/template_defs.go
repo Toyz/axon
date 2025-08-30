@@ -242,7 +242,7 @@ const (
 		}
 		return c.JSON(http.StatusOK, data)`
 
-	// ResponseErrorResponseTemplate handles (*Response, error) return type  
+	// ResponseErrorResponseTemplate handles (*Response, error) return type
 	ResponseErrorResponseTemplate = `		{{if .ErrAlreadyDeclared}}var response *axon.Response
 		response, err = {{.HandlerCall}}{{else}}response, err := {{.HandlerCall}}{{end}}
 		if err != nil {

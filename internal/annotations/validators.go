@@ -180,7 +180,7 @@ func ValidateConstructor(value interface{}) error {
 		utils.NotEmpty("constructor"),
 		utils.IsValidGoIdentifier("constructor"),
 	)
-	
+
 	if err := validator.Validate(constructor); err != nil {
 		return err
 	}
@@ -193,4 +193,3 @@ func ValidateConstructor(value interface{}) error {
 
 	return nil
 }
-

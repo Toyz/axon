@@ -15,8 +15,6 @@ import (
 	"github.com/toyz/axon/pkg/axon"
 )
 
-
-
 // Generator implements the CodeGenerator interface
 type Generator struct {
 	moduleResolver ModuleResolver
@@ -138,13 +136,13 @@ func (g *Generator) generateControllerModuleWithModule(metadata *models.PackageM
 	} else {
 		resolvedModuleName = moduleName // Use the provided module name
 	}
-	
+
 	// Use provided required packages or detect them if not provided
 	userPackages := requiredPackages
 	if userPackages == nil {
 		userPackages = g.detectRequiredUserPackages(metadata, resolvedModuleName)
 	}
-	
+
 	// Generate minimal imports with user packages
 	importsSection := templates.GenerateMinimalImportsWithPackages(resolvedModuleName, userPackages)
 	moduleBuilder.WriteString(importsSection)
@@ -198,31 +196,31 @@ func (g *Generator) generateControllerModuleWithModule(metadata *models.PackageM
 // This is a simplified version - the CLI will pass the required package information
 func (g *Generator) detectRequiredUserPackages(metadata *models.PackageMetadata, moduleName string) []string {
 	packageSet := make(map[string]bool)
-	
+
 	// For now, include common packages that are likely needed
 	// The CLI should pass this information properly in the future
-	
+
 	// Check for service dependencies (if controllers inject services)
 	if len(metadata.CoreServices) > 0 {
 		packageSet["internal/services"] = true
 	}
-	
+
 	// Check for model references (common in controllers)
 	if len(metadata.Controllers) > 0 {
 		packageSet["internal/models"] = true
 	}
-	
+
 	// Check for custom parsers
 	if len(metadata.RouteParsers) > 0 {
 		packageSet["internal/parsers"] = true
 	}
-	
+
 	// Convert set to slice
 	var packages []string
 	for pkg := range packageSet {
 		packages = append(packages, pkg)
 	}
-	
+
 	return packages
 }
 
@@ -259,8 +257,6 @@ func (g *Generator) generateControllerProvider(controller models.ControllerMetad
 
 	return templates.ExecuteTemplate("controller-provider", templates.ProviderTemplate, data)
 }
-
-
 
 // extractPackageFromType is now available as utils.ExtractPackageFromType
 
@@ -337,14 +333,13 @@ func fileExists(path string) bool {
 func extractModuleNameFromGoMod(goModPath string) string {
 	fileReader := utils.NewFileReader()
 	goModParser := utils.NewGoModParser(fileReader)
-	
+
 	moduleName, err := goModParser.ParseModuleName(goModPath)
 	if err != nil {
 		return ""
 	}
 	return moduleName
 }
-
 
 // generateRouteRegistrationFunction generates a function that registers all routes with Echo
 func (g *Generator) generateRouteRegistrationFunction(metadata *models.PackageMetadata) (string, error) {
@@ -437,11 +432,11 @@ func (g *Generator) collectMiddlewareDependencies(metadata *models.PackageMetada
 // e.g., "/users/{id:int}/posts/{slug:string}" -> {"id": "int", "slug": "string"}
 func (g *Generator) extractParameterTypes(path string) map[string]string {
 	paramTypes := make(map[string]string)
-	
+
 	// Find all parameters in the format {name:type}
 	re := regexp.MustCompile(`\{([^:}]+):([^}]+)\}`)
 	matches := re.FindAllStringSubmatch(path, -1)
-	
+
 	for _, match := range matches {
 		if len(match) == 3 {
 			paramName := match[1]
@@ -449,7 +444,7 @@ func (g *Generator) extractParameterTypes(path string) map[string]string {
 			paramTypes[paramName] = paramType
 		}
 	}
-	
+
 	return paramTypes
 }
 
@@ -606,7 +601,6 @@ func (g *Generator) GenerateRootModule(packageName string, subModules []models.M
 	return nil
 }
 
-
 // generateResponseHelperFunctions generates shared helper functions for response handling
 func (g *Generator) generateResponseHelperFunctions() string {
 	return `// handleAxonResponse processes an axon.Response and applies headers, cookies, and content type
@@ -665,6 +659,7 @@ func handleError(c echo.Context, err error) error {
 func (g *Generator) GetParserRegistry() axon.ParserRegistryInterface {
 	return g.parserRegistry
 }
+
 // convertToEchoPath converts Axon path format to Echo path format
 func (g *Generator) convertToEchoPath(axonPath string) string {
 	// Convert {param:type} to :param
@@ -677,11 +672,11 @@ func (g *Generator) buildRouteTemplateData(route models.RouteMetadata, controlle
 	controllerVar := strings.ToLower(controller.StructName)
 	handlerVar := fmt.Sprintf("handler_%s%s", controllerVar, strings.ToLower(route.HandlerName))
 	wrapperFunc := fmt.Sprintf("wrap%s%s", controller.StructName, route.HandlerName)
-	
+
 	// Combine controller middleware and route middleware
 	allMiddlewares := append([]string{}, controller.Middlewares...)
 	allMiddlewares = append(allMiddlewares, route.Middlewares...)
-	
+
 	// Calculate route path relative to group
 	routePath := route.Path
 	if controller.Prefix != "" {
@@ -693,10 +688,10 @@ func (g *Generator) buildRouteTemplateData(route models.RouteMetadata, controlle
 			}
 		}
 	}
-	
+
 	echoPath := g.convertToEchoPath(routePath)
 	paramTypes := templates.ExtractParameterTypes(route.Path)
-	
+
 	return templates.RouteTemplateData{
 		HandlerVar:               handlerVar,
 		WrapperFunc:              wrapperFunc,

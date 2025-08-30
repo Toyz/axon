@@ -18,11 +18,11 @@ type ResponseHandlerData struct {
 
 // RouteWrapperData represents data needed for route wrapper template
 type RouteWrapperData struct {
-	WrapperName            string
-	ControllerName         string
-	ParameterBindingCode   string
-	BodyBindingCode        string
-	ResponseHandlingCode   string
+	WrapperName          string
+	ControllerName       string
+	ParameterBindingCode string
+	BodyBindingCode      string
+	ResponseHandlingCode string
 }
 
 // BodyBindingData represents data needed for body binding template
@@ -155,7 +155,7 @@ func generateDataErrorResponse(handlerCall string, errAlreadyDeclared bool) stri
 		HandlerCall:        handlerCall,
 		ErrAlreadyDeclared: errAlreadyDeclared,
 	}
-	
+
 	result, err := executeTemplate("data-error-response", DataErrorResponseTemplate, data)
 	if err != nil {
 		// Fallback to old behavior if template fails
@@ -183,7 +183,7 @@ func generateResponseErrorResponse(handlerCall string, errAlreadyDeclared bool) 
 		HandlerCall:        handlerCall,
 		ErrAlreadyDeclared: errAlreadyDeclared,
 	}
-	
+
 	result, err := executeTemplate("response-error-response", ResponseErrorResponseTemplate, data)
 	if err != nil {
 		// Fallback to old behavior if template fails
@@ -218,7 +218,7 @@ func generateErrorResponse(handlerCall string, errAlreadyDeclared bool) string {
 		HandlerCall:        handlerCall,
 		ErrAlreadyDeclared: errAlreadyDeclared,
 	}
-	
+
 	result, err := executeTemplate("error-response", ErrorResponseTemplate, data)
 	if err != nil {
 		// Fallback to old behavior if template fails
@@ -304,7 +304,7 @@ func generateBodyBindingCode(parameters []models.Parameter, method string) strin
 			data := BodyBindingData{
 				BodyType: param.Type,
 			}
-			
+
 			result, err := executeTemplate("body-binding", BodyBindingTemplate, data)
 			if err != nil {
 				// Fallback to old behavior if template fails
@@ -348,8 +348,6 @@ func generateMiddlewareApplication(middlewares []string) string {
 
 	return code.String()
 }
-
-
 
 // convertAxonPathToEcho converts Axon route syntax to Echo route syntax
 // Axon: /users/{id:int} -> Echo: /users/:id

@@ -50,7 +50,7 @@ func TestGeneratedCoreServiceModuleCompilation(t *testing.T) {
 
 	// Generate a core services module
 	generator := NewGenerator()
-	
+
 	metadata := &models.PackageMetadata{
 		PackageName: "testservices",
 		PackagePath: moduleDir,
@@ -190,7 +190,7 @@ func TestGeneratedMainFileCompilation(t *testing.T) {
 		"github.com/labstack/echo/v4@latest",
 		"go.uber.org/fx@latest",
 	}
-	
+
 	for _, dep := range dependencies {
 		cmd = exec.Command("go", "get", dep)
 		cmd.Dir = tempDir

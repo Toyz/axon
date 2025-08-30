@@ -33,18 +33,12 @@ func NewRegistry() AnnotationRegistry {
 	}
 }
 
-
-
-
-
-
-
 // Register adds a new annotation type with its schema to the registry
 func (r *registry) Register(annotationType AnnotationType, schema AnnotationSchema) error {
 	validator := func(key AnnotationType, value AnnotationSchema, existing map[AnnotationType]AnnotationSchema) error {
 		// Validate that the schema type matches the annotation type
 		if value.Type != key {
-			return fmt.Errorf("schema type %s does not match annotation type %s", 
+			return fmt.Errorf("schema type %s does not match annotation type %s",
 				value.Type.String(), key.String())
 		}
 
@@ -60,7 +54,7 @@ func (r *registry) Register(annotationType AnnotationType, schema AnnotationSche
 
 		return nil
 	}
-	
+
 	return r.Registry.RegisterWithValidator(annotationType, schema, validator)
 }
 

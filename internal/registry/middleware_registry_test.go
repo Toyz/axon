@@ -134,7 +134,7 @@ func TestMiddlewareRegistry_Register(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			registry := NewMiddlewareRegistry()
-			
+
 			var err error
 			for _, mw := range tt.middlewares {
 				err = registry.Register(mw.name, mw.middleware)
@@ -218,7 +218,7 @@ func TestMiddlewareRegistry_Validate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			registry := NewMiddlewareRegistry()
-			
+
 			// Register middlewares
 			for _, name := range tt.registeredNames {
 				middleware := &models.MiddlewareMetadata{
@@ -233,7 +233,7 @@ func TestMiddlewareRegistry_Validate(t *testing.T) {
 					t.Fatalf("failed to register middleware %s: %v", name, err)
 				}
 			}
-			
+
 			// Validate middleware names
 			err := registry.Validate(tt.validateNames)
 
@@ -256,7 +256,7 @@ func TestMiddlewareRegistry_Validate(t *testing.T) {
 
 func TestMiddlewareRegistry_Get(t *testing.T) {
 	registry := NewMiddlewareRegistry()
-	
+
 	// Register some middlewares
 	authMiddleware := &models.MiddlewareMetadata{
 		BaseMetadata: models.BaseMetadata{
@@ -268,7 +268,7 @@ func TestMiddlewareRegistry_Get(t *testing.T) {
 		},
 		PackagePath: "/auth",
 	}
-	
+
 	loggingMiddleware := &models.MiddlewareMetadata{
 		BaseMetadata: models.BaseMetadata{
 			Name:       "LoggingMiddleware",
@@ -279,12 +279,12 @@ func TestMiddlewareRegistry_Get(t *testing.T) {
 		},
 		PackagePath: "/logging",
 	}
-	
+
 	err := registry.Register("AuthMiddleware", authMiddleware)
 	if err != nil {
 		t.Fatalf("failed to register AuthMiddleware: %v", err)
 	}
-	
+
 	err = registry.Register("LoggingMiddleware", loggingMiddleware)
 	if err != nil {
 		t.Fatalf("failed to register LoggingMiddleware: %v", err)
@@ -335,19 +335,19 @@ func TestMiddlewareRegistry_Get(t *testing.T) {
 					t.Errorf("expected middleware but got nil")
 					return
 				}
-				
+
 				if result.Name != tt.expected.Name {
 					t.Errorf("expected name %s, got %s", tt.expected.Name, result.Name)
 				}
-				
+
 				if result.PackagePath != tt.expected.PackagePath {
 					t.Errorf("expected package path %s, got %s", tt.expected.PackagePath, result.PackagePath)
 				}
-				
+
 				if result.StructName != tt.expected.StructName {
 					t.Errorf("expected struct name %s, got %s", tt.expected.StructName, result.StructName)
 				}
-				
+
 				if len(result.Dependencies) != len(tt.expected.Dependencies) {
 					t.Errorf("expected %d dependencies, got %d", len(tt.expected.Dependencies), len(result.Dependencies))
 				}

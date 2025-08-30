@@ -36,12 +36,12 @@ func FormatGoFileWithGofmt(filename string) error {
 	cmd := exec.Command("gofmt", "-w", filename)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
-	
+
 	err := cmd.Run()
 	if err != nil {
 		return fmt.Errorf("gofmt failed for %s: %w (stderr: %s)", filename, err, stderr.String())
 	}
-	
+
 	return nil
 }
 
@@ -54,12 +54,12 @@ func FormatAndWriteGoFile(filename string, code string) error {
 		if writeErr := os.WriteFile(filename, []byte(code), 0644); writeErr != nil {
 			return fmt.Errorf("failed to write unformatted code to %s: %w (format error: %v)", filename, writeErr, err)
 		}
-		
+
 		// Try to format with gofmt as fallback
 		if gofmtErr := FormatGoFileWithGofmt(filename); gofmtErr != nil {
 			return fmt.Errorf("failed to format %s with gofmt: %w (original format error: %v)", filename, gofmtErr, err)
 		}
-		
+
 		return nil
 	}
 

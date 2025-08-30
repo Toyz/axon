@@ -133,7 +133,7 @@ func IsValidGoIdentifier(field string) Validator[string] {
 				Message: "cannot be empty",
 			}
 		}
-		
+
 		if !token.IsIdentifier(value) {
 			return ValidationError{
 				Field:   field,
@@ -141,7 +141,7 @@ func IsValidGoIdentifier(field string) Validator[string] {
 				Message: "must be a valid Go identifier",
 			}
 		}
-		
+
 		return nil
 	}
 }
@@ -154,7 +154,7 @@ func IsOneOf[T comparable](field string, allowed ...T) Validator[T] {
 				return nil
 			}
 		}
-		
+
 		return ValidationError{
 			Field:   field,
 			Value:   value,

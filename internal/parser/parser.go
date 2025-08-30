@@ -18,14 +18,14 @@ import (
 
 // Parser implements the AnnotationParser interface using the new annotations package
 type Parser struct {
-	fileReader              *utils.FileReader
-	middlewareRegistry      registry.MiddlewareRegistry
-	skipParserValidation    bool               // Skip custom parser validation during discovery phase
-	skipMiddlewareValidation bool              // Skip middleware validation during discovery phase
-	reporter                DiagnosticReporter // For debug logging and error reporting
-	annotationParser        *annotations.ParticipleParser
-	annotationRegistry      annotations.AnnotationRegistry
-	goModParser             *utils.GoModParser
+	fileReader               *utils.FileReader
+	middlewareRegistry       registry.MiddlewareRegistry
+	skipParserValidation     bool               // Skip custom parser validation during discovery phase
+	skipMiddlewareValidation bool               // Skip middleware validation during discovery phase
+	reporter                 DiagnosticReporter // For debug logging and error reporting
+	annotationParser         *annotations.ParticipleParser
+	annotationRegistry       annotations.AnnotationRegistry
+	goModParser              *utils.GoModParser
 }
 
 // DiagnosticReporter interface for debug logging (wrapper for new diagnostic system)
@@ -76,8 +76,8 @@ func NewParserWithReporter(reporter DiagnosticReporter) *Parser {
 // noOpReporter is a no-op implementation of DiagnosticReporter for backward compatibility
 type noOpReporter struct{}
 
-func (n *noOpReporter) Debug(format string, args ...interface{})         {}
-func (n *noOpReporter) DebugSection(section string)                      {}
+func (n *noOpReporter) Debug(format string, args ...interface{})            {}
+func (n *noOpReporter) DebugSection(section string)                         {}
 func (n *noOpReporter) ReportWarning(message string, suggestions ...string) {}
 
 // ParseSource parses source code from a string for testing purposes
@@ -395,7 +395,7 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 			route := models.RouteMetadata{
 				Method:      annotation.GetString("method"),
 				Path:        annotation.GetString("path"),
-				HandlerName: annotation.Target, // Keep full target for now, will be processed later
+				HandlerName: annotation.Target,                  // Keep full target for now, will be processed later
 				Priority:    annotation.GetInt("Priority", 100), // Default priority 100
 			}
 
@@ -483,7 +483,7 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 					"Both annotations work the same way, but //axon::service is the preferred syntax",
 				)
 			}
-			
+
 			service := models.CoreServiceMetadata{
 				BaseMetadata: models.BaseMetadata{
 					Name:         annotation.Target,
@@ -542,7 +542,7 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 			constructor := annotation.GetString("Constructor", "")
 			if constructor != "" {
 				service.Constructor = constructor
-				
+
 				// Validate that custom constructors don't use axon::inject or axon::init
 				if len(service.Dependencies) > 0 {
 					return fmt.Errorf("service %s uses custom constructor '%s' but has axon::inject or axon::init annotations. Custom constructors handle all dependency injection and initialization - remove the axon::inject and axon::init annotations", annotation.Target, constructor)
@@ -1537,6 +1537,7 @@ func (p *Parser) parseParameterDefinition(paramDef string, isEchoSyntax bool) (m
 		Source: models.ParameterSourcePath,
 	}, nil
 }
+
 // parseDirectoryFiles parses all Go files in a directory using cached FileReader
 func (p *Parser) parseDirectoryFiles(dirPath string) (map[string]*ast.File, string, error) {
 	// Read directory contents
@@ -1547,77 +1548,77 @@ func (p *Parser) parseDirectoryFiles(dirPath string) (map[string]*ast.File, stri
 
 	files := make(map[string]*ast.File)
 	var packageName string
-	
+
 	// Parse each .go file using cached FileReader
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
 			continue
 		}
-		
+
 		filePath := filepath.Join(dirPath, entry.Name())
-		
+
 		// Use cached ParseGoFile instead of parsing directly
 		file, err := p.fileReader.ParseGoFile(filePath)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to parse file %s: %w", entry.Name(), err)
 		}
-		
+
 		// Verify all files belong to the same package
 		if packageName == "" {
 			packageName = file.Name.Name
 		} else if file.Name.Name != packageName {
 			return nil, "", fmt.Errorf("multiple packages found in directory: %s and %s", packageName, file.Name.Name)
 		}
-		
+
 		files[filePath] = file
 	}
-	
+
 	if len(files) == 0 {
 		return nil, "", fmt.Errorf("no Go files found in directory")
 	}
-	
+
 	return files, packageName, nil
 }
 
 // extractParametersFromPath extracts parameters from a URL path (e.g., /users/{id:int})
 func (p *Parser) extractParametersFromPath(path string) ([]models.Parameter, error) {
 	var parameters []models.Parameter
-	
+
 	// Find all parameter patterns like {name:type}
 	paramPattern := regexp.MustCompile(`\{([^}]+)\}`)
 	matches := paramPattern.FindAllStringSubmatch(path, -1)
-	
+
 	for _, match := range matches {
 		if len(match) < 2 {
 			continue
 		}
-		
+
 		paramDef := match[1]
 		parts := strings.Split(paramDef, ":")
-		
+
 		if len(parts) != 2 {
 			return nil, fmt.Errorf("invalid parameter format in path %s: expected {name:type}, got {%s}", path, paramDef)
 		}
-		
+
 		paramName := strings.TrimSpace(parts[0])
 		paramType := strings.TrimSpace(parts[1])
-		
+
 		// Convert type to Go type
 		goType, err := p.validateParameterType(paramType)
 		if err != nil {
 			return nil, fmt.Errorf("invalid parameter type %s in path %s: %w", paramType, path, err)
 		}
-		
+
 		parameter := models.Parameter{
 			Name:     paramName,
 			Type:     goType,
 			Source:   models.ParameterSourcePath,
 			Required: true,
 		}
-		
+
 		parameters = append(parameters, parameter)
 	}
-	
+
 	return parameters, nil
 }
 
@@ -1627,28 +1628,28 @@ func (p *Parser) mergeControllerPrefixWithRoute(controller models.ControllerMeta
 	if controller.Prefix == "" {
 		return route, nil
 	}
-	
+
 	// Extract parameters from controller prefix
 	prefixParams, err := p.extractParametersFromPath(controller.Prefix)
 	if err != nil {
 		return route, fmt.Errorf("failed to parse controller prefix %s: %w", controller.Prefix, err)
 	}
-	
+
 	// Extract parameters from route path
 	routeParams, err := p.extractParametersFromPath(route.Path)
 	if err != nil {
 		return route, fmt.Errorf("failed to parse route path %s: %w", route.Path, err)
 	}
-	
+
 	// Check for parameter name conflicts and resolve them
 	paramNameMap := make(map[string]string) // old name -> new name
 	usedNames := make(map[string]bool)
-	
+
 	// First, mark all prefix parameter names as used
 	for _, param := range prefixParams {
 		usedNames[param.Name] = true
 	}
-	
+
 	// Then, check route parameters for conflicts and rename if necessary
 	for i, param := range routeParams {
 		if usedNames[param.Name] {
@@ -1661,17 +1662,17 @@ func (p *Parser) mergeControllerPrefixWithRoute(controller models.ControllerMeta
 			usedNames[param.Name] = true
 		}
 	}
-	
+
 	// Merge parameters (prefix first, then route)
 	allParams := append(prefixParams, routeParams...)
-	
+
 	// Merge existing route parameters (from function signature) with path parameters
 	mergedParams := p.mergeParameters(allParams, route.Parameters)
-	
+
 	// Update route with merged parameters and combined path
 	updatedRoute := route
 	updatedRoute.Path = controller.Prefix + route.Path
 	updatedRoute.Parameters = mergedParams
-	
+
 	return updatedRoute, nil
 }

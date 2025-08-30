@@ -10,7 +10,7 @@ const (
 	AnnotationTypeController  = annotations.ControllerAnnotation
 	AnnotationTypeRoute       = annotations.RouteAnnotation
 	AnnotationTypeMiddleware  = annotations.MiddlewareAnnotation
-	AnnotationTypeCore        = annotations.CoreAnnotation        // Deprecated: use AnnotationTypeService
+	AnnotationTypeCore        = annotations.CoreAnnotation // Deprecated: use AnnotationTypeService
 	AnnotationTypeService     = annotations.ServiceAnnotation
 	AnnotationTypeInterface   = annotations.InterfaceAnnotation
 	AnnotationTypeInject      = annotations.InjectAnnotation
@@ -51,4 +51,3 @@ const (
 	ErrorTypeParserImport
 	ErrorTypeParserConflict
 )
-

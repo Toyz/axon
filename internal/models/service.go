@@ -2,9 +2,9 @@ package models
 
 // Dependency represents a dependency with both field name and type
 type Dependency struct {
-	Name     string // field name in the struct
-	Type     string // type of the dependency
-	IsInit   bool   // whether this should be initialized (not injected)
+	Name   string // field name in the struct
+	Type   string // type of the dependency
+	IsInit bool   // whether this should be initialized (not injected)
 }
 
 // LifecycleMetadata contains common lifecycle-related fields

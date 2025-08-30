@@ -22,7 +22,7 @@ func TestDiagnosticReporter_ReportWarning(t *testing.T) {
 	reporter.ReportWarning("This is a test warning")
 
 	// Test warning with suggestions
-	reporter.ReportWarning("This is another warning", 
+	reporter.ReportWarning("This is another warning",
 		"First suggestion",
 		"Second suggestion",
 	)

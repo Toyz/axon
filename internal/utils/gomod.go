@@ -50,15 +50,15 @@ func (p *GoModParser) ParseModuleName(goModPath string) (string, error) {
 // FindGoModFile searches for go.mod file starting from the given directory and walking up
 func (p *GoModParser) FindGoModFile(startDir string) (string, error) {
 	currentDir := filepath.Clean(startDir)
-	
+
 	for {
 		goModPath := filepath.Join(currentDir, "go.mod")
-		
+
 		// Check if go.mod exists in current directory
 		if content, err := p.fileReader.ReadFile(goModPath); err == nil && content != "" {
 			return goModPath, nil
 		}
-		
+
 		// Move to parent directory
 		parentDir := filepath.Dir(currentDir)
 		if parentDir == currentDir {
@@ -67,6 +67,6 @@ func (p *GoModParser) FindGoModFile(startDir string) (string, error) {
 		}
 		currentDir = parentDir
 	}
-	
+
 	return "", fmt.Errorf("go.mod file not found")
 }

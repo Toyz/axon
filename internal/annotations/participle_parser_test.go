@@ -12,7 +12,7 @@ func TestParticipleParserBasic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to register builtin schemas: %v", err)
 	}
-	
+
 	parser := NewParticipleParser(registry)
 	location := SourceLocation{File: "test.go", Line: 1, Column: 1}
 

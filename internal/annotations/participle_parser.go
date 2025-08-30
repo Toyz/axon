@@ -105,48 +105,48 @@ func (p *ParticipleParser) ParseAnnotation(comment string, location SourceLocati
 			return nil, fmt.Errorf("failed to parse positional and named parts: %w", err)
 		}
 
-	// Handle positional parameters based on annotation type
-	p.handlePositionalParameters(parsed, positionalParams)
+		// Handle positional parameters based on annotation type
+		p.handlePositionalParameters(parsed, positionalParams)
 
-	// Parse named parameters and flags if any
-	if namedPart != "" {
-		paramsAndFlags, err := p.parseParamsAndFlags(namedPart)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse parameters and flags: %w", err)
-		}
+		// Parse named parameters and flags if any
+		if namedPart != "" {
+			paramsAndFlags, err := p.parseParamsAndFlags(namedPart)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse parameters and flags: %w", err)
+			}
 
-		// Process named parameters and flags
-		for _, item := range paramsAndFlags.Items {
-			if item.HasValue && item.Value != nil {
-				// This is a parameter with an explicit value
-				key := item.Flag
-				
-				// Extract the raw value from ParamValue
-				rawValue := item.Value.Raw
-				
-				// Convert value to appropriate type based on schema
-				convertedValue := p.convertParameterValue(key, rawValue, parsed.Type)
-				parsed.Parameters[key] = convertedValue
-			} else {
-				// This could be either a boolean flag or a parameter with default value
-				key := item.Flag
-				
-				// Check if this is a boolean parameter
-				if p.isBooleanParameter(key, parsed.Type) {
-					// For boolean parameters, -Flag means true
-					parsed.Parameters[key] = true
-				} else if p.isParameterWithDefault(key, parsed.Type) {
-					// For parameters with defaults, -Flag means use the default value
-					defaultValue := p.getParameterDefault(key, parsed.Type)
-					parsed.Parameters[key] = defaultValue
+			// Process named parameters and flags
+			for _, item := range paramsAndFlags.Items {
+				if item.HasValue && item.Value != nil {
+					// This is a parameter with an explicit value
+					key := item.Flag
+
+					// Extract the raw value from ParamValue
+					rawValue := item.Value.Raw
+
+					// Convert value to appropriate type based on schema
+					convertedValue := p.convertParameterValue(key, rawValue, parsed.Type)
+					parsed.Parameters[key] = convertedValue
 				} else {
-					// Unknown parameter - this should be caught by schema validation
-					// For now, treat as a boolean flag
-					parsed.Parameters[key] = true
+					// This could be either a boolean flag or a parameter with default value
+					key := item.Flag
+
+					// Check if this is a boolean parameter
+					if p.isBooleanParameter(key, parsed.Type) {
+						// For boolean parameters, -Flag means true
+						parsed.Parameters[key] = true
+					} else if p.isParameterWithDefault(key, parsed.Type) {
+						// For parameters with defaults, -Flag means use the default value
+						defaultValue := p.getParameterDefault(key, parsed.Type)
+						parsed.Parameters[key] = defaultValue
+					} else {
+						// Unknown parameter - this should be caught by schema validation
+						// For now, treat as a boolean flag
+						parsed.Parameters[key] = true
+					}
 				}
 			}
 		}
-	}
 	} // End of parameter parsing else block
 
 	// Don't apply default values - only use what the user explicitly specified
@@ -166,7 +166,7 @@ func (p *ParticipleParser) ParseAnnotation(comment string, location SourceLocati
 func (p *ParticipleParser) parseBasicStructure(comment string) (annotationType, target, remaining string, err error) {
 	// Trim leading whitespace first
 	comment = strings.TrimSpace(comment)
-	
+
 	// Remove comment prefix
 	if !strings.HasPrefix(comment, "//") {
 		return "", "", "", fmt.Errorf("annotation must start with '//'")
@@ -206,18 +206,18 @@ func (p *ParticipleParser) parseParamsAndFlags(input string) (*ParamsAndFlags, e
 	}
 
 	result := &ParamsAndFlags{}
-	
+
 	// Split by spaces to get individual parameters/flags
 	parts := strings.Fields(input)
-	
+
 	for _, part := range parts {
 		if !strings.HasPrefix(part, "-") {
 			continue // Skip non-flag parts
 		}
-		
+
 		// Remove the leading dash
 		part = strings.TrimPrefix(part, "-")
-		
+
 		// Check if it has an equals sign (parameter) or not (flag)
 		if strings.Contains(part, "=") {
 			// This is a parameter with a value
@@ -238,7 +238,7 @@ func (p *ParticipleParser) parseParamsAndFlags(input string) (*ParamsAndFlags, e
 			})
 		}
 	}
-	
+
 	return result, nil
 }
 
@@ -249,10 +249,10 @@ type ParamsAndFlags struct {
 
 // ParamItem represents a single parameter or flag
 type ParamItem struct {
-	Flag      string      `parser:"@Dash @Ident"`
-	HasValue  bool        `parser:"(@Equals"`
-	Value     *ParamValue `parser:"  @@"`
-	ClosePar  bool        `parser:")?"`
+	Flag     string      `parser:"@Dash @Ident"`
+	HasValue bool        `parser:"(@Equals"`
+	Value    *ParamValue `parser:"  @@"`
+	ClosePar bool        `parser:")?"`
 }
 
 // ParamValue represents a parameter value - we'll parse it as a raw string and handle comma-separation later
@@ -465,6 +465,7 @@ func (p *ParticipleParser) ValidateAnnotation(annotation *ParsedAnnotation) erro
 	// TODO: Implement validation
 	return nil
 }
+
 // isParameterWithDefault checks if a parameter supports being used without a value (with default)
 func (p *ParticipleParser) isParameterWithDefault(paramName string, annotationType AnnotationType) bool {
 	if p.registry == nil {

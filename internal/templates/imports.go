@@ -21,20 +21,20 @@ func GenerateMinimalImports(moduleImport string) string {
 // GenerateMinimalImportsWithPackages creates imports with user project packages
 func GenerateMinimalImportsWithPackages(moduleImport string, userPackages []string) string {
 	var builder strings.Builder
-	
+
 	builder.WriteString("import (\n")
 	builder.WriteString("\t\"github.com/labstack/echo/v4\"\n")
 	builder.WriteString("\t\"go.uber.org/fx\"\n")
 	builder.WriteString("\n")
-	
+
 	// Add user project packages
 	for _, pkg := range userPackages {
 		builder.WriteString(fmt.Sprintf("\t\"%s/%s\"\n", moduleImport, pkg))
 	}
-	
+
 	builder.WriteString(fmt.Sprintf("\t\"%s/pkg/axon\"\n", moduleImport))
 	builder.WriteString(")\n\n")
-	
+
 	return builder.String()
 }
 
@@ -43,4 +43,3 @@ func FixEchoImports(content string) string {
 	// Replace any echo imports that don't specify v4
 	return strings.ReplaceAll(content, `"github.com/labstack/echo"`, `"github.com/labstack/echo/v4"`)
 }
-

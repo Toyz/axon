@@ -6,8 +6,6 @@ import (
 	"github.com/toyz/axon/pkg/axon"
 )
 
-
-
 // ParserRegistry manages route parameter parsers
 type ParserRegistry struct {
 	*utils.Registry[string, axon.RouteParserMetadata]
@@ -18,14 +16,14 @@ func NewParserRegistry() *ParserRegistry {
 	registry := &ParserRegistry{
 		Registry: utils.NewRegistry[string, axon.RouteParserMetadata](),
 	}
-	
+
 	// Register built-in parsers from public API
 	builtinParsers := make(map[string]axon.RouteParserMetadata)
 	for _, parser := range axon.BuiltinParsers {
 		builtinParsers[parser.TypeName] = parser
 	}
 	registry.Registry.ClearWithReset(builtinParsers)
-	
+
 	return registry
 }
 
@@ -43,7 +41,7 @@ func (r *ParserRegistry) RegisterParser(parser axon.RouteParserMetadata) error {
 		}
 		return nil
 	}
-	
+
 	return r.Registry.RegisterWithValidator(parser.TypeName, parser, validator)
 }
 
@@ -53,7 +51,7 @@ func (r *ParserRegistry) GetParser(typeName string) (axon.RouteParserMetadata, b
 	if parser, exists := r.Registry.Get(typeName); exists {
 		return parser, true
 	}
-	
+
 	// Try resolving alias and lookup again
 	resolvedType := axon.ResolveTypeAlias(typeName)
 	if resolvedType != typeName {
@@ -61,7 +59,7 @@ func (r *ParserRegistry) GetParser(typeName string) (axon.RouteParserMetadata, b
 			return parser, true
 		}
 	}
-	
+
 	return axon.RouteParserMetadata{}, false
 }
 
@@ -94,7 +92,7 @@ func (r *ParserRegistry) ClearCustomParsers() {
 			builtinParsers[parser.TypeName] = existing
 		}
 	}
-	
+
 	r.Registry.ClearWithReset(builtinParsers)
 }
 

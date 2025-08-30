@@ -37,7 +37,7 @@ var CoreAnnotationSchema = AnnotationSchema{
 	Parameters:  ServiceAnnotationSchema.Parameters, // Same parameters as ServiceAnnotationSchema
 	Examples: []string{
 		"//axon::core",
-		"//axon::core -Mode=Transient", 
+		"//axon::core -Mode=Transient",
 		"//axon::core -Init=Background",
 		"//axon::core -Constructor=NewCustomService",
 		"//axon::core -Mode=Singleton -Init=Same",
@@ -127,7 +127,7 @@ var InterfaceAnnotationSchema = AnnotationSchema{
 var InjectAnnotationSchema = AnnotationSchema{
 	Type:        InjectAnnotation,
 	Description: "Marks a field for dependency injection",
-	Parameters: map[string]ParameterSpec{},
+	Parameters:  map[string]ParameterSpec{},
 	Examples: []string{
 		"//axon::inject",
 	},
@@ -137,7 +137,7 @@ var InjectAnnotationSchema = AnnotationSchema{
 var InitAnnotationSchema = AnnotationSchema{
 	Type:        InitAnnotation,
 	Description: "Marks a function for initialization",
-	Parameters: map[string]ParameterSpec{},
+	Parameters:  map[string]ParameterSpec{},
 	Examples: []string{
 		"//axon::init",
 	},

@@ -146,8 +146,6 @@ type User struct {
 		assert.FileExists(t, serviceModulePath)
 	})
 
-
-
 	t.Run("no packages found", func(t *testing.T) {
 		emptyDir := filepath.Join(tempDir, "empty")
 		require.NoError(t, os.MkdirAll(emptyDir, 0755))

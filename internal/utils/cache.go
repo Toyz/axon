@@ -30,11 +30,11 @@ func NewCache[K comparable, V any]() *Cache[K, V] {
 func (c *Cache[K, V]) Get(key K) (V, bool) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
-	
+
 	if item, exists := c.items[key]; exists {
 		return item.Value, true
 	}
-	
+
 	var zero V
 	return zero, false
 }
@@ -45,24 +45,24 @@ func (c *Cache[K, V]) GetWithFileValidation(key K, filePath string) (V, bool) {
 	c.mutex.RLock()
 	item, exists := c.items[key]
 	c.mutex.RUnlock()
-	
+
 	if !exists {
 		var zero V
 		return zero, false
 	}
-	
+
 	// Check if file has been modified
 	if stat, err := os.Stat(filePath); err == nil {
 		if stat.ModTime().Equal(item.ModTime) && stat.Size() == item.Size {
 			return item.Value, true
 		}
 	}
-	
+
 	// File changed or error, remove from cache
 	c.mutex.Lock()
 	delete(c.items, key)
 	c.mutex.Unlock()
-	
+
 	var zero V
 	return zero, false
 }
@@ -71,7 +71,7 @@ func (c *Cache[K, V]) GetWithFileValidation(key K, filePath string) (V, bool) {
 func (c *Cache[K, V]) Set(key K, value V) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	
+
 	c.items[key] = &CacheItem[V]{
 		Value: value,
 	}
@@ -83,16 +83,16 @@ func (c *Cache[K, V]) SetWithFileInfo(key K, value V, filePath string) error {
 	if err != nil {
 		return err
 	}
-	
+
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	
+
 	c.items[key] = &CacheItem[V]{
 		Value:   value,
 		ModTime: stat.ModTime(),
 		Size:    stat.Size(),
 	}
-	
+
 	return nil
 }
 
@@ -100,7 +100,7 @@ func (c *Cache[K, V]) SetWithFileInfo(key K, value V, filePath string) error {
 func (c *Cache[K, V]) Delete(key K) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	
+
 	delete(c.items, key)
 }
 
@@ -108,7 +108,7 @@ func (c *Cache[K, V]) Delete(key K) {
 func (c *Cache[K, V]) Clear() {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	
+
 	c.items = make(map[K]*CacheItem[V])
 }
 
@@ -116,7 +116,7 @@ func (c *Cache[K, V]) Clear() {
 func (c *Cache[K, V]) Size() int {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
-	
+
 	return len(c.items)
 }
 
@@ -124,12 +124,12 @@ func (c *Cache[K, V]) Size() int {
 func (c *Cache[K, V]) Keys() []K {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
-	
+
 	keys := make([]K, 0, len(c.items))
 	for key := range c.items {
 		keys = append(keys, key)
 	}
-	
+
 	return keys
 }
 
@@ -137,7 +137,7 @@ func (c *Cache[K, V]) Keys() []K {
 func (c *Cache[K, V]) ForEach(fn func(key K, value V)) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
-	
+
 	for key, item := range c.items {
 		fn(key, item.Value)
 	}
@@ -147,7 +147,7 @@ func (c *Cache[K, V]) ForEach(fn func(key K, value V)) {
 func (c *Cache[K, V]) GetStats() CacheStats {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
-	
+
 	return CacheStats{
 		Size: len(c.items),
 	}

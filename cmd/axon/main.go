@@ -69,29 +69,29 @@ func main() {
 	}
 
 	// Clean startup - no banner needed, generator will handle output
-	
+
 	// Handle clean operation
 	if *cleanFlag {
 		diagnostics.Info("Starting cleanup operation...")
-		
+
 		cleaner := cli.NewCleaner()
 		err := cleaner.CleanGeneratedFiles(args)
 		if err != nil {
 			diagnostics.Error("Clean operation failed: %v", err)
 			os.Exit(1)
 		}
-		
+
 		diagnostics.Success("All autogen_module.go files have been removed")
 		return
 	}
 
 	// Create and configure generator (no extra output)
 	generator := cli.NewGeneratorWithDiagnostics(*verboseFlag, diagnostics)
-	
+
 	if *moduleFlag != "" {
 		generator.SetCustomModule(*moduleFlag)
 	}
-	
+
 	// Run the generation process
 	err := generator.Generate(args)
 	if err != nil {

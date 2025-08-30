@@ -124,10 +124,10 @@ func TestModuleResolver_BuildPackagePath(t *testing.T) {
 	require.NoError(t, err)
 
 	testCases := []struct {
-		name        string
-		moduleName  string
-		packageDir  string
-		expected    string
+		name       string
+		moduleName string
+		packageDir string
+		expected   string
 	}{
 		{
 			name:       "current directory",

@@ -8,4 +8,3 @@ type MiddlewareRegistry interface {
 	Validate(middlewareNames []string) error
 	Get(name string) (*models.MiddlewareMetadata, bool)
 }
-

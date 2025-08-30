@@ -20,8 +20,6 @@ func TestNewRegistry(t *testing.T) {
 	}
 }
 
-
-
 func TestRegister(t *testing.T) {
 	registry := NewRegistry()
 
@@ -437,7 +435,6 @@ func TestConcurrentRegistryModifications(t *testing.T) {
 }
 
 // Test concurrent validation operations
-
 
 func TestValidateDefaultValue(t *testing.T) {
 	registry := NewRegistry().(*registry)

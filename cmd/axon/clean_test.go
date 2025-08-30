@@ -28,7 +28,7 @@ func TestCleanAutogenFiles(t *testing.T) {
 	for _, dir := range dirs {
 		dirPath := filepath.Join(tempDir, dir)
 		require.NoError(t, os.MkdirAll(dirPath, 0755))
-		
+
 		autogenFile := filepath.Join(dirPath, "autogen_module.go")
 		require.NoError(t, os.WriteFile(autogenFile, []byte("package test\n// Generated file"), 0644))
 		autogenFiles = append(autogenFiles, autogenFile)
@@ -40,7 +40,7 @@ func TestCleanAutogenFiles(t *testing.T) {
 		filepath.Join(tempDir, "services", "user_service.go"),
 		filepath.Join(tempDir, "main.go"),
 	}
-	
+
 	for _, file := range nonAutogenFiles {
 		require.NoError(t, os.WriteFile(file, []byte("package test\n// Regular file"), 0644))
 	}
@@ -126,7 +126,7 @@ func TestFindAutogenFilesRecursive(t *testing.T) {
 		"controllers",
 		"services/user",
 		"middleware",
-		".hidden", // Should be skipped
+		".hidden",    // Should be skipped
 		"vendor/pkg", // Should be skipped
 	}
 
@@ -135,10 +135,10 @@ func TestFindAutogenFilesRecursive(t *testing.T) {
 		if dir == ".hidden" || dir == "vendor/pkg" {
 			continue // These should be skipped
 		}
-		
+
 		dirPath := filepath.Join(tempDir, dir)
 		require.NoError(t, os.MkdirAll(dirPath, 0755))
-		
+
 		autogenFile := filepath.Join(dirPath, "autogen_module.go")
 		require.NoError(t, os.WriteFile(autogenFile, []byte("package test"), 0644))
 		expectedFiles = append(expectedFiles, autogenFile)
@@ -153,14 +153,13 @@ func TestFindAutogenFilesRecursive(t *testing.T) {
 	require.NoError(t, os.MkdirAll(vendorDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(vendorDir, "autogen_module.go"), []byte("package vendor"), 0644))
 
+	t.Run("clean autogen files recursively", func(t *testing.T) {
+		// Test that cleaner can handle complex directory structures
+		cleaner := cli.NewCleaner()
+		err := cleaner.CleanGeneratedFiles([]string{tempDir + "/..."})
+		assert.NoError(t, err)
 
-t.Run("clean autogen files recursively", func(t *testing.T) {
-// Test that cleaner can handle complex directory structures
-cleaner := cli.NewCleaner()
-err := cleaner.CleanGeneratedFiles([]string{tempDir + "/..."})
-assert.NoError(t, err)
-
-// Just verify no error occurred - the cleaner should handle the complex structure
-assert.NoError(t, err)
-})
+		// Just verify no error occurred - the cleaner should handle the complex structure
+		assert.NoError(t, err)
+	})
 }

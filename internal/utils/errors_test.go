@@ -75,10 +75,10 @@ func TestErrorWrappers(t *testing.T) {
 
 func TestErrorWrappersWithEmptyItem(t *testing.T) {
 	originalErr := errors.New("test error")
-	
+
 	result := WrapRegisterError("", originalErr)
 	expected := "failed to register : test error"
-	
+
 	if result.Error() != expected {
 		t.Errorf("expected %q, got %q", expected, result.Error())
 	}
@@ -88,7 +88,7 @@ func TestErrorWrappersWithNilError(t *testing.T) {
 	// These should still work with nil errors (though not recommended usage)
 	result := WrapRegisterError("test", nil)
 	expected := "failed to register test: %!w(<nil>)"
-	
+
 	if result.Error() != expected {
 		t.Errorf("expected %q, got %q", expected, result.Error())
 	}

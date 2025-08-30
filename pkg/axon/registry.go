@@ -1,18 +1,18 @@
 package axon
 
 import (
-	"strings"
 	"github.com/labstack/echo/v4"
+	"strings"
 )
 
 // MiddlewareInstance represents a middleware with its name and handler
 type MiddlewareInstance struct {
 	// Name is the middleware name as defined in annotations
 	Name string
-	
+
 	// Handler is the middleware function that can be applied to routes
 	Handler func(echo.HandlerFunc) echo.HandlerFunc
-	
+
 	// Instance is the actual middleware struct instance (if available)
 	Instance interface{}
 }
@@ -21,7 +21,7 @@ type MiddlewareInstance struct {
 type ParameterInstance struct {
 	// Name is the parameter name as defined in the route path
 	Name string
-	
+
 	// Type is the parameter type (e.g., "int", "string", "UUID", "ProductCode")
 	Type string
 }
@@ -30,10 +30,10 @@ type ParameterInstance struct {
 type MiddlewareRegistry interface {
 	// RegisterMiddleware adds a middleware to the registry
 	RegisterMiddleware(name string, handler func(echo.HandlerFunc) echo.HandlerFunc, instance interface{})
-	
+
 	// GetMiddleware retrieves a middleware by name
 	GetMiddleware(name string) (MiddlewareInstance, bool)
-	
+
 	// GetAllMiddlewares returns all registered middlewares
 	GetAllMiddlewares() []MiddlewareInstance
 }
@@ -89,31 +89,31 @@ type ParserRegistryInterface interface {
 type RouteInfo struct {
 	// Method is the HTTP method (GET, POST, PUT, DELETE, etc.)
 	Method string
-	
+
 	// Path is the original Axon route path with parameter placeholders (e.g., "/users/{id:int}")
 	Path string
-	
+
 	// EchoPath is the Echo-compatible route path (e.g., "/users/:id")
 	EchoPath string
-	
+
 	// HandlerName is the name of the handler function
 	HandlerName string
-	
+
 	// ControllerName is the name of the controller that owns this route
 	ControllerName string
-	
+
 	// PackageName is the name of the package containing the controller
 	PackageName string
-	
+
 	// Middlewares is a list of middleware names applied to this route
 	Middlewares []string
-	
+
 	// MiddlewareInstances provides access to the actual middleware instances
 	MiddlewareInstances []MiddlewareInstance
-	
+
 	// ParameterInstances provides access to the actual parameter instances
 	ParameterInstances []ParameterInstance
-	
+
 	// Handler is the actual Echo handler function
 	Handler echo.HandlerFunc
 }
@@ -122,16 +122,16 @@ type RouteInfo struct {
 type RouteRegistry interface {
 	// GetAllRoutes returns all registered routes
 	GetAllRoutes() []RouteInfo
-	
+
 	// GetRoutesByPackage returns routes filtered by package name
 	GetRoutesByPackage(packageName string) []RouteInfo
-	
+
 	// GetRoutesByController returns routes filtered by controller name
 	GetRoutesByController(controllerName string) []RouteInfo
-	
+
 	// GetRoutesByMethod returns routes filtered by HTTP method
 	GetRoutesByMethod(method string) []RouteInfo
-	
+
 	// RegisterRoute adds a route to the registry (used internally by generated code)
 	RegisterRoute(route RouteInfo)
 }
@@ -247,23 +247,23 @@ func GetMiddlewaresByRoute(route RouteInfo) []MiddlewareInstance {
 func ConvertAxonPathToEcho(axonPath string) string {
 	// Replace Axon parameter syntax {param:type} with Echo syntax :param
 	result := axonPath
-	
+
 	// Find all {param:type} patterns and replace with :param
 	for {
 		start := strings.Index(result, "{")
 		if start == -1 {
 			break
 		}
-		
+
 		end := strings.Index(result[start:], "}")
 		if end == -1 {
 			break
 		}
 		end += start
-		
+
 		// Extract parameter definition: {id:int} -> id:int
 		paramDef := result[start+1 : end]
-		
+
 		// Split by colon to get parameter name
 		parts := strings.Split(paramDef, ":")
 		if len(parts) > 0 {
@@ -275,7 +275,7 @@ func ConvertAxonPathToEcho(axonPath string) string {
 			break
 		}
 	}
-	
+
 	return result
 }
 

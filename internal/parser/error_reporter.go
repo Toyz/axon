@@ -22,15 +22,15 @@ func NewParserErrorReporter(parser *Parser) *ParserErrorReporter {
 // ReportParserValidationError creates a detailed parser validation error with context and suggestions
 func (r *ParserErrorReporter) ReportParserValidationError(functionName, fileName string, line int, issue string, actualSignature string) error {
 	expectedSignature := "func(c echo.Context, paramValue string) (T, error)"
-	
+
 	suggestions := []string{
 		"Expected signature: " + expectedSignature,
 	}
-	
+
 	// Add specific suggestions based on the issue
 	switch {
 	case strings.Contains(issue, "parameters"):
-		suggestions = append(suggestions, 
+		suggestions = append(suggestions,
 			"Ensure the function has exactly 2 parameters",
 			"First parameter should be echo.Context",
 			"Second parameter should be string",
@@ -57,13 +57,13 @@ func (r *ParserErrorReporter) ReportParserValidationError(functionName, fileName
 			"Ensure the function is not a method (no receiver)",
 		)
 	}
-	
+
 	// Add example based on common parser patterns
 	example := r.generateParserExample(functionName)
 	if example != "" {
 		suggestions = append(suggestions, "Example implementation:", example)
 	}
-	
+
 	return &models.GeneratorError{
 		Type:        models.ErrorTypeParserValidation,
 		File:        fileName,
@@ -85,7 +85,7 @@ func (r *ParserErrorReporter) ReportParserNotFoundError(typeName, routeMethod, r
 		fmt.Sprintf("Register a parser for type '%s' using //axon::route_parser %s", typeName, typeName),
 		"Check if the type name is spelled correctly",
 	}
-	
+
 	// Add suggestions based on the type name
 	if strings.Contains(typeName, "UUID") || strings.Contains(typeName, "uuid") {
 		suggestions = append(suggestions,
@@ -93,14 +93,14 @@ func (r *ParserErrorReporter) ReportParserNotFoundError(typeName, routeMethod, r
 			"Example: //axon::route_parser uuid.UUID",
 		)
 	}
-	
+
 	if strings.Contains(typeName, "Time") || strings.Contains(typeName, "time") {
 		suggestions = append(suggestions,
 			"For time types, use 'time.Time' and import 'time'",
 			"Example: //axon::route_parser time.Time",
 		)
 	}
-	
+
 	// Add available parsers information
 	if len(availableParsers) > 0 {
 		suggestions = append(suggestions, fmt.Sprintf("Available parsers: %s", strings.Join(availableParsers, ", ")))
@@ -108,13 +108,13 @@ func (r *ParserErrorReporter) ReportParserNotFoundError(typeName, routeMethod, r
 		suggestions = append(suggestions, "No parsers are currently registered")
 		suggestions = append(suggestions, "Consider adding built-in parsers or creating custom ones")
 	}
-	
+
 	// Add example parser implementation
 	example := r.generateParserExample("Parse" + r.capitalizeFirst(typeName))
 	if example != "" {
 		suggestions = append(suggestions, "Example parser implementation:", example)
 	}
-	
+
 	return &models.GeneratorError{
 		Type:        models.ErrorTypeParserValidation,
 		File:        fileName,
@@ -137,7 +137,7 @@ func (r *ParserErrorReporter) ReportParserImportError(typeName, fileName string,
 		fmt.Sprintf("Add import: %s", requiredImport),
 		"Ensure the package containing the type is imported",
 	}
-	
+
 	// Add specific suggestions based on the import
 	switch requiredImport {
 	case "github.com/google/uuid":
@@ -154,7 +154,7 @@ func (r *ParserErrorReporter) ReportParserImportError(typeName, fileName string,
 			"Add to imports: import \"net/url\"",
 		)
 	}
-	
+
 	return &models.GeneratorError{
 		Type:        models.ErrorTypeParserImport,
 		File:        fileName,
@@ -174,14 +174,14 @@ func (r *ParserErrorReporter) ReportParserConflictError(typeName string, conflic
 	for _, conflict := range conflicts {
 		conflictDetails = append(conflictDetails, fmt.Sprintf("%s:%d (%s)", conflict.FileName, conflict.Line, conflict.FunctionName))
 	}
-	
+
 	suggestions := []string{
 		"Keep only one parser registration for each type",
 		"Remove duplicate parser annotations",
 		"Consider using different type names if you need multiple parsers",
 		fmt.Sprintf("Conflicting registrations found at: %s", strings.Join(conflictDetails, ", ")),
 	}
-	
+
 	return &models.GeneratorError{
 		Type:        models.ErrorTypeParserConflict,
 		Message:     fmt.Sprintf("Multiple parsers registered for type '%s'", typeName),
@@ -202,14 +202,14 @@ func ParseUUID(c echo.Context, paramValue string) (uuid.UUID, error) {
     return uuid.Parse(paramValue)
 }`
 	}
-	
+
 	if strings.Contains(strings.ToLower(functionName), "time") {
 		return `//axon::route_parser time.Time
 func ParseTime(c echo.Context, paramValue string) (time.Time, error) {
     return time.Parse(time.RFC3339, paramValue)
 }`
 	}
-	
+
 	if strings.Contains(strings.ToLower(functionName), "int") {
 		return `//axon::route_parser CustomInt
 func ParseCustomInt(c echo.Context, paramValue string) (CustomInt, error) {
@@ -220,7 +220,7 @@ func ParseCustomInt(c echo.Context, paramValue string) (CustomInt, error) {
     return CustomInt(val), nil
 }`
 	}
-	
+
 	// Generic example
 	return fmt.Sprintf(`//axon::route_parser YourType
 func %s(c echo.Context, paramValue string) (YourType, error) {
@@ -241,12 +241,12 @@ func (r *ParserErrorReporter) capitalizeFirst(s string) string {
 // GenerateParserDiagnostics generates comprehensive diagnostics for parser-related issues
 func (r *ParserErrorReporter) GenerateParserDiagnostics(metadata *models.PackageMetadata) []string {
 	var diagnostics []string
-	
+
 	// Check for common parser issues
 	if len(metadata.RouteParsers) == 0 {
 		diagnostics = append(diagnostics, "No custom parsers found. Consider adding parsers for complex types.")
 	}
-	
+
 	// Check for unused parsers
 	usedParsers := make(map[string]bool)
 	for _, controller := range metadata.Controllers {
@@ -258,13 +258,13 @@ func (r *ParserErrorReporter) GenerateParserDiagnostics(metadata *models.Package
 			}
 		}
 	}
-	
+
 	for _, parser := range metadata.RouteParsers {
 		if !usedParsers[parser.TypeName] {
 			diagnostics = append(diagnostics, fmt.Sprintf("Parser for type '%s' is defined but not used in any routes", parser.TypeName))
 		}
 	}
-	
+
 	// Check for missing parsers for custom types
 	for _, controller := range metadata.Controllers {
 		for _, route := range controller.Routes {
@@ -275,6 +275,6 @@ func (r *ParserErrorReporter) GenerateParserDiagnostics(metadata *models.Package
 			}
 		}
 	}
-	
+
 	return diagnostics
 }

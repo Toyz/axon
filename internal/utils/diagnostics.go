@@ -118,8 +118,6 @@ func (d *DiagnosticSystem) Progress(format string, args ...interface{}) {
 	}
 }
 
-
-
 // Section creates a prominent section header
 func (d *DiagnosticSystem) Section(title string) {
 	if d.level >= DiagnosticInfo {
@@ -158,7 +156,7 @@ func (d *DiagnosticSystem) Unindent() {
 func (d *DiagnosticSystem) Summary(title string, stats map[string]interface{}) {
 	if d.level >= DiagnosticInfo {
 		fmt.Fprintf(d.output, "\n%s\n", title)
-		
+
 		for key, value := range stats {
 			fmt.Fprintf(d.output, "   %s: %v\n", key, value)
 		}
@@ -231,30 +229,28 @@ func (d *DiagnosticSystem) GenerationComplete() {
 // writeMessage is the internal message writing function
 func (d *DiagnosticSystem) writeMessage(writer io.Writer, level, color, format string, args ...interface{}) {
 	message := fmt.Sprintf(format, args...)
-	
+
 	var output strings.Builder
 	output.WriteString(d.getIndent())
-	
+
 	// Add timestamp if enabled
 	if d.showTime {
 		output.WriteString(time.Now().Format("15:04:05 "))
 	}
-	
+
 	// Add colored level if colors are enabled
 	if d.useColors {
 		output.WriteString(fmt.Sprintf("%s[%s]%s ", color, level, ColorReset))
 	} else {
 		output.WriteString(fmt.Sprintf("[%s] ", level))
 	}
-	
+
 	// Add the message
 	output.WriteString(message)
 	output.WriteString("\n")
-	
+
 	fmt.Fprint(writer, output.String())
 }
-
-
 
 // getIndent returns the current indentation string
 func (d *DiagnosticSystem) getIndent() string {
@@ -267,12 +263,12 @@ func shouldUseColors() bool {
 	if os.Getenv("NO_COLOR") != "" {
 		return false
 	}
-	
+
 	// Check if FORCE_COLOR is set
 	if os.Getenv("FORCE_COLOR") != "" {
 		return true
 	}
-	
+
 	// Check if we have a terminal
 	term := os.Getenv("TERM")
 	return term != "" && term != "dumb"

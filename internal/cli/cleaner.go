@@ -22,14 +22,14 @@ func NewCleaner() *Cleaner {
 // CleanGeneratedFiles removes all autogen_module.go files from the specified directories
 func (c *Cleaner) CleanGeneratedFiles(directories []string) error {
 	var removedFiles []string
-	
+
 	for _, dir := range directories {
 		err := c.cleanDirectory(dir, &removedFiles)
 		if err != nil {
 			return fmt.Errorf("failed to clean directory %s: %w", dir, err)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -43,7 +43,7 @@ func (c *Cleaner) cleanDirectory(dir string, removedFiles *[]string) error {
 		}
 		return c.cleanRecursively(baseDir, removedFiles)
 	}
-	
+
 	// Clean specific directory
 	return c.cleanSingleDirectory(dir, removedFiles)
 }
@@ -54,13 +54,13 @@ func (c *Cleaner) cleanRecursively(baseDir string, removedFiles *[]string) error
 	if baseDir != "" {
 		startDir = baseDir
 	}
-	
+
 	return filepath.Walk(startDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			// Skip directories that don't exist or can't be accessed
 			return nil
 		}
-		
+
 		if info.IsDir() {
 			err := c.cleanSingleDirectory(path, removedFiles)
 			if err != nil {
@@ -68,7 +68,7 @@ func (c *Cleaner) cleanRecursively(baseDir string, removedFiles *[]string) error
 				return nil
 			}
 		}
-		
+
 		return nil
 	})
 }
@@ -79,9 +79,9 @@ func (c *Cleaner) cleanSingleDirectory(dir string, removedFiles *[]string) error
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		return nil
 	}
-	
+
 	autogenFile := filepath.Join(dir, "autogen_module.go")
-	
+
 	// Check if the file exists
 	if _, err := os.Stat(autogenFile); err != nil {
 		if os.IsNotExist(err) {
@@ -89,13 +89,13 @@ func (c *Cleaner) cleanSingleDirectory(dir string, removedFiles *[]string) error
 		}
 		return fmt.Errorf("failed to check file %s: %w", autogenFile, err)
 	}
-	
+
 	// Remove the file
 	err := os.Remove(autogenFile)
 	if err != nil {
 		return fmt.Errorf("failed to remove file %s: %w", autogenFile, err)
 	}
-	
+
 	*removedFiles = append(*removedFiles, autogenFile)
 	return nil
 }

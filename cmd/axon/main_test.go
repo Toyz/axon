@@ -84,7 +84,7 @@ func TestDirectoryValidation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Test the validation logic by simulating what main() does
 			var validationError error
-			
+
 			// Validate directory paths (same logic as in main.go)
 			for _, dir := range tt.directories {
 				if strings.HasSuffix(dir, "/...") {
@@ -95,14 +95,14 @@ func TestDirectoryValidation(t *testing.T) {
 					} else {
 						baseDir = filepath.Dir(dir[:len(dir)-4]) // Remove /...
 					}
-					
+
 					// More accurate base directory extraction
 					if dir == "./..." {
 						baseDir = "."
 					} else if dir[len(dir)-4:] == "/..." {
 						baseDir = dir[:len(dir)-4]
 					}
-					
+
 					if _, err := os.Stat(baseDir); os.IsNotExist(err) {
 						validationError = err
 						break
@@ -126,46 +126,46 @@ func TestDirectoryValidation(t *testing.T) {
 
 func TestGoStylePatternParsing(t *testing.T) {
 	tests := []struct {
-		name        string
-		pattern     string
+		name         string
+		pattern      string
 		expectedBase string
-		isPattern   bool
+		isPattern    bool
 	}{
 		{
-			name:        "root recursive pattern",
-			pattern:     "./...",
+			name:         "root recursive pattern",
+			pattern:      "./...",
 			expectedBase: ".",
-			isPattern:   true,
+			isPattern:    true,
 		},
 		{
-			name:        "subdirectory recursive pattern",
-			pattern:     "./internal/...",
+			name:         "subdirectory recursive pattern",
+			pattern:      "./internal/...",
 			expectedBase: "./internal",
-			isPattern:   true,
+			isPattern:    true,
 		},
 		{
-			name:        "deep subdirectory recursive pattern",
-			pattern:     "./internal/controllers/...",
+			name:         "deep subdirectory recursive pattern",
+			pattern:      "./internal/controllers/...",
 			expectedBase: "./internal/controllers",
-			isPattern:   true,
+			isPattern:    true,
 		},
 		{
-			name:        "absolute path pattern",
-			pattern:     "/home/user/project/...",
+			name:         "absolute path pattern",
+			pattern:      "/home/user/project/...",
 			expectedBase: "/home/user/project",
-			isPattern:   true,
+			isPattern:    true,
 		},
 		{
-			name:        "regular directory",
-			pattern:     "./internal/controllers",
+			name:         "regular directory",
+			pattern:      "./internal/controllers",
 			expectedBase: "./internal/controllers",
-			isPattern:   false,
+			isPattern:    false,
 		},
 		{
-			name:        "root directory",
-			pattern:     ".",
+			name:         "root directory",
+			pattern:      ".",
 			expectedBase: ".",
-			isPattern:   false,
+			isPattern:    false,
 		},
 	}
 

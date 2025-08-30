@@ -41,11 +41,11 @@ func (e ErrorCode) String() string {
 
 // ValidationError represents a parameter validation error
 type ValidationError struct {
-	Parameter  string         // Parameter name that failed validation
-	Expected   string         // What was expected
-	Actual     string         // What was provided
-	Loc        SourceLocation // Where the error occurred
-	Hint       string         // Suggested fix
+	Parameter string         // Parameter name that failed validation
+	Expected  string         // What was expected
+	Actual    string         // What was provided
+	Loc       SourceLocation // Where the error occurred
+	Hint      string         // Suggested fix
 }
 
 func (e *ValidationError) Error() string {
@@ -55,8 +55,8 @@ func (e *ValidationError) Error() string {
 }
 
 func (e *ValidationError) Location() SourceLocation { return e.Loc }
-func (e *ValidationError) Suggestion() string      { return e.Hint }
-func (e *ValidationError) Code() ErrorCode         { return ValidationErrorCode }
+func (e *ValidationError) Suggestion() string       { return e.Hint }
+func (e *ValidationError) Code() ErrorCode          { return ValidationErrorCode }
 
 // SyntaxError represents a syntax parsing error
 type SyntaxError struct {
@@ -71,8 +71,8 @@ func (e *SyntaxError) Error() string {
 }
 
 func (e *SyntaxError) Location() SourceLocation { return e.Loc }
-func (e *SyntaxError) Suggestion() string      { return e.Hint }
-func (e *SyntaxError) Code() ErrorCode         { return SyntaxErrorCode }
+func (e *SyntaxError) Suggestion() string       { return e.Hint }
+func (e *SyntaxError) Code() ErrorCode          { return SyntaxErrorCode }
 
 // SchemaError represents a schema-related error
 type SchemaError struct {
@@ -87,8 +87,8 @@ func (e *SchemaError) Error() string {
 }
 
 func (e *SchemaError) Location() SourceLocation { return e.Loc }
-func (e *SchemaError) Suggestion() string      { return e.Hint }
-func (e *SchemaError) Code() ErrorCode         { return SchemaErrorCode }
+func (e *SchemaError) Suggestion() string       { return e.Hint }
+func (e *SchemaError) Code() ErrorCode          { return SchemaErrorCode }
 
 // RegistrationError represents an error during annotation type registration
 type RegistrationError struct {
@@ -106,10 +106,8 @@ func (e *RegistrationError) Error() string {
 }
 
 func (e *RegistrationError) Location() SourceLocation { return e.Loc }
-func (e *RegistrationError) Suggestion() string      { return e.Hint }
-func (e *RegistrationError) Code() ErrorCode         { return RegistrationErrorCode }
-
-
+func (e *RegistrationError) Suggestion() string       { return e.Hint }
+func (e *RegistrationError) Code() ErrorCode          { return RegistrationErrorCode }
 
 // MultipleAnnotationErrors represents multiple annotation errors collected together
 type MultipleAnnotationErrors struct {
