@@ -138,7 +138,7 @@ jobs:
       - name: Generate code for example app
         run: |
           cd examples/complete-app
-          ../../axon ./internal/...
+          ../../axon ./...
 
       - name: Build example app
         run: |
