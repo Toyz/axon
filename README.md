@@ -131,7 +131,7 @@ type LoggingMiddleware struct {
 Build robust services with automatic dependency injection and lifecycle hooks.
 
 ```go
-//axon::core -Init
+//axon::service -Init
 type DatabaseService struct {
     //axon::inject
     Config *config.Config
@@ -149,7 +149,7 @@ func (s *DatabaseService) Stop(ctx context.Context) error {
     return nil
 }
 
-//axon::core -Init=Background -Mode=Transient
+//axon::service -Init=Background -Mode=Transient
 type BackgroundWorker struct {
     //axon::inject
     DatabaseService *DatabaseService
@@ -324,34 +324,56 @@ type LoggingMiddleware struct {}
 
 ### Service Annotations
 
-#### `//axon::core [flags]`
+#### `//axon::service [flags]`
 Define business services with lifecycle management.
+
+> **Note**: `//axon::core` is deprecated. Use `//axon::service` instead.
 
 **Flags:**
 - `-Init[=Same|Background]` - Enable lifecycle hooks with execution mode
   - `Same`: Start/Stop runs on the same thread (blocking) - default if no value specified
   - `Background`: Start/Stop runs in its own goroutine (non-blocking)
 - `-Mode=Singleton|Transient` - Instance lifecycle (default: Singleton)
+- `-Constructor=FunctionName` - Use custom constructor function instead of generated one
 - `-Manual=ModuleName` - Reference existing FX module
 
 ```go
-//axon::core -Init
+//axon::service -Init
 type DatabaseService struct {
     //axon::inject
     Config *config.Config
     connected bool
 }
 
-//axon::core -Init=Background
+//axon::service -Init=Background
 type CrawlerService struct {
     // Background service for async operations
 }
 
-//axon::core -Mode=Transient
+//axon::service -Mode=Transient
 type SessionService struct {
     //axon::inject
     DatabaseService *DatabaseService
     sessionID string
+}
+
+//axon::service -Constructor=NewCustomDatabaseService
+type DatabaseService struct {
+    //axon::inject
+    Config *config.Config
+    db *sql.DB
+}
+
+// Custom constructor function
+func NewCustomDatabaseService(config *config.Config) (*DatabaseService, error) {
+    db, err := sql.Open("postgres", config.DatabaseURL)
+    if err != nil {
+        return nil, err
+    }
+    return &DatabaseService{
+        Config: config,
+        db:     db,
+    }, nil
 }
 
 func (s *DatabaseService) Start(ctx context.Context) error {
@@ -365,7 +387,7 @@ func (s *DatabaseService) Stop(ctx context.Context) error {
     return s.db.Close()
 }
 
-//axon::core -Init=Background -Mode=Singleton
+//axon::service -Init=Background -Mode=Singleton
 type BackgroundWorker struct {
     //axon::inject
     DatabaseService *DatabaseService
@@ -475,7 +497,7 @@ your-app/
 
 ### Design for Testing
 ```go
-//axon::core
+//axon::service
 //axon::interface  // Generates interface for easy mocking
 type UserService struct {
     //axon::inject
@@ -483,36 +505,101 @@ type UserService struct {
 }
 ```
 
+### Custom Constructors
+
+When you need complex initialization logic or error handling during service creation, use custom constructors:
+
+```go
+//axon::service -Constructor=NewDatabaseService
+type DatabaseService struct {
+    //axon::inject
+    Config *config.Config
+    db *sql.DB
+}
+
+// Custom constructor with error handling
+func NewDatabaseService(config *config.Config) (*DatabaseService, error) {
+    db, err := sql.Open("postgres", config.DatabaseURL)
+    if err != nil {
+        return nil, fmt.Errorf("failed to connect to database: %w", err)
+    }
+    
+    if err := db.Ping(); err != nil {
+        return nil, fmt.Errorf("database ping failed: %w", err)
+    }
+    
+    return &DatabaseService{
+        Config: config,
+        db:     db,
+    }, nil
+}
+
+//axon::service -Constructor=NewRedisClient -Mode=Singleton
+type RedisClient struct {
+    //axon::inject
+    Config *config.Config
+    client *redis.Client
+}
+
+func NewRedisClient(config *config.Config) (*RedisClient, error) {
+    client := redis.NewClient(&redis.Options{
+        Addr:     config.RedisAddr,
+        Password: config.RedisPassword,
+        DB:       config.RedisDB,
+    })
+    
+    // Test connection
+    if err := client.Ping(context.Background()).Err(); err != nil {
+        return nil, fmt.Errorf("redis connection failed: %w", err)
+    }
+    
+    return &RedisClient{
+        Config: config,
+        client: client,
+    }, nil
+}
+```
+
+**Benefits of custom constructors:**
+- Complex initialization logic with error handling
+- Connection validation during startup
+- Custom configuration or setup
+- Integration with third-party libraries that require specific initialization
+
 ### Service Lifecycle Best Practices
 ```go
 // Use -Init for services that need startup/shutdown logic
-//axon::core -Init
+//axon::service -Init
 type DatabaseService struct {}
 
 // Use -Init=Background for non-blocking services
-//axon::core -Init=Background  
+//axon::service -Init=Background  
 type CrawlerService struct {}
 
 // Use -Mode=Transient for request-scoped services
-//axon::core -Mode=Transient
+//axon::service -Mode=Transient
 type SessionService struct {}
 
+// Use -Constructor for complex initialization
+//axon::service -Constructor=NewComplexService
+type ComplexService struct {}
+
 // Simple services don't need lifecycle hooks
-//axon::core
+//axon::service
 type UtilityService struct {}
 ```
 
 ### Lifecycle Management
 ```go
 // Blocking initialization (database connections, etc.)
-//axon::core -Init
+//axon::service -Init
 type DatabaseService struct {
     //axon::inject
     Config *config.Config
 }
 
 // Non-blocking initialization (background workers, etc.)
-//axon::core -Init=Background
+//axon::service -Init=Background
 type CrawlerService struct {}
 ```
 
@@ -593,7 +680,7 @@ type LoggingMiddleware struct {}
 ### Service Lifecycle Examples
 ```go
 // Database service - blocking initialization (default Same mode)
-//axon::core -Init
+//axon::service -Init
 type DatabaseService struct {
     //axon::inject
     Config *config.Config
@@ -608,7 +695,7 @@ func (s *DatabaseService) Start(ctx context.Context) error {
 }
 
 // Background worker - non-blocking initialization  
-//axon::core -Init=Background
+//axon::service -Init=Background
 type CrawlerService struct {}
 
 func (s *CrawlerService) Start(ctx context.Context) error {
@@ -628,7 +715,7 @@ func (s *CrawlerService) Start(ctx context.Context) error {
 }
 
 // Transient service - new instance per request
-//axon::core -Mode=Transient
+//axon::service -Mode=Transient
 type SessionService struct {
     //axon::inject
     DatabaseService *DatabaseService
