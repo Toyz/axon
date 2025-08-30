@@ -712,7 +712,7 @@ func (g *Generator) postProcessGeneratedFiles() error {
 	return nil
 }
 
-// processFileImports runs goimports on a single file
+// processFileImports runs goimports and gofmt on a single file in the correct order
 func (g *Generator) processFileImports(filePath string) error {
 	// Read the generated file
 	content, err := os.ReadFile(filePath)
@@ -734,7 +734,7 @@ func (g *Generator) processFileImports(filePath string) error {
 		}
 	}
 	
-	// Process with goimports - the filePath is crucial for context
+	// Phase 2: Process with goimports - the filePath is crucial for context
 	formatted, err := imports.Process(filePath, content, &imports.Options{
 		Fragment:  false,    // Complete Go file
 		AllErrors: true,     // Report all errors
@@ -780,16 +780,35 @@ func (g *Generator) processFileImports(filePath string) error {
 		return nil // Successfully wrote gofmt result
 	}
 	
-	// Fix imports to use correct versions
+	// Fix imports to use correct versions (before final formatting)
 	formattedString := string(formatted)
 	formattedString = fixAxonImports(formattedString)
 	formattedString = templates.FixEchoImports(formattedString)
 	
-	// Write the processed file back
-	if err := os.WriteFile(filePath, []byte(formattedString), 0644); err != nil {
+	// Phase 3: Final gofmt pass to ensure consistent formatting
+	finalFormatted, err := format.Source([]byte(formattedString))
+	if err != nil {
+		return &models.GeneratorError{
+			Type:    models.ErrorTypeGeneration,
+			Message: "Final gofmt formatting failed",
+			File:    filePath,
+			Cause:   err,
+			Context: map[string]interface{}{
+				"operation": "final_format",
+				"file_path": filePath,
+			},
+			Suggestions: []string{
+				"Check the generated code syntax after import fixes",
+				"Verify that import fixes didn't introduce syntax errors",
+			},
+		}
+	}
+	
+	// Write the final processed file back
+	if err := os.WriteFile(filePath, finalFormatted, 0644); err != nil {
 		return &models.GeneratorError{
 			Type:    models.ErrorTypeFileSystem,
-			Message: "Failed to write processed file",
+			Message: "Failed to write final processed file",
 			File:    filePath,
 			Cause:   err,
 			Context: map[string]interface{}{

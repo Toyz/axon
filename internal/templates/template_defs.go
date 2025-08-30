@@ -179,15 +179,93 @@ const (
 
 	// GlobalMiddlewareRegistrationTemplate is the template for registering global middleware
 	GlobalMiddlewareRegistrationTemplate = `// RegisterGlobalMiddleware registers all global middleware with Echo
-func RegisterGlobalMiddleware(e *echo.Echo{{range .GlobalMiddlewares}}, {{.Name}} *{{.StructName}}{{end}}) {
-{{range .GlobalMiddlewares}}	e.Use({{.Name}}.Handle)
+func RegisterGlobalMiddleware(e *echo.Echo{{range .GlobalMiddlewares}}, {{toCamelCase .Name}} *{{.StructName}}{{end}}) {
+{{range .GlobalMiddlewares}}	e.Use({{toCamelCase .Name}}.Handle)
 {{end}}}`
 
 	// MiddlewareRegistryTemplate is the template for middleware registry functions
 	MiddlewareRegistryTemplate = `// RegisterMiddlewares registers all middleware with the axon middleware registry
-func RegisterMiddlewares({{range $i, $mw := .Middlewares}}{{if $i}}, {{end}}{{$mw.Name}} *{{$mw.StructName}}{{end}}) {
-{{range .Middlewares}}	axon.RegisterMiddlewareHandler("{{.Name}}", {{.Name}})
+func RegisterMiddlewares({{range $i, $mw := .Middlewares}}{{if $i}}, {{end}}{{toCamelCase $mw.Name}} *{{$mw.StructName}}{{end}}) {
+{{range .Middlewares}}	axon.RegisterMiddlewareHandler("{{.Name}}", {{toCamelCase .Name}})
 {{end}}}`
+)
+
+// Route Templates - Templates for generating route registration code
+const (
+	// RouteRegistrationFunctionTemplate is the template for generating the RegisterRoutes function
+	RouteRegistrationFunctionTemplate = `// RegisterRoutes registers all HTTP routes with the Echo instance
+func RegisterRoutes(e *echo.Echo{{range .Controllers}}, {{.VarName}} *{{.StructName}}{{end}}{{range .MiddlewareDeps}}, {{.VarName}} *{{.PackageName}}.{{.Name}}{{end}}) {
+{{range .Controllers}}{{if .Prefix}}	{{.VarName}}Group := e.Group("{{.EchoPrefix}}")
+{{end}}{{range .Routes}}{{template "RouteRegistration" .}}{{end}}{{end}}}`
+
+	// RouteRegistrationTemplate is the template for individual route registration
+	RouteRegistrationTemplate = `	{{.HandlerVar}} := {{.WrapperFunc}}({{.ControllerVar}})
+{{if .HasMiddleware}}	{{.GroupVar}}.{{.Method}}("{{.EchoPath}}", {{.HandlerVar}}, {{.MiddlewareList}})
+{{else}}	{{.GroupVar}}.{{.Method}}("{{.EchoPath}}", {{.HandlerVar}})
+{{end}}	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
+		Method:              "{{.Method}}",
+		Path:                "{{.Path}}",
+		EchoPath:            "{{.EchoPath}}",
+		HandlerName:         "{{.HandlerName}}",
+		ControllerName:      "{{.ControllerName}}",
+		PackageName:         "{{.PackageName}}",
+		Middlewares:         {{.MiddlewaresArray}},
+		MiddlewareInstances: {{.MiddlewareInstancesArray}},
+		ParameterInstances:  {{.ParameterInstancesArray}},
+		Handler:             {{.HandlerVar}},
+	})
+`
+
+	// MiddlewareInstanceTemplate is the template for middleware instance objects
+	MiddlewareInstanceTemplate = `{
+		Name:     "{{.Name}}",
+		Handler:  {{.VarName}}.Handle,
+		Instance: {{.VarName}},
+	}`
+)
+
+// Response Handling Templates - Templates for generating response handling code
+const (
+	// RouteWrapperTemplate is the template for generating route wrapper functions
+	RouteWrapperTemplate = `func {{.WrapperName}}(handler *{{.ControllerName}}) echo.HandlerFunc {
+	return func(c echo.Context) error {
+{{.ParameterBindingCode}}{{.BodyBindingCode}}
+{{.ResponseHandlingCode}}
+	}
+}`
+
+	// DataErrorResponseTemplate handles (data, error) return type
+	DataErrorResponseTemplate = `		{{if .ErrAlreadyDeclared}}var data interface{}
+		data, err = {{.HandlerCall}}{{else}}data, err := {{.HandlerCall}}{{end}}
+		if err != nil {
+			return handleError(c, err)
+		}
+		return c.JSON(http.StatusOK, data)`
+
+	// ResponseErrorResponseTemplate handles (*Response, error) return type  
+	ResponseErrorResponseTemplate = `		{{if .ErrAlreadyDeclared}}var response *axon.Response
+		response, err = {{.HandlerCall}}{{else}}response, err := {{.HandlerCall}}{{end}}
+		if err != nil {
+			return handleError(c, err)
+		}
+		if response == nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
+		}
+		return handleAxonResponse(c, response)`
+
+	// ErrorResponseTemplate handles error return type
+	ErrorResponseTemplate = `		{{if .ErrAlreadyDeclared}}err = {{.HandlerCall}}{{else}}err := {{.HandlerCall}}{{end}}
+		if err != nil {
+			return err
+		}
+		return nil`
+
+	// BodyBindingTemplate generates body parameter binding code
+	BodyBindingTemplate = `		var body {{.BodyType}}
+		if err := c.Bind(&body); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+`
 )
 
 // Removed unused templates (FXLoggerAdapterTemplate, ModuleHeaderTemplate, ModuleDefinitionTemplate)

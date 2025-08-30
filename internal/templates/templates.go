@@ -27,62 +27,142 @@ type ParserRegistryInterface interface {
 
 // Template constants are now defined in template_defs.go for better organization
 
-// generateRouteRegistryCall generates the call to register the route with the global registry
-func generateRouteRegistryCall(route models.RouteMetadata, controllerName, handlerVar, echoPath string, paramTypes map[string]string) string {
-	var registryCall strings.Builder
-
-	registryCall.WriteString("axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{\n")
-	registryCall.WriteString(fmt.Sprintf("\t\tMethod:         \"%s\",\n", route.Method))
-	registryCall.WriteString(fmt.Sprintf("\t\tPath:           \"%s\",\n", route.Path))
-	registryCall.WriteString(fmt.Sprintf("\t\tEchoPath:       \"%s\",\n", echoPath))
-	registryCall.WriteString(fmt.Sprintf("\t\tHandlerName:    \"%s\",\n", route.HandlerName))
-	registryCall.WriteString(fmt.Sprintf("\t\tControllerName: \"%s\",\n", controllerName))
-	registryCall.WriteString("\t\tPackageName:    \"PACKAGE_NAME\",\n") // Will be replaced by generator
-
-	// Generate middlewares array
-	if len(route.Middlewares) > 0 {
-		registryCall.WriteString("\t\tMiddlewares:    []string{")
-		for i, middleware := range route.Middlewares {
-			if i > 0 {
-				registryCall.WriteString(", ")
-			}
-			registryCall.WriteString(fmt.Sprintf("\"%s\"", middleware))
-		}
-		registryCall.WriteString("},\n")
-	} else {
-		registryCall.WriteString("\t\tMiddlewares:    []string{},\n")
-	}
-
-	// Generate parameter types map
-	if len(paramTypes) > 0 {
-		registryCall.WriteString("\t\tParameterTypes: map[string]string{")
-		first := true
-		for name, typ := range paramTypes {
-			if !first {
-				registryCall.WriteString(", ")
-			}
-			registryCall.WriteString(fmt.Sprintf("\"%s\": \"%s\"", name, typ))
-			first = false
-		}
-		registryCall.WriteString("},\n")
-	} else {
-		registryCall.WriteString("\t\tParameterTypes: map[string]string{},\n")
-	}
-
-	registryCall.WriteString(fmt.Sprintf("\t\tHandler:        %s,\n", handlerVar))
-	registryCall.WriteString("\t})")
-
-	return registryCall.String()
+// Route registration template data structures
+type RouteRegistrationData struct {
+	Controllers     []ControllerTemplateData
+	MiddlewareDeps  []MiddlewareDependency
 }
 
-// extractParameterTypes extracts parameter names and types from Axon route syntax
-func extractParameterTypes(axonPath string) map[string]string {
+type ControllerTemplateData struct {
+	StructName  string
+	VarName     string
+	Prefix      string
+	EchoPrefix  string
+	Routes      []RouteTemplateData
+}
+
+type RouteTemplateData struct {
+	HandlerVar               string
+	WrapperFunc              string
+	ControllerVar            string
+	GroupVar                 string
+	Method                   string
+	Path                     string
+	EchoPath                 string
+	HandlerName              string
+	ControllerName           string
+	PackageName              string
+	HasMiddleware            bool
+	MiddlewareList           string
+	MiddlewaresArray         string
+	MiddlewareInstancesArray string
+	ParameterInstancesArray  string
+}
+
+type MiddlewareDependency struct {
+	Name        string
+	VarName     string
+	PackageName string
+}
+
+type MiddlewareInstanceData struct {
+	Name    string
+	VarName string
+}
+
+// GenerateRouteRegistrationFunction generates the RegisterRoutes function using templates
+func GenerateRouteRegistrationFunction(data RouteRegistrationData) (string, error) {
+	// Parse the main template
+	tmpl, err := template.New("routeRegistration").Parse(RouteRegistrationFunctionTemplate)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse route registration template: %w", err)
+	}
+
+	// Add the route registration sub-template
+	_, err = tmpl.New("RouteRegistration").Parse(RouteRegistrationTemplate)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse route registration sub-template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("failed to execute route registration template: %w", err)
+	}
+
+	return buf.String(), nil
+}
+
+// Helper functions for building template data
+func BuildMiddlewareInstancesArray(middlewares []string) string {
+	if len(middlewares) == 0 {
+		return "[]axon.MiddlewareInstance{}"
+	}
+
+	var instances []string
+	for _, mw := range middlewares {
+		varName := strings.ToLower(mw)
+		instance := fmt.Sprintf(`{
+		Name:     "%s",
+		Handler:  %s.Handle,
+		Instance: %s,
+	}`, mw, varName, varName)
+		instances = append(instances, instance)
+	}
+
+	return fmt.Sprintf("[]axon.MiddlewareInstance{%s}", strings.Join(instances, ", "))
+}
+
+func BuildMiddlewaresArray(middlewares []string) string {
+	if len(middlewares) == 0 {
+		return "[]string{}"
+	}
+
+	var quoted []string
+	for _, mw := range middlewares {
+		quoted = append(quoted, fmt.Sprintf(`"%s"`, mw))
+	}
+
+	return fmt.Sprintf("[]string{%s}", strings.Join(quoted, ", "))
+}
+
+func BuildParameterInstancesArray(paramTypes map[string]string) string {
+	if len(paramTypes) == 0 {
+		return "[]axon.ParameterInstance{}"
+	}
+
+	var instances []string
+	for name, typ := range paramTypes {
+		instance := fmt.Sprintf(`{
+		Name: "%s",
+		Type: "%s",
+	}`, name, typ)
+		instances = append(instances, instance)
+	}
+
+	return fmt.Sprintf("[]axon.ParameterInstance{%s}", strings.Join(instances, ", "))
+}
+
+func BuildMiddlewareList(middlewares []string) string {
+	if len(middlewares) == 0 {
+		return ""
+	}
+
+	var handlers []string
+	for _, mw := range middlewares {
+		handlers = append(handlers, fmt.Sprintf("%s.Handle", strings.ToLower(mw)))
+	}
+
+	return strings.Join(handlers, ", ")
+}
+
+// ExtractParameterTypes extracts parameter types from a route path
+func ExtractParameterTypes(path string) map[string]string {
 	paramTypes := make(map[string]string)
-
-	// Regex to match Axon parameter syntax: {param:type}
+	
+	// Find all parameters in the format {name:type}
 	re := regexp.MustCompile(`\{([^:}]+):([^}]+)\}`)
-	matches := re.FindAllStringSubmatch(axonPath, -1)
-
+	matches := re.FindAllStringSubmatch(path, -1)
+	
 	for _, match := range matches {
 		if len(match) == 3 {
 			paramName := match[1]
@@ -90,9 +170,11 @@ func extractParameterTypes(axonPath string) map[string]string {
 			paramTypes[paramName] = paramType
 		}
 	}
-
+	
 	return paramTypes
 }
+
+
 
 // Note: ParameterBindingData and GenerateParameterBinding were removed as they were unused.
 // Parameter binding is now handled directly by GenerateParameterBindingCode.
@@ -203,6 +285,14 @@ type DependencyData struct {
 	IsInit    bool   // whether this should be initialized (not injected)
 }
 
+// toCamelCase converts PascalCase to camelCase
+func toCamelCase(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToLower(s[:1]) + s[1:]
+}
+
 // generateInitCode generates initialization code for a given type
 func generateInitCode(fieldType string) string {
 	// Remove pointer prefix for analysis
@@ -270,48 +360,7 @@ func isLoggerType(typeName string) bool {
 	return false
 }
 
-// isStandardLibraryPackage checks if a package name is from the Go standard library
-func isStandardLibraryPackage(packageName string) bool {
-	// If it contains a dot, it's definitely not standard library
-	if strings.Contains(packageName, ".") {
-		return false
-	}
-
-	// Common standard library packages (not exhaustive, but covers common cases)
-	commonStdLib := map[string]bool{
-		"fmt": true, "os": true, "io": true, "net": true, "http": true,
-		"context": true, "time": true, "strings": true, "strconv": true,
-		"errors": true, "log": true, "slog": true, "json": true, "sql": true,
-		"sync": true, "crypto": true, "encoding": true, "path": true,
-		"sort": true, "math": true, "bytes": true, "bufio": true, "regexp": true,
-	}
-
-	// Check if it's a known standard library package
-	if commonStdLib[packageName] {
-		return true
-	}
-
-	// For unknown simple names, assume they are local packages that need import resolution
-	return false
-}
-
 // extractPackageFromType is now available as utils.ExtractPackageFromType
-
-// extractParameterName extracts a parameter name from a type string
-func extractParameterName(typeStr string) string {
-	// Remove pointer prefix
-	typeStr = strings.TrimPrefix(typeStr, "*")
-
-	// If it contains a package qualifier, extract the type name
-	if dotIndex := strings.LastIndex(typeStr, "."); dotIndex != -1 {
-		typeName := typeStr[dotIndex+1:]
-		// Convert to camelCase for parameter name
-		return strings.ToLower(typeName[:1]) + typeName[1:]
-	}
-
-	// If no package qualifier, use the type name directly
-	return strings.ToLower(typeStr[:1]) + typeStr[1:]
-}
 
 // GenerateCoreServiceProvider generates FX provider code for a core service
 func GenerateCoreServiceProvider(service models.CoreServiceMetadata) (string, error) {
@@ -824,6 +873,7 @@ func executeTemplate(name, templateStr string, data interface{}) (string, error)
 	// Create template with custom functions
 	funcMap := template.FuncMap{
 		"generateInitCode": generateInitCode,
+		"toCamelCase":      toCamelCase,
 	}
 
 	tmpl, err := template.New(name).Funcs(funcMap).Parse(templateStr)

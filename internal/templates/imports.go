@@ -2,11 +2,7 @@ package templates
 
 import (
 	"fmt"
-	"go/format"
-	"os"
 	"strings"
-
-	"golang.org/x/tools/imports"
 )
 
 // GenerateMinimalImports creates the absolute minimal import block
@@ -48,45 +44,3 @@ func FixEchoImports(content string) string {
 	return strings.ReplaceAll(content, `"github.com/labstack/echo"`, `"github.com/labstack/echo/v4"`)
 }
 
-// PostProcessAllGeneratedFiles runs goimports on all generated files after they're written
-// This two-phase approach ensures:
-// 1. All files are generated first (so cross-references work)
-// 2. Then goimports can properly resolve all imports with full context
-func PostProcessAllGeneratedFiles(generatedFilePaths []string) error {
-	for _, filePath := range generatedFilePaths {
-		if err := processFileImports(filePath); err != nil {
-			return fmt.Errorf("failed to process imports for %s: %w", filePath, err)
-		}
-	}
-	return nil
-}
-
-// processFileImports runs goimports on a single file
-func processFileImports(filePath string) error {
-	// Read the generated file
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to read file: %w", err)
-	}
-	
-	// Process with goimports - the filePath is crucial for context
-	formatted, err := imports.Process(filePath, content, &imports.Options{
-		Fragment:  false,    // Complete Go file
-		AllErrors: true,     // Report all errors
-		Comments:  true,     // Preserve comments
-		TabIndent: true,     // Use tabs
-		TabWidth:  8,        // Standard Go tab width
-	})
-	if err != nil {
-		// Fallback to gofmt if goimports fails
-		formatted, fmtErr := format.Source(content)
-		if fmtErr != nil {
-			return fmt.Errorf("goimports failed: %v, gofmt also failed: %v", err, fmtErr)
-		}
-		// Write the gofmt result and continue
-		return os.WriteFile(filePath, formatted, 0644)
-	}
-	
-	// Write the processed file back
-	return os.WriteFile(filePath, formatted, 0644)
-}
