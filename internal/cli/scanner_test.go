@@ -49,10 +49,10 @@ func TestDirectoryScanner_ScanDirectories(t *testing.T) {
 	goFiles := map[string]string{
 		filepath.Join(controllersDir, "user_controller.go"): "package controllers\n\ntype UserController struct{}",
 		filepath.Join(controllersDir, "auth_controller.go"): "package controllers\n\ntype AuthController struct{}",
-		filepath.Join(servicesDir, "user_service.go"):      "package services\n\ntype UserService struct{}",
-		filepath.Join(subserviceDir, "helper.go"):          "package subservice\n\ntype Helper struct{}",
-		filepath.Join(modelsDir, "user.go"):                "package models\n\ntype User struct{}",
-		filepath.Join(vendorDir, "dependency.go"):          "package vendor\n\ntype Dependency struct{}",
+		filepath.Join(servicesDir, "user_service.go"):       "package services\n\ntype UserService struct{}",
+		filepath.Join(subserviceDir, "helper.go"):           "package subservice\n\ntype Helper struct{}",
+		filepath.Join(modelsDir, "user.go"):                 "package models\n\ntype User struct{}",
+		filepath.Join(vendorDir, "dependency.go"):           "package vendor\n\ntype Dependency struct{}",
 	}
 
 	for filePath, content := range goFiles {
@@ -88,7 +88,7 @@ func TestDirectoryScanner_ScanDirectories(t *testing.T) {
 	t.Run("scan root directory recursively", func(t *testing.T) {
 		dirs, err := scanner.ScanDirectories([]string{tempDir})
 		require.NoError(t, err)
-		
+
 		// Should find controllers, services, subservice, and models
 		// Should NOT find vendor (skipped) or empty_dir (no Go files)
 		assert.Len(t, dirs, 4)
@@ -109,14 +109,20 @@ func TestDirectoryScanner_ScanDirectories(t *testing.T) {
 
 		dirs, err := scanner.ScanDirectories([]string{"./..."})
 		require.NoError(t, err)
-		
+
 		// Should find all the same directories as recursive scan
 		assert.Len(t, dirs, 4)
 		// Convert to relative paths for comparison
 		for _, dir := range dirs {
-			relDir, err := filepath.Rel(tempDir, dir)
+			// Resolve tempDir to the same form as the returned paths
+			resolvedTempDir, err := filepath.EvalSymlinks(tempDir)
+			if err != nil {
+				resolvedTempDir = tempDir
+			}
+
+			relDir, err := filepath.Rel(resolvedTempDir, dir)
 			require.NoError(t, err)
-			
+
 			switch relDir {
 			case "controllers", "services", "services/subservice", "models":
 				// Expected directories
@@ -135,14 +141,20 @@ func TestDirectoryScanner_ScanDirectories(t *testing.T) {
 
 		dirs, err := scanner.ScanDirectories([]string{"./services/..."})
 		require.NoError(t, err)
-		
+
 		// Should find services and subservice directories
 		assert.Len(t, dirs, 2)
 		for _, dir := range dirs {
-			relDir, err := filepath.Rel(tempDir, dir)
+			// Resolve tempDir to the same form as the returned paths
+			resolvedTempDir, err := filepath.EvalSymlinks(tempDir)
+			if err != nil {
+				resolvedTempDir = tempDir
+			}
+
+			relDir, err := filepath.Rel(resolvedTempDir, dir)
 			require.NoError(t, err)
-			
-			assert.True(t, relDir == "services" || relDir == "services/subservice", 
+
+			assert.True(t, relDir == "services" || relDir == "services/subservice",
 				"Expected services or services/subservice, got %s", relDir)
 		}
 	})
@@ -172,7 +184,7 @@ func TestDirectoryScanner_hasGoFiles(t *testing.T) {
 	t.Run("directory with only test files", func(t *testing.T) {
 		testDir := filepath.Join(tempDir, "testonly")
 		require.NoError(t, os.MkdirAll(testDir, 0755))
-		
+
 		testFile := filepath.Join(testDir, "main_test.go")
 		require.NoError(t, os.WriteFile(testFile, []byte("package main"), 0644))
 
@@ -184,7 +196,7 @@ func TestDirectoryScanner_hasGoFiles(t *testing.T) {
 	t.Run("directory with only autogen files", func(t *testing.T) {
 		autogenDir := filepath.Join(tempDir, "autogenonly")
 		require.NoError(t, os.MkdirAll(autogenDir, 0755))
-		
+
 		autogenFile := filepath.Join(autogenDir, "autogen_module.go")
 		require.NoError(t, os.WriteFile(autogenFile, []byte("package main"), 0644))
 

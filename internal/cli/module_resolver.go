@@ -9,7 +9,7 @@ import (
 )
 
 // ModuleResolver handles resolving Go module information
-type ModuleResolver struct{
+type ModuleResolver struct {
 	goModParser *utils.GoModParser
 }
 
@@ -82,10 +82,26 @@ func (r *ModuleResolver) BuildPackagePath(moduleName, packageDir string) (string
 		return "", fmt.Errorf("failed to resolve package directory: %w", err)
 	}
 
-	// Calculate relative path from current directory
-	relPath, err := filepath.Rel(currentDir, absPackageDir)
+	// On macOS, /var is a symlink to /private/var, so we need to ensure both paths
+	// use the same resolved form. Try to resolve symlinks for both paths.
+	resolvedCurrentDir, err := filepath.EvalSymlinks(currentDir)
 	if err != nil {
-		return "", fmt.Errorf("failed to calculate relative path: %w", err)
+		resolvedCurrentDir = currentDir
+	}
+
+	resolvedPackageDir, err := filepath.EvalSymlinks(absPackageDir)
+	if err != nil {
+		resolvedPackageDir = absPackageDir
+	}
+
+	// Calculate relative path from current directory
+	relPath, err := filepath.Rel(resolvedCurrentDir, resolvedPackageDir)
+	if err != nil {
+		// If symlink resolution didn't work, try with original paths
+		relPath, err = filepath.Rel(currentDir, absPackageDir)
+		if err != nil {
+			return "", fmt.Errorf("failed to calculate relative path: %w", err)
+		}
 	}
 
 	// Convert file path separators to forward slashes for import paths
