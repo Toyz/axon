@@ -17,6 +17,15 @@ type MiddlewareInstance struct {
 	Instance interface{}
 }
 
+// ParameterInstance represents a route parameter with its name and type
+type ParameterInstance struct {
+	// Name is the parameter name as defined in the route path
+	Name string
+	
+	// Type is the parameter type (e.g., "int", "string", "UUID", "ProductCode")
+	Type string
+}
+
 // MiddlewareRegistry provides access to all registered middlewares
 type MiddlewareRegistry interface {
 	// RegisterMiddleware adds a middleware to the registry
@@ -91,8 +100,8 @@ type RouteInfo struct {
 	// MiddlewareInstances provides access to the actual middleware instances
 	MiddlewareInstances []MiddlewareInstance
 	
-	// ParameterTypes maps parameter names to their types (e.g., {"id": "int", "slug": "string"})
-	ParameterTypes map[string]string
+	// ParameterInstances provides access to the actual parameter instances
+	ParameterInstances []ParameterInstance
 	
 	// Handler is the actual Echo handler function
 	Handler echo.HandlerFunc

@@ -357,61 +357,56 @@ func extractModuleNameFromGoMod(goModPath string) string {
 
 // generateRouteRegistrationFunction generates a function that registers all routes with Echo
 func (g *Generator) generateRouteRegistrationFunction(metadata *models.PackageMetadata) (string, error) {
-	var funcBuilder strings.Builder
-
 	// Collect all middleware dependencies
 	middlewareDeps := g.collectMiddlewareDependencies(metadata)
 
-	// Generate function signature
-	funcBuilder.WriteString("// RegisterRoutes registers all HTTP routes with the Echo instance\n")
-	funcBuilder.WriteString("func RegisterRoutes(e *echo.Echo")
-
-	// Add controller parameters
-	for _, controller := range metadata.Controllers {
-		funcBuilder.WriteString(fmt.Sprintf(", %s *%s",
-			strings.ToLower(controller.StructName),
-			controller.StructName))
+	// Build template data
+	data := templates.RouteRegistrationData{
+		Controllers:    make([]templates.ControllerTemplateData, 0, len(metadata.Controllers)),
+		MiddlewareDeps: make([]templates.MiddlewareDependency, 0, len(middlewareDeps)),
 	}
 
-	// Add middleware parameters with package prefixes
-	for _, middleware := range middlewareDeps {
-		funcBuilder.WriteString(fmt.Sprintf(", %s *%s.%s",
-			strings.ToLower(middleware.Name),
-			middleware.PackageName,
-			middleware.Name))
+	// Convert middleware dependencies
+	for _, mw := range middlewareDeps {
+		data.MiddlewareDeps = append(data.MiddlewareDeps, templates.MiddlewareDependency{
+			Name:        mw.Name,
+			VarName:     strings.ToLower(mw.Name),
+			PackageName: mw.PackageName,
+		})
 	}
 
-	funcBuilder.WriteString(") {\n")
-
-	// Generate route registrations - group by controller
+	// Convert controllers and routes
 	for _, controller := range metadata.Controllers {
-		controllerVar := strings.ToLower(controller.StructName)
-		
-		// Treat all controllers uniformly - use group approach
+		controllerData := templates.ControllerTemplateData{
+			StructName: controller.StructName,
+			VarName:    strings.ToLower(controller.StructName),
+			Prefix:     controller.Prefix,
+			EchoPrefix: g.convertToEchoPath(controller.Prefix),
+			Routes:     make([]templates.RouteTemplateData, 0, len(controller.Routes)),
+		}
+
+		// Determine group variable
 		var groupVar string
 		if controller.Prefix != "" {
-			// Create Echo group with prefix
-			groupVar = fmt.Sprintf("%sGroup", controllerVar)
-			echoPrefix := g.convertToEchoPath(controller.Prefix)
-			funcBuilder.WriteString(fmt.Sprintf("\t%s := e.Group(\"%s\")\n", groupVar, echoPrefix))
+			groupVar = fmt.Sprintf("%sGroup", controllerData.VarName)
 		} else {
-			// No prefix, use base Echo instance as the "group"
 			groupVar = "e"
 		}
-		
-		// Register routes on the group (or base Echo instance)
+
+		// Convert routes
 		for _, route := range controller.Routes {
-			registration, err := g.generateGroupRouteRegistration(route, controller, groupVar, metadata.PackageName)
+			routeData, err := g.buildRouteTemplateData(route, controller, groupVar, metadata.PackageName)
 			if err != nil {
-				return "", fmt.Errorf("failed to generate registration for route %s: %w", route.HandlerName, err)
+				return "", fmt.Errorf("failed to build route template data for %s: %w", route.HandlerName, err)
 			}
-			funcBuilder.WriteString(registration)
+			controllerData.Routes = append(controllerData.Routes, routeData)
 		}
+
+		data.Controllers = append(data.Controllers, controllerData)
 	}
 
-	funcBuilder.WriteString("}")
-
-	return funcBuilder.String(), nil
+	// Generate using template
+	return templates.GenerateRouteRegistrationFunction(data)
 }
 
 // MiddlewareDependency represents a middleware with its package information
@@ -445,6 +440,26 @@ func (g *Generator) collectMiddlewareDependencies(metadata *models.PackageMetada
 	}
 
 	return middlewares
+}
+
+// extractParameterTypes extracts parameter types from a route path
+// e.g., "/users/{id:int}/posts/{slug:string}" -> {"id": "int", "slug": "string"}
+func (g *Generator) extractParameterTypes(path string) map[string]string {
+	paramTypes := make(map[string]string)
+	
+	// Find all parameters in the format {name:type}
+	re := regexp.MustCompile(`\{([^:}]+):([^}]+)\}`)
+	matches := re.FindAllStringSubmatch(path, -1)
+	
+	for _, match := range matches {
+		if len(match) == 3 {
+			paramName := match[1]
+			paramType := match[2]
+			paramTypes[paramName] = paramType
+		}
+	}
+	
+	return paramTypes
 }
 
 // getMiddlewareReference returns the package-qualified reference for a middleware name
@@ -666,24 +681,17 @@ func (g *Generator) convertToEchoPath(axonPath string) string {
 	return re.ReplaceAllString(axonPath, ":$1")
 }
 
-// generateGroupRouteRegistration generates route registration for Echo groups
-func (g *Generator) generateGroupRouteRegistration(route models.RouteMetadata, controller models.ControllerMetadata, groupVar, packageName string) (string, error) {
-	var regBuilder strings.Builder
-	
+// buildRouteTemplateData builds template data for a single route
+func (g *Generator) buildRouteTemplateData(route models.RouteMetadata, controller models.ControllerMetadata, groupVar, packageName string) (templates.RouteTemplateData, error) {
 	controllerVar := strings.ToLower(controller.StructName)
 	handlerVar := fmt.Sprintf("handler_%s%s", controllerVar, strings.ToLower(route.HandlerName))
-	
-	// Generate handler wrapper
 	wrapperFunc := fmt.Sprintf("wrap%s%s", controller.StructName, route.HandlerName)
 	
 	// Combine controller middleware and route middleware
 	allMiddlewares := append([]string{}, controller.Middlewares...)
 	allMiddlewares = append(allMiddlewares, route.Middlewares...)
 	
-	// Generate handler wrapper (middleware is passed to Echo route, not wrapper)
-	regBuilder.WriteString(fmt.Sprintf("\t%s := %s(%s)\n", handlerVar, wrapperFunc, controllerVar))
-	
-	// Register route on group (path is relative to group prefix)
+	// Calculate route path relative to group
 	routePath := route.Path
 	if controller.Prefix != "" {
 		// Remove controller prefix from route path since group already has it
@@ -696,46 +704,23 @@ func (g *Generator) generateGroupRouteRegistration(route models.RouteMetadata, c
 	}
 	
 	echoPath := g.convertToEchoPath(routePath)
+	paramTypes := templates.ExtractParameterTypes(route.Path)
 	
-	// Build middleware list for this route
-	if len(allMiddlewares) > 0 {
-		middlewareList := make([]string, len(allMiddlewares))
-		for i, mw := range allMiddlewares {
-			// Use lowercase middleware name for the variable, but middleware package for the type
-			middlewareList[i] = fmt.Sprintf("%s.Handle", strings.ToLower(mw))
-		}
-		regBuilder.WriteString(fmt.Sprintf("\t%s.%s(\"%s\", %s, %s)\n", groupVar, route.Method, echoPath, handlerVar, strings.Join(middlewareList, ", ")))
-	} else {
-		regBuilder.WriteString(fmt.Sprintf("\t%s.%s(\"%s\", %s)\n", groupVar, route.Method, echoPath, handlerVar))
-	}
-	
-	// Generate route registry registration
-	regBuilder.WriteString(fmt.Sprintf("\taxon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{\n"))
-	regBuilder.WriteString(fmt.Sprintf("\t\tMethod:         \"%s\",\n", route.Method))
-	regBuilder.WriteString(fmt.Sprintf("\t\tPath:           \"%s\",\n", route.Path))
-	regBuilder.WriteString(fmt.Sprintf("\t\tEchoPath:       \"%s\",\n", g.convertToEchoPath(route.Path)))
-	regBuilder.WriteString(fmt.Sprintf("\t\tHandlerName:    \"%s\",\n", route.HandlerName))
-	regBuilder.WriteString(fmt.Sprintf("\t\tControllerName: \"%s\",\n", controller.StructName))
-	regBuilder.WriteString(fmt.Sprintf("\t\tPackageName:    \"%s\",\n", packageName))
-	
-	// Add middleware info (controller + route middlewares)
-	if len(allMiddlewares) > 0 {
-		regBuilder.WriteString("\t\tMiddlewares:    []string{")
-		for i, mw := range allMiddlewares {
-			if i > 0 {
-				regBuilder.WriteString(", ")
-			}
-			regBuilder.WriteString(fmt.Sprintf("\"%s\"", mw))
-		}
-		regBuilder.WriteString("},\n")
-	} else {
-		regBuilder.WriteString("\t\tMiddlewares:    []string{},\n")
-	}
-	
-	regBuilder.WriteString("\t\tMiddlewareInstances: []axon.MiddlewareInstance{},\n") // TODO: Add middleware instances
-	regBuilder.WriteString("\t\tParameterTypes:      map[string]string{},\n") // TODO: Add parameter types
-	regBuilder.WriteString(fmt.Sprintf("\t\tHandler:             %s,\n", handlerVar))
-	regBuilder.WriteString("\t})\n")
-	
-	return regBuilder.String(), nil
+	return templates.RouteTemplateData{
+		HandlerVar:               handlerVar,
+		WrapperFunc:              wrapperFunc,
+		ControllerVar:            controllerVar,
+		GroupVar:                 groupVar,
+		Method:                   route.Method,
+		Path:                     route.Path,
+		EchoPath:                 echoPath,
+		HandlerName:              route.HandlerName,
+		ControllerName:           controller.StructName,
+		PackageName:              packageName,
+		HasMiddleware:            len(allMiddlewares) > 0,
+		MiddlewareList:           templates.BuildMiddlewareList(allMiddlewares),
+		MiddlewaresArray:         templates.BuildMiddlewaresArray(allMiddlewares),
+		MiddlewareInstancesArray: templates.BuildMiddlewareInstancesArray(allMiddlewares),
+		ParameterInstancesArray:  templates.BuildParameterInstancesArray(paramTypes),
+	}, nil
 }

@@ -10,9 +10,22 @@ import (
 
 // ResponseHandlerData represents data needed for response handling template
 type ResponseHandlerData struct {
-	ReturnType       models.ReturnType
-	HandlerCall      string
-	ResponseHandling string
+	HandlerCall        string
+	ErrAlreadyDeclared bool
+}
+
+// RouteWrapperData represents data needed for route wrapper template
+type RouteWrapperData struct {
+	WrapperName            string
+	ControllerName         string
+	ParameterBindingCode   string
+	BodyBindingCode        string
+	ResponseHandlingCode   string
+}
+
+// BodyBindingData represents data needed for body binding template
+type BodyBindingData struct {
+	BodyType string
 }
 
 // GenerateResponseHandling generates response handling code based on handler return type
@@ -137,29 +150,47 @@ func generateHandlerCall(route models.RouteMetadata, controllerName string) stri
 
 // generateDataErrorResponse generates response handling for (data, error) return type
 func generateDataErrorResponse(handlerCall string, errAlreadyDeclared bool) string {
-	if errAlreadyDeclared {
-		return fmt.Sprintf(`		var data interface{}
+	data := ResponseHandlerData{
+		HandlerCall:        handlerCall,
+		ErrAlreadyDeclared: errAlreadyDeclared,
+	}
+	
+	result, err := executeTemplate("data-error-response", DataErrorResponseTemplate, data)
+	if err != nil {
+		// Fallback to old behavior if template fails
+		if errAlreadyDeclared {
+			return fmt.Sprintf(`		var data interface{}
 		data, err = %s
 		if err != nil {
 			return handleError(c, err)
 		}
 		return c.JSON(http.StatusOK, data)`, handlerCall)
-	} else {
-		return fmt.Sprintf(`		data, err := %s
+		} else {
+			return fmt.Sprintf(`		data, err := %s
 		if err != nil {
 			return handleError(c, err)
 		}
 		return c.JSON(http.StatusOK, data)`, handlerCall)
+		}
 	}
+	return result
 }
 
 // generateResponseErrorResponse generates response handling for (*Response, error) return type
 func generateResponseErrorResponse(handlerCall string, errAlreadyDeclared bool) string {
-	responseHandling := `
+	data := ResponseHandlerData{
+		HandlerCall:        handlerCall,
+		ErrAlreadyDeclared: errAlreadyDeclared,
+	}
+	
+	result, err := executeTemplate("response-error-response", ResponseErrorResponseTemplate, data)
+	if err != nil {
+		// Fallback to old behavior if template fails
+		responseHandling := `
 		return handleAxonResponse(c, response)`
 
-	if errAlreadyDeclared {
-		return fmt.Sprintf(`		var response *axon.Response
+		if errAlreadyDeclared {
+			return fmt.Sprintf(`		var response *axon.Response
 		response, err = %s
 		if err != nil {
 			return handleError(c, err)
@@ -167,31 +198,43 @@ func generateResponseErrorResponse(handlerCall string, errAlreadyDeclared bool) 
 		if response == nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
 		}%s`, handlerCall, responseHandling)
-	} else {
-		return fmt.Sprintf(`		response, err := %s
+		} else {
+			return fmt.Sprintf(`		response, err := %s
 		if err != nil {
 			return handleError(c, err)
 		}
 		if response == nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
 		}%s`, handlerCall, responseHandling)
+		}
 	}
+	return result
 }
 
 // generateErrorResponse generates response handling for error return type
 func generateErrorResponse(handlerCall string, errAlreadyDeclared bool) string {
-	var assignment string
-	if errAlreadyDeclared {
-		assignment = "err ="
-	} else {
-		assignment = "err :="
+	data := ResponseHandlerData{
+		HandlerCall:        handlerCall,
+		ErrAlreadyDeclared: errAlreadyDeclared,
 	}
+	
+	result, err := executeTemplate("error-response", ErrorResponseTemplate, data)
+	if err != nil {
+		// Fallback to old behavior if template fails
+		var assignment string
+		if errAlreadyDeclared {
+			assignment = "err ="
+		} else {
+			assignment = "err :="
+		}
 
-	return fmt.Sprintf(`		%s %s
+		return fmt.Sprintf(`		%s %s
 		if err != nil {
 			return err
 		}
 		return nil`, assignment, handlerCall)
+	}
+	return result
 }
 
 // hasPassContextFlag checks if the route has the PassContext flag
@@ -218,21 +261,34 @@ func GenerateRouteWrapper(route models.RouteMetadata, controllerName string, par
 		return "", fmt.Errorf("failed to generate response handling: %w", err)
 	}
 
-	// Middleware is now applied at Echo route level, not in wrapper
-	// So we always use the simple template without middleware parameters
-	template := `func %s(handler *%s) echo.HandlerFunc {
+	// Use template for route wrapper generation
+	data := RouteWrapperData{
+		WrapperName:          wrapperName,
+		ControllerName:       controllerName,
+		ParameterBindingCode: paramBindingCode,
+		BodyBindingCode:      bodyBindingCode,
+		ResponseHandlingCode: responseHandlingCode,
+	}
+
+	result, err := executeTemplate("route-wrapper", RouteWrapperTemplate, data)
+	if err != nil {
+		// Fallback to old behavior if template fails
+		template := `func %s(handler *%s) echo.HandlerFunc {
 	return func(c echo.Context) error {
 %s%s
 %s
 	}
 }`
 
-	return fmt.Sprintf(template,
-		wrapperName,
-		controllerName,
-		paramBindingCode,
-		bodyBindingCode,
-		responseHandlingCode), nil
+		return fmt.Sprintf(template,
+			wrapperName,
+			controllerName,
+			paramBindingCode,
+			bodyBindingCode,
+			responseHandlingCode), nil
+	}
+
+	return result, nil
 }
 
 // generateBodyBindingCode generates body parameter binding code
@@ -244,11 +300,20 @@ func generateBodyBindingCode(parameters []models.Parameter, method string) strin
 
 	for _, param := range parameters {
 		if param.Source == models.ParameterSourceBody {
-			return fmt.Sprintf(`		var body %s
+			data := BodyBindingData{
+				BodyType: param.Type,
+			}
+			
+			result, err := executeTemplate("body-binding", BodyBindingTemplate, data)
+			if err != nil {
+				// Fallback to old behavior if template fails
+				return fmt.Sprintf(`		var body %s
 		if err := c.Bind(&body); err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
 `, param.Type)
+			}
+			return result
 		}
 	}
 	return ""
@@ -283,99 +348,7 @@ func generateMiddlewareApplication(middlewares []string) string {
 	return code.String()
 }
 
-// GenerateRouteRegistration generates the Echo route registration line with registry integration
-func GenerateRouteRegistration(route models.RouteMetadata, controllerVar string, middlewares []string) (string, error) {
-	// Build the handler call (middleware is now applied at Echo route level)
-	handlerCall := fmt.Sprintf("wrap%s%s(%s)", controllerVar, route.HandlerName, controllerVar)
 
-	// Convert Axon route syntax to Echo syntax
-	echoPath := convertAxonPathToEcho(route.Path)
-
-	// Generate handler variable name
-	handlerVarName := fmt.Sprintf("handler_%s%s",
-		strings.ToLower(controllerVar),
-		strings.ToLower(route.HandlerName))
-
-	// Build parameter types map
-	paramTypesMap := "map[string]string{"
-	if len(route.Parameters) > 0 {
-		var paramPairs []string
-		for _, param := range route.Parameters {
-			if param.Source == models.ParameterSourcePath {
-				// Clean parameter name by removing :* suffix for wildcard parameters
-				cleanParamName := strings.TrimSuffix(param.Name, ":*")
-				paramPairs = append(paramPairs, fmt.Sprintf(`"%s": "%s"`, cleanParamName, param.Type))
-			}
-		}
-		if len(paramPairs) > 0 {
-			paramTypesMap += strings.Join(paramPairs, ", ")
-		}
-	}
-	paramTypesMap += "}"
-
-	// Build middlewares array
-	middlewaresArray := "[]string{"
-	if len(middlewares) > 0 {
-		var middlewareNames []string
-		for _, middleware := range middlewares {
-			middlewareNames = append(middlewareNames, fmt.Sprintf(`"%s"`, middleware))
-		}
-		middlewaresArray += strings.Join(middlewareNames, ", ")
-	}
-	middlewaresArray += "}"
-
-	// Build middleware instances array
-	middlewareInstancesArray := "[]axon.MiddlewareInstance{"
-	if len(middlewares) > 0 {
-		var instanceEntries []string
-		for _, middleware := range middlewares {
-			middlewareVar := strings.ToLower(middleware)
-			instanceEntry := fmt.Sprintf(`{
-			Name:     "%s",
-			Handler:  %s.Handle,
-			Instance: %s,
-		}`, middleware, middlewareVar, middlewareVar)
-			instanceEntries = append(instanceEntries, instanceEntry)
-		}
-		middlewareInstancesArray += strings.Join(instanceEntries, ", ")
-	}
-	middlewareInstancesArray += "}"
-
-	// Generate the Echo route registration (same logic as generateGroupRouteRegistration)
-	var echoRegistration string
-	if len(middlewares) > 0 {
-		// Build middleware list for Echo route
-		middlewareList := make([]string, len(middlewares))
-		for i, mw := range middlewares {
-			middlewareList[i] = fmt.Sprintf("%s.Handle", strings.ToLower(mw))
-		}
-		echoRegistration = fmt.Sprintf("e.%s(\"%s\", %s, %s)", route.Method, echoPath, handlerVarName, strings.Join(middlewareList, ", "))
-	} else {
-		echoRegistration = fmt.Sprintf("e.%s(\"%s\", %s)", route.Method, echoPath, handlerVarName)
-	}
-
-	// Generate the complete registration code
-	result := fmt.Sprintf(`%s := %s
-	%s
-	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
-		Method:              "%s",
-		Path:                "%s",
-		EchoPath:            "%s",
-		HandlerName:         "%s",
-		ControllerName:      "%s",
-		PackageName:         "PACKAGE_NAME",
-		Middlewares:         %s,
-		MiddlewareInstances: %s,
-		ParameterTypes:      %s,
-		Handler:             %s,
-	})`,
-		handlerVarName, handlerCall,
-		echoRegistration,
-		route.Method, route.Path, echoPath, route.HandlerName, controllerVar,
-		middlewaresArray, middlewareInstancesArray, paramTypesMap, handlerVarName)
-
-	return result, nil
-}
 
 // convertAxonPathToEcho converts Axon route syntax to Echo route syntax
 // Axon: /users/{id:int} -> Echo: /users/:id

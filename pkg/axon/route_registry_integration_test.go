@@ -31,7 +31,7 @@ func (suite *RouteRegistryIntegrationTestSuite) TestCompleteRouteDiscoveryWorkfl
 			ControllerName: "UserController",
 			PackageName:    "controllers",
 			Middlewares:    []string{"Auth", "Logging"},
-			ParameterTypes: map[string]string{"id": "int"},
+			ParameterInstances: []ParameterInstance{{Name: "id", Type: "int"}},
 			Handler:        func(c echo.Context) error { return nil },
 		},
 		{
@@ -42,7 +42,7 @@ func (suite *RouteRegistryIntegrationTestSuite) TestCompleteRouteDiscoveryWorkfl
 			ControllerName: "UserController",
 			PackageName:    "controllers",
 			Middlewares:    []string{"Auth", "Validation"},
-			ParameterTypes: map[string]string{},
+			ParameterInstances: []ParameterInstance{},
 			Handler:        func(c echo.Context) error { return nil },
 		},
 		{
@@ -53,7 +53,7 @@ func (suite *RouteRegistryIntegrationTestSuite) TestCompleteRouteDiscoveryWorkfl
 			ControllerName: "PostController",
 			PackageName:    "controllers",
 			Middlewares:    []string{"Logging"},
-			ParameterTypes: map[string]string{"slug": "string"},
+			ParameterInstances: []ParameterInstance{{Name: "slug", Type: "string"}},
 			Handler:        func(c echo.Context) error { return nil },
 		},
 		{
@@ -64,7 +64,7 @@ func (suite *RouteRegistryIntegrationTestSuite) TestCompleteRouteDiscoveryWorkfl
 			ControllerName: "HealthController",
 			PackageName:    "health",
 			Middlewares:    []string{},
-			ParameterTypes: map[string]string{},
+			ParameterInstances: []ParameterInstance{},
 			Handler:        func(c echo.Context) error { return nil },
 		},
 		{
@@ -75,7 +75,7 @@ func (suite *RouteRegistryIntegrationTestSuite) TestCompleteRouteDiscoveryWorkfl
 			ControllerName: "UserController",
 			PackageName:    "controllers",
 			Middlewares:    []string{"Auth", "Validation", "RateLimit"},
-			ParameterTypes: map[string]string{"id": "int"},
+			ParameterInstances: []ParameterInstance{{Name: "id", Type: "int"}},
 			Handler:        func(c echo.Context) error { return nil },
 		},
 	}
@@ -128,7 +128,7 @@ func (suite *RouteRegistryIntegrationTestSuite) TestRouteMetadataIntegrity() {
 		ControllerName: "PostController",
 		PackageName:    "api.controllers",
 		Middlewares:    []string{"Auth", "Validation", "RateLimit", "Logging"},
-		ParameterTypes: map[string]string{"id": "int", "slug": "string"},
+		ParameterInstances: []ParameterInstance{{Name: "id", Type: "int"}, {Name: "slug", Type: "string"}},
 		Handler:        func(c echo.Context) error { return nil },
 	}
 
@@ -145,7 +145,7 @@ func (suite *RouteRegistryIntegrationTestSuite) TestRouteMetadataIntegrity() {
 	assert.Equal(suite.T(), route.ControllerName, retrieved.ControllerName)
 	assert.Equal(suite.T(), route.PackageName, retrieved.PackageName)
 	assert.Equal(suite.T(), route.Middlewares, retrieved.Middlewares)
-	assert.Equal(suite.T(), route.ParameterTypes, retrieved.ParameterTypes)
+	assert.Equal(suite.T(), route.ParameterInstances, retrieved.ParameterInstances)
 	assert.NotNil(suite.T(), retrieved.Handler)
 }
 
