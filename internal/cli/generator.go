@@ -679,11 +679,36 @@ func (g *Generator) collectSummaryInfo(metadata *models.PackageMetadata) {
 
 // postProcessGeneratedFiles runs goimports on all generated files
 func (g *Generator) postProcessGeneratedFiles() error {
+	var failedFiles []string
+	
 	for _, filePath := range g.summary.GeneratedFiles {
 		if err := g.processFileImports(filePath); err != nil {
-			return fmt.Errorf("failed to process imports for %s: %w", filePath, err)
+			failedFiles = append(failedFiles, filePath)
+			// Log the specific error but continue processing other files
+			if g.reporter != nil {
+				g.reporter.Debug("Failed to process imports for %s: %v", filePath, err)
+			}
 		}
 	}
+	
+	// If some files failed, return an error with context
+	if len(failedFiles) > 0 {
+		return &models.GeneratorError{
+			Type:    models.ErrorTypeGeneration,
+			Message: fmt.Sprintf("Failed to post-process %d of %d generated files", len(failedFiles), len(g.summary.GeneratedFiles)),
+			Context: map[string]interface{}{
+				"failed_files":     failedFiles,
+				"total_files":      len(g.summary.GeneratedFiles),
+				"successful_files": len(g.summary.GeneratedFiles) - len(failedFiles),
+			},
+			Suggestions: []string{
+				"Run 'goimports -w .' manually to fix import issues",
+				"Check that all required dependencies are available in go.mod",
+				"Verify that generated code syntax is valid",
+			},
+		}
+	}
+	
 	return nil
 }
 
@@ -692,7 +717,21 @@ func (g *Generator) processFileImports(filePath string) error {
 	// Read the generated file
 	content, err := os.ReadFile(filePath)
 	if err != nil {
-		return fmt.Errorf("failed to read file: %w", err)
+		return &models.GeneratorError{
+			Type:    models.ErrorTypeFileSystem,
+			Message: "Failed to read generated file for post-processing",
+			File:    filePath,
+			Cause:   err,
+			Context: map[string]interface{}{
+				"operation": "read_file",
+				"file_path": filePath,
+			},
+			Suggestions: []string{
+				"Check file permissions",
+				"Ensure the file was generated successfully",
+				"Verify disk space is available",
+			},
+		}
 	}
 	
 	// Process with goimports - the filePath is crucial for context
@@ -707,10 +746,38 @@ func (g *Generator) processFileImports(filePath string) error {
 		// Fallback to gofmt if goimports fails
 		formatted, fmtErr := format.Source(content)
 		if fmtErr != nil {
-			return fmt.Errorf("goimports failed: %v, gofmt also failed: %v", err, fmtErr)
+			return &models.GeneratorError{
+				Type:    models.ErrorTypeGeneration,
+				Message: "Both goimports and gofmt failed to process generated file",
+				File:    filePath,
+				Cause:   err,
+				Context: map[string]interface{}{
+					"operation":     "format_imports",
+					"file_path":     filePath,
+					"goimports_err": err.Error(),
+					"gofmt_err":     fmtErr.Error(),
+				},
+				Suggestions: []string{
+					"Check the generated code syntax manually",
+					"Look for missing imports or invalid Go syntax",
+					"Try running 'go fmt' on the file to identify syntax issues",
+				},
+			}
 		}
 		// Write the gofmt result and continue
-		return os.WriteFile(filePath, formatted, 0644)
+		if writeErr := os.WriteFile(filePath, formatted, 0644); writeErr != nil {
+			return &models.GeneratorError{
+				Type:    models.ErrorTypeFileSystem,
+				Message: "Failed to write formatted file after gofmt fallback",
+				File:    filePath,
+				Cause:   writeErr,
+				Context: map[string]interface{}{
+					"operation": "write_file",
+					"file_path": filePath,
+				},
+			}
+		}
+		return nil // Successfully wrote gofmt result
 	}
 	
 	// Fix imports to use correct versions
@@ -719,7 +786,25 @@ func (g *Generator) processFileImports(filePath string) error {
 	formattedString = templates.FixEchoImports(formattedString)
 	
 	// Write the processed file back
-	return os.WriteFile(filePath, []byte(formattedString), 0644)
+	if err := os.WriteFile(filePath, []byte(formattedString), 0644); err != nil {
+		return &models.GeneratorError{
+			Type:    models.ErrorTypeFileSystem,
+			Message: "Failed to write processed file",
+			File:    filePath,
+			Cause:   err,
+			Context: map[string]interface{}{
+				"operation": "write_file",
+				"file_path": filePath,
+			},
+			Suggestions: []string{
+				"Check file permissions",
+				"Verify disk space is available",
+				"Ensure the directory is writable",
+			},
+		}
+	}
+	
+	return nil
 }
 
 // fixAxonImports ensures axon imports always use the canonical path
