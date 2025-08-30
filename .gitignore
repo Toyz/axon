@@ -77,9 +77,10 @@ coverage.html
 .env.local
 .env.*.local
 
-# Generated files (but keep examples for documentation)
+# Generated files
 **/autogen_*.go
-!examples/**/autogen_*.go
+**/autogen_module.go
+**/autogen_root_module.go
 
 # Kiro specific files
 .kiro/cache/
