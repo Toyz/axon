@@ -29,7 +29,7 @@ func (s *DirectoryScanner) ScanDirectories(rootDirs []string) ([]string, error) 
 			if baseDir == "" {
 				baseDir = "."
 			}
-			
+
 			// Clean and resolve the base path
 			cleanPath, err := filepath.Abs(baseDir)
 			if err != nil {
@@ -119,8 +119,8 @@ func (s *DirectoryScanner) hasGoFiles(dir string) (bool, error) {
 	for _, entry := range entries {
 		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".go") {
 			// Skip test files and generated files
-			if !strings.HasSuffix(entry.Name(), "_test.go") && 
-			   !strings.HasPrefix(entry.Name(), "autogen_") {
+			if !strings.HasSuffix(entry.Name(), "_test.go") &&
+				!strings.HasPrefix(entry.Name(), "autogen_") {
 				return true, nil
 			}
 		}
