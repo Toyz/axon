@@ -1029,6 +1029,16 @@ func (p *Parser) parsePathParameters(path string) ([]models.Parameter, error) {
 
 // validateParameterType validates that a parameter type is supported
 func (p *Parser) validateParameterType(typeStr string) (string, error) {
+	// First validate that it's not empty and is a valid Go identifier
+	validator := utils.NewValidatorChain(
+		utils.NotEmpty("parameter type"),
+		utils.IsValidGoIdentifier("parameter type"),
+	)
+	
+	if err := validator.Validate(typeStr); err != nil {
+		return "", err
+	}
+
 	validTypes := map[string]string{
 		"int":         "int",
 		"string":      "string",
@@ -1044,35 +1054,11 @@ func (p *Parser) validateParameterType(typeStr string) (string, error) {
 		return validType, nil
 	}
 
-	// Allow any custom type that looks like a valid Go identifier
-	if isValidGoIdentifier(typeStr) {
-		return "string", nil // Custom types are treated as strings for parameter parsing
-	}
-
-	return "", fmt.Errorf("unsupported parameter type: %s", typeStr)
+	// Custom types are treated as strings for parameter parsing
+	return "string", nil
 }
 
-// isValidGoIdentifier checks if a string is a valid Go identifier
-func isValidGoIdentifier(s string) bool {
-	if s == "" {
-		return false
-	}
 
-	// First character must be a letter or underscore
-	if !((s[0] >= 'a' && s[0] <= 'z') || (s[0] >= 'A' && s[0] <= 'Z') || s[0] == '_') {
-		return false
-	}
-
-	// Remaining characters must be letters, digits, or underscores
-	for i := 1; i < len(s); i++ {
-		c := s[i]
-		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '.') {
-			return false
-		}
-	}
-
-	return true
-}
 
 // analyzeHandlerSignature analyzes a handler method signature to extract parameters
 func (p *Parser) analyzeHandlerSignature(file *ast.File, controllerName, methodName string) ([]models.Parameter, error) {

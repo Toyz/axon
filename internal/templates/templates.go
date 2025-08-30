@@ -64,13 +64,13 @@ type MiddlewareInstanceData struct {
 // GenerateRouteRegistrationFunction generates the RegisterRoutes function using templates
 func GenerateRouteRegistrationFunction(data RouteRegistrationData) (string, error) {
 	// Parse the main template
-	tmpl, err := template.New("routeRegistration").Parse(RouteRegistrationFunctionTemplate)
+	tmpl, err := template.New("routeRegistration").Parse(DefaultTemplateRegistry.MustGet("route-registration-function"))
 	if err != nil {
 		return "", utils.WrapParseError("route registration template", err)
 	}
 
 	// Add the route registration sub-template
-	_, err = tmpl.New("RouteRegistration").Parse(RouteRegistrationTemplate)
+	_, err = tmpl.New("RouteRegistration").Parse(DefaultTemplateRegistry.MustGet("route-registration"))
 	if err != nil {
 		return "", utils.WrapParseError("route registration sub-template", err)
 	}
@@ -425,23 +425,23 @@ func GenerateCoreServiceProvider(service models.CoreServiceMetadata) (string, er
 		if service.HasLifecycle && service.StartMode != "" {
 			// For services with -Init flag (StartMode is set), generate simple provider only
 			// The invoke function will be generated separately
-			return executeTemplate("init-provider", InitProviderTemplate, data)
+			return executeRegistryTemplate("provider", data)
 		} else if service.HasLifecycle {
 			// For old-style lifecycle services (no -Init flag), generate embedded lifecycle hooks
-			return executeTemplate("lifecycle-provider", LifecycleProviderTemplate, data)
+			return executeRegistryTemplate("lifecycle-provider", data)
 		} else if len(service.Dependencies) > 0 {
 			// Use regular provider template for services with dependencies
-			return executeTemplate("provider", ProviderTemplate, data)
+			return executeRegistryTemplate("provider", data)
 		} else {
 			// Use FX provider template for services with no dependencies
-			return executeTemplate("fx-provider", FXProviderTemplate, data)
+			return executeRegistryTemplate("simple-provider", data)
 		}
 	}
 }
 
 // generateTransientServiceProvider generates a factory function for transient services
 func generateTransientServiceProvider(data CoreServiceProviderData) (string, error) {
-	return executeTemplate("transient-provider", TransientProviderTemplate, data)
+	return executeRegistryTemplate("transient-provider", data)
 }
 
 // GenerateInitInvokeFunction generates an invoke function for lifecycle management
@@ -459,7 +459,7 @@ func GenerateInitInvokeFunction(service models.CoreServiceMetadata) (string, err
 		StartMode: service.StartMode,
 	}
 
-	return executeTemplate("init-invoke", InitInvokeTemplate, data)
+	return executeRegistryTemplate("init-invoke", data)
 }
 
 // GenerateCoreServiceModule generates the complete FX module for core services in a package
@@ -764,7 +764,7 @@ func generateInterfaceContent(iface models.InterfaceMetadata, builder *strings.B
 		Methods:    methods,
 	}
 
-	interfaceCode, err := executeTemplate("interface", InterfaceTemplate, data)
+	interfaceCode, err := executeRegistryTemplate("interface", data)
 	if err != nil {
 		return "", err
 	}
@@ -832,7 +832,7 @@ func GenerateLoggerProvider(logger models.LoggerMetadata) (string, error) {
 				},
 				ConfigParam: configParam,
 			}
-			return executeTemplate("logger-provider", LoggerProviderTemplate, data)
+			return executeRegistryTemplate("logger-provider", data)
 		} else {
 			// Use simple logger template without lifecycle
 			data := LoggerProviderData{
@@ -845,7 +845,7 @@ func GenerateLoggerProvider(logger models.LoggerMetadata) (string, error) {
 				},
 				ConfigParam: configParam,
 			}
-			return executeTemplate("simple-logger-provider", SimpleLoggerProviderTemplate, data)
+			return executeRegistryTemplate("simple-logger-provider", data)
 		}
 	} else if logger.HasLifecycle {
 		// Use FX lifecycle template for other loggers with lifecycle
@@ -858,7 +858,7 @@ func GenerateLoggerProvider(logger models.LoggerMetadata) (string, error) {
 				HasStop:      logger.HasStop,
 			},
 		}
-		return executeTemplate("fx-lifecycle-provider", FXLifecycleProviderTemplate, data)
+		return executeRegistryTemplate("lifecycle-provider", data)
 	} else if len(logger.Dependencies) > 0 {
 		// Use regular provider template for loggers with dependencies
 		data := CoreServiceProviderData{
@@ -870,7 +870,7 @@ func GenerateLoggerProvider(logger models.LoggerMetadata) (string, error) {
 				HasStop:      logger.HasStop,
 			},
 		}
-		return executeTemplate("provider", ProviderTemplate, data)
+		return executeRegistryTemplate("provider", data)
 	} else {
 		// Use FX provider template for loggers with no dependencies
 		data := CoreServiceProviderData{
@@ -882,7 +882,7 @@ func GenerateLoggerProvider(logger models.LoggerMetadata) (string, error) {
 				HasStop:      logger.HasStop,
 			},
 		}
-		return executeTemplate("fx-provider", FXProviderTemplate, data)
+		return executeRegistryTemplate("simple-provider", data)
 	}
 }
 
@@ -893,7 +893,7 @@ func GenerateInterfaceProvider(iface models.InterfaceMetadata) (string, error) {
 		StructName: iface.StructName,
 	}
 
-	return executeTemplate("interface-provider", InterfaceProviderTemplate, data)
+	return executeRegistryTemplate("interface-provider", data)
 }
 
 // executeTemplate executes a Go template with the given data
@@ -923,6 +923,12 @@ func ExecuteTemplate(name, templateStr string, data interface{}) (string, error)
 	return executeTemplate(name, templateStr, data)
 }
 
+// executeRegistryTemplate executes a template from the registry
+func executeRegistryTemplate(name string, data interface{}) (string, error) {
+	templateStr := DefaultTemplateRegistry.MustGet(name)
+	return executeTemplate(name, templateStr, data)
+}
+
 // GenerateMiddlewareProvider generates FX provider function for middleware
 func GenerateMiddlewareProvider(middleware models.MiddlewareMetadata) (string, error) {
 	data := struct {
@@ -935,7 +941,7 @@ func GenerateMiddlewareProvider(middleware models.MiddlewareMetadata) (string, e
 		InjectedDeps: filterInjectedDependencies(middleware.Dependencies),
 	}
 
-	return executeTemplate("middleware-provider", MiddlewareProviderTemplate, data)
+	return executeRegistryTemplate("middleware-provider", data)
 }
 
 // GenerateGlobalMiddlewareRegistration generates function to register global middleware with Echo
@@ -963,7 +969,7 @@ func GenerateGlobalMiddlewareRegistration(middlewares []models.MiddlewareMetadat
 		GlobalMiddlewares: globalMiddlewares,
 	}
 
-	return executeTemplate("global-middleware-registration", GlobalMiddlewareRegistrationTemplate, data)
+	return executeRegistryTemplate("global-middleware-registration", data)
 }
 
 // GenerateMiddlewareRegistry generates function to register all middleware with axon registry
@@ -974,7 +980,7 @@ func GenerateMiddlewareRegistry(middlewares []models.MiddlewareMetadata) (string
 		Middlewares: middlewares,
 	}
 
-	return executeTemplate("middleware-registry", MiddlewareRegistryTemplate, data)
+	return executeRegistryTemplate("middleware-registry", data)
 }
 
 // GenerateMiddlewareModule generates a complete middleware module using ImportManager

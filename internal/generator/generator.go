@@ -257,7 +257,7 @@ func (g *Generator) generateControllerProvider(controller models.ControllerMetad
 		},
 	}
 
-	return templates.ExecuteTemplate("controller-provider", templates.ProviderTemplate, data)
+	return templates.ExecuteTemplate("controller-provider", templates.DefaultTemplateRegistry.MustGet("provider"), data)
 }
 
 // extractPackageFromType is now available as utils.ExtractPackageFromType

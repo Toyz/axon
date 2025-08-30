@@ -156,7 +156,7 @@ func generateDataErrorResponse(handlerCall string, errAlreadyDeclared bool) stri
 		ErrAlreadyDeclared: errAlreadyDeclared,
 	}
 
-	result, err := executeTemplate("data-error-response", DataErrorResponseTemplate, data)
+	result, err := executeRegistryTemplate("data-error-response", data)
 	if err != nil {
 		// Fallback to old behavior if template fails
 		if errAlreadyDeclared {
@@ -184,7 +184,7 @@ func generateResponseErrorResponse(handlerCall string, errAlreadyDeclared bool) 
 		ErrAlreadyDeclared: errAlreadyDeclared,
 	}
 
-	result, err := executeTemplate("response-error-response", ResponseErrorResponseTemplate, data)
+	result, err := executeRegistryTemplate("response-error-response", data)
 	if err != nil {
 		// Fallback to old behavior if template fails
 		responseHandling := `
@@ -219,7 +219,7 @@ func generateErrorResponse(handlerCall string, errAlreadyDeclared bool) string {
 		ErrAlreadyDeclared: errAlreadyDeclared,
 	}
 
-	result, err := executeTemplate("error-response", ErrorResponseTemplate, data)
+	result, err := executeRegistryTemplate("error-response", data)
 	if err != nil {
 		// Fallback to old behavior if template fails
 		var assignment string
@@ -271,7 +271,7 @@ func GenerateRouteWrapper(route models.RouteMetadata, controllerName string, par
 		ResponseHandlingCode: responseHandlingCode,
 	}
 
-	result, err := executeTemplate("route-wrapper", RouteWrapperTemplate, data)
+	result, err := executeRegistryTemplate("route-wrapper", data)
 	if err != nil {
 		// Fallback to old behavior if template fails
 		template := `func %s(handler *%s) echo.HandlerFunc {
@@ -305,7 +305,7 @@ func generateBodyBindingCode(parameters []models.Parameter, method string) strin
 				BodyType: param.Type,
 			}
 
-			result, err := executeTemplate("body-binding", BodyBindingTemplate, data)
+			result, err := executeRegistryTemplate("body-binding", data)
 			if err != nil {
 				// Fallback to old behavior if template fails
 				return fmt.Sprintf(`		var body %s

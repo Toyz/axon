@@ -11,17 +11,43 @@ import (
 	"go.uber.org/fx"
 )
 
+// NotificationServiceInterface is the interface for NotificationService
+type NotificationServiceInterface interface {
+	SendNotification(ctx context.Context, message string, channel string) error
+	EnableChannel(channel string)
+	DisableChannel(channel string)
+}
+
 // CrawlerServiceInterface is the interface for CrawlerService
 type CrawlerServiceInterface interface {
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
 }
 
-// NotificationServiceInterface is the interface for NotificationService
-type NotificationServiceInterface interface {
-	SendNotification(ctx context.Context, message string, channel string) error
-	EnableChannel(channel string)
-	DisableChannel(channel string)
+// NewSessionServiceFactory creates a factory function for SessionService (Transient mode)
+func NewSessionServiceFactory(DatabaseService *DatabaseService) func() *SessionService {
+	return func() *SessionService {
+		return &SessionService{
+			DatabaseService: DatabaseService,
+		}
+	}
+}
+
+func NewUserService(Config *config.Config) *UserService {
+	return &UserService{
+		Config: Config,
+	}
+}
+
+func initUserServiceLifecycle(lc fx.Lifecycle, service *UserService) {
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			return service.Start(ctx)
+		},
+		OnStop: func(ctx context.Context) error {
+			return service.Stop(ctx)
+		},
+	})
 }
 
 func NewCrawlerService() *CrawlerService {
@@ -61,50 +87,24 @@ func initDatabaseServiceLifecycle(lc fx.Lifecycle, service *DatabaseService) {
 	})
 }
 
-// NewSessionServiceFactory creates a factory function for SessionService (Transient mode)
-func NewSessionServiceFactory(DatabaseService *DatabaseService) func() *SessionService {
-	return func() *SessionService {
-		return &SessionService{
-			DatabaseService: DatabaseService,
-		}
-	}
-}
-
-func NewUserService(Config *config.Config) *UserService {
-	return &UserService{
-		Config: Config,
-	}
-}
-
-func initUserServiceLifecycle(lc fx.Lifecycle, service *UserService) {
-	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			return service.Start(ctx)
-		},
-		OnStop: func(ctx context.Context) error {
-			return service.Stop(ctx)
-		},
-	})
+func NewNotificationServiceInterface(impl *NotificationService) NotificationServiceInterface {
+	return impl
 }
 
 func NewCrawlerServiceInterface(impl *CrawlerService) CrawlerServiceInterface {
 	return impl
 }
 
-func NewNotificationServiceInterface(impl *NotificationService) NotificationServiceInterface {
-	return impl
-}
-
 // AutogenModule provides all core services in this package
 var AutogenModule = fx.Module("services",
-	fx.Provide(NewCrawlerService),
-	fx.Invoke(initCrawlerServiceLifecycle),
-	fx.Provide(NewDatabaseService),
-	fx.Invoke(initDatabaseServiceLifecycle),
 	fx.Provide(NewCustomNotificationService),
 	fx.Provide(NewSessionServiceFactory),
 	fx.Provide(NewUserService),
 	fx.Invoke(initUserServiceLifecycle),
-	fx.Provide(NewCrawlerServiceInterface),
+	fx.Provide(NewCrawlerService),
+	fx.Invoke(initCrawlerServiceLifecycle),
+	fx.Provide(NewDatabaseService),
+	fx.Invoke(initDatabaseServiceLifecycle),
 	fx.Provide(NewNotificationServiceInterface),
+	fx.Provide(NewCrawlerServiceInterface),
 )
