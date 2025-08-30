@@ -9,18 +9,11 @@ import (
 	"text/template"
 
 	"github.com/toyz/axon/internal/models"
+	"github.com/toyz/axon/internal/utils"
 	"github.com/toyz/axon/pkg/axon"
 )
 
-// ParserRegistryInterface defines the interface for parser registry operations
-type ParserRegistryInterface interface {
-	RegisterParser(parser axon.RouteParserMetadata) error
-	GetParser(typeName string) (axon.RouteParserMetadata, bool)
-	ListParsers() []string
-	HasParser(typeName string) bool
-	Clear()
-	GetAllParsers() map[string]axon.RouteParserMetadata
-}
+
 
 // This package contains Go templates for code generation
 // Route wrapper generation is handled in response.go
@@ -75,13 +68,13 @@ func GenerateRouteRegistrationFunction(data RouteRegistrationData) (string, erro
 	// Parse the main template
 	tmpl, err := template.New("routeRegistration").Parse(RouteRegistrationFunctionTemplate)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse route registration template: %w", err)
+		return "", utils.WrapParseError("route registration template", err)
 	}
 
 	// Add the route registration sub-template
 	_, err = tmpl.New("RouteRegistration").Parse(RouteRegistrationTemplate)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse route registration sub-template: %w", err)
+		return "", utils.WrapParseError("route registration sub-template", err)
 	}
 
 	var buf bytes.Buffer
@@ -180,7 +173,7 @@ func ExtractParameterTypes(path string) map[string]string {
 // Parameter binding is now handled directly by GenerateParameterBindingCode.
 
 // GenerateParameterBindingCode generates the complete parameter binding code for a list of parameters
-func GenerateParameterBindingCode(parameters []models.Parameter, parserRegistry ParserRegistryInterface) (string, error) {
+func GenerateParameterBindingCode(parameters []models.Parameter, parserRegistry axon.ParserRegistryInterface) (string, error) {
 	var bindingCode strings.Builder
 
 	for _, param := range parameters {
@@ -554,7 +547,7 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 	for _, iface := range metadata.Interfaces {
 		interfaceCode, err := GenerateInterface(iface)
 		if err != nil {
-			return "", fmt.Errorf("failed to generate interface %s: %w", iface.Name, err)
+			return "", utils.WrapGenerateError("interface "+iface.Name, err)
 		}
 
 		contentBuilder.WriteString(interfaceCode)
@@ -569,7 +562,7 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 
 		provider, err := GenerateCoreServiceProvider(service)
 		if err != nil {
-			return "", fmt.Errorf("failed to generate provider for service %s: %w", service.Name, err)
+			return "", utils.WrapGenerateError("provider for service "+service.Name, err)
 		}
 
 		if provider != "" {
@@ -581,7 +574,7 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 		if service.HasLifecycle {
 			invokeFunc, err := GenerateInitInvokeFunction(service)
 			if err != nil {
-				return "", fmt.Errorf("failed to generate invoke function for service %s: %w", service.Name, err)
+				return "", utils.WrapGenerateError("invoke function for service "+service.Name, err)
 			}
 
 			if invokeFunc != "" {
@@ -891,7 +884,7 @@ func executeTemplate(name, templateStr string, data interface{}) (string, error)
 
 	tmpl, err := template.New(name).Funcs(funcMap).Parse(templateStr)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse template %s: %w", name, err)
+		return "", utils.WrapParseError("template "+name, err)
 	}
 
 	var buf bytes.Buffer

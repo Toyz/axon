@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/toyz/axon/internal/models"
+	"github.com/toyz/axon/internal/utils"
+	"github.com/toyz/axon/pkg/axon"
 )
 
 // ResponseHandlerData represents data needed for response handling template
@@ -243,13 +245,13 @@ func hasPassContextFlag(flags []string) bool {
 }
 
 // GenerateRouteWrapper generates a complete route wrapper function
-func GenerateRouteWrapper(route models.RouteMetadata, controllerName string, parserRegistry ParserRegistryInterface) (string, error) {
+func GenerateRouteWrapper(route models.RouteMetadata, controllerName string, parserRegistry axon.ParserRegistryInterface) (string, error) {
 	wrapperName := fmt.Sprintf("wrap%s%s", controllerName, route.HandlerName)
 
 	// Generate parameter binding code
 	paramBindingCode, err := GenerateParameterBindingCode(route.Parameters, parserRegistry)
 	if err != nil {
-		return "", fmt.Errorf("failed to generate parameter binding: %w", err)
+		return "", utils.WrapGenerateError("parameter binding", err)
 	}
 
 	// Generate body binding code if needed
@@ -258,7 +260,7 @@ func GenerateRouteWrapper(route models.RouteMetadata, controllerName string, par
 	// Generate response handling code
 	responseHandlingCode, err := GenerateResponseHandling(route, controllerName)
 	if err != nil {
-		return "", fmt.Errorf("failed to generate response handling: %w", err)
+		return "", utils.WrapGenerateError("response handling", err)
 	}
 
 	// Use template for route wrapper generation

@@ -3,6 +3,8 @@ package annotations
 import (
 	"fmt"
 	"strings"
+
+	"github.com/toyz/axon/internal/utils"
 )
 
 // Built-in annotation schemas
@@ -171,7 +173,7 @@ var RouteParserAnnotationSchema = AnnotationSchema{
 func RegisterBuiltinSchemas(registry AnnotationRegistry) error {
 	for _, schema := range GetBuiltinSchemas() {
 		if err := registry.Register(schema.Type, schema); err != nil {
-			return fmt.Errorf("failed to register %s schema: %w", schema.Type.String(), err)
+			return utils.WrapRegisterError(schema.Type.String()+" schema", err)
 		}
 	}
 

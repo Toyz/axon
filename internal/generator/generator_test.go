@@ -69,11 +69,13 @@ func TestGenerateModule_CoreServices(t *testing.T) {
 		PackagePath: "./services",
 		CoreServices: []models.CoreServiceMetadata{
 			{
-				Name:         "UserService",
-				StructName:   "UserService",
+				BaseMetadata: models.BaseMetadata{
+					Name:         "UserService",
+					StructName:   "UserService",
+					Dependencies: []models.Dependency{{Name: "UserRepository", Type: "UserRepository"}},
+				},
 				HasLifecycle: false,
 				IsManual:     false,
-				Dependencies: []models.Dependency{{Name: "UserRepository", Type: "UserRepository"}},
 			},
 		},
 	}
@@ -115,8 +117,11 @@ func TestGenerateModule_Controllers(t *testing.T) {
 		PackagePath: "./controllers",
 		Controllers: []models.ControllerMetadata{
 			{
-				Name:       "UserController",
-				StructName: "UserController",
+				BaseMetadata: models.BaseMetadata{
+					Name:       "UserController",
+					StructName: "UserController",
+					Dependencies: []models.Dependency{{Name: "UserService", Type: "UserService"}},
+				},
 				Routes: []models.RouteMetadata{
 					{
 						Method:      "GET",
@@ -134,7 +139,6 @@ func TestGenerateModule_Controllers(t *testing.T) {
 						},
 					},
 				},
-				Dependencies: []models.Dependency{{Name: "UserService", Type: "UserService"}},
 			},
 		},
 	}
@@ -183,11 +187,13 @@ func TestGenerateControllerProvider(t *testing.T) {
 	generator := NewGenerator()
 	
 	controller := models.ControllerMetadata{
-		Name:       "UserController",
-		StructName: "UserController",
-		Dependencies: []models.Dependency{
-			{Name: "UserService", Type: "UserService"},
-			{Name: "Config", Type: "*Config"},
+		BaseMetadata: models.BaseMetadata{
+			Name:       "UserController",
+			StructName: "UserController",
+			Dependencies: []models.Dependency{
+				{Name: "UserService", Type: "UserService"},
+				{Name: "Config", Type: "*Config"},
+			},
 		},
 	}
 	
@@ -262,30 +268,38 @@ func TestExtractProviders(t *testing.T) {
 	metadata := &models.PackageMetadata{
 		Controllers: []models.ControllerMetadata{
 			{
-				Name:         "UserController",
-				StructName:   "UserController",
-				Dependencies: []models.Dependency{{Name: "UserService", Type: "UserService"}},
+				BaseMetadata: models.BaseMetadata{
+					Name:         "UserController",
+					StructName:   "UserController",
+					Dependencies: []models.Dependency{{Name: "UserService", Type: "UserService"}},
+				},
 			},
 		},
 		CoreServices: []models.CoreServiceMetadata{
 			{
-				Name:         "UserService",
-				StructName:   "UserService",
+				BaseMetadata: models.BaseMetadata{
+					Name:         "UserService",
+					StructName:   "UserService",
+					Dependencies: []models.Dependency{{Name: "UserRepository", Type: "UserRepository"}},
+				},
 				HasLifecycle: true,
 				IsManual:     false,
-				Dependencies: []models.Dependency{{Name: "UserRepository", Type: "UserRepository"}},
 			},
 			{
-				Name:         "ConfigService",
-				StructName:   "ConfigService",
-				IsManual:     true,
-				ModuleName:   "CustomModule",
+				BaseMetadata: models.BaseMetadata{
+					Name:       "ConfigService",
+					StructName: "ConfigService",
+				},
+				IsManual:   true,
+				ModuleName: "CustomModule",
 			},
 		},
 		Interfaces: []models.InterfaceMetadata{
 			{
-				Name:       "UserServiceInterface",
-				StructName: "UserService",
+				BaseMetadata: models.BaseMetadata{
+					Name:       "UserServiceInterface",
+					StructName: "UserService",
+				},
 			},
 		},
 	}

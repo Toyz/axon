@@ -26,9 +26,11 @@ func TestMiddlewareRegistry_Register(t *testing.T) {
 				{
 					name: "AuthMiddleware",
 					middleware: &models.MiddlewareMetadata{
-						Name:        "AuthMiddleware",
+						BaseMetadata: models.BaseMetadata{
+							Name:       "AuthMiddleware",
+							StructName: "AuthMiddleware",
+						},
 						PackagePath: "/auth",
-						StructName:  "AuthMiddleware",
 					},
 				},
 			},
@@ -43,17 +45,21 @@ func TestMiddlewareRegistry_Register(t *testing.T) {
 				{
 					name: "AuthMiddleware",
 					middleware: &models.MiddlewareMetadata{
-						Name:        "AuthMiddleware",
+						BaseMetadata: models.BaseMetadata{
+							Name:       "AuthMiddleware",
+							StructName: "AuthMiddleware",
+						},
 						PackagePath: "/auth",
-						StructName:  "AuthMiddleware",
 					},
 				},
 				{
 					name: "LoggingMiddleware",
 					middleware: &models.MiddlewareMetadata{
-						Name:        "LoggingMiddleware",
+						BaseMetadata: models.BaseMetadata{
+							Name:       "LoggingMiddleware",
+							StructName: "LoggingMiddleware",
+						},
 						PackagePath: "/logging",
-						StructName:  "LoggingMiddleware",
 					},
 				},
 			},
@@ -68,17 +74,21 @@ func TestMiddlewareRegistry_Register(t *testing.T) {
 				{
 					name: "AuthMiddleware",
 					middleware: &models.MiddlewareMetadata{
-						Name:        "AuthMiddleware",
+						BaseMetadata: models.BaseMetadata{
+							Name:       "AuthMiddleware",
+							StructName: "AuthMiddleware",
+						},
 						PackagePath: "/auth",
-						StructName:  "AuthMiddleware",
 					},
 				},
 				{
 					name: "AuthMiddleware",
 					middleware: &models.MiddlewareMetadata{
-						Name:        "AuthMiddleware",
+						BaseMetadata: models.BaseMetadata{
+							Name:       "AuthMiddleware",
+							StructName: "AuthMiddleware",
+						},
 						PackagePath: "/auth2",
-						StructName:  "AuthMiddleware",
 					},
 				},
 			},
@@ -94,9 +104,11 @@ func TestMiddlewareRegistry_Register(t *testing.T) {
 				{
 					name: "",
 					middleware: &models.MiddlewareMetadata{
-						Name:        "AuthMiddleware",
+						BaseMetadata: models.BaseMetadata{
+							Name:       "AuthMiddleware",
+							StructName: "AuthMiddleware",
+						},
 						PackagePath: "/auth",
-						StructName:  "AuthMiddleware",
 					},
 				},
 			},
@@ -210,9 +222,11 @@ func TestMiddlewareRegistry_Validate(t *testing.T) {
 			// Register middlewares
 			for _, name := range tt.registeredNames {
 				middleware := &models.MiddlewareMetadata{
-					Name:        name,
+					BaseMetadata: models.BaseMetadata{
+						Name:       name,
+						StructName: name,
+					},
 					PackagePath: "/test",
-					StructName:  name,
 				}
 				err := registry.Register(name, middleware)
 				if err != nil {
@@ -245,21 +259,25 @@ func TestMiddlewareRegistry_Get(t *testing.T) {
 	
 	// Register some middlewares
 	authMiddleware := &models.MiddlewareMetadata{
-		Name:        "AuthMiddleware",
-		PackagePath: "/auth",
-		StructName:  "AuthMiddleware",
-		Dependencies: []models.Dependency{
-			{Name: "TokenService", Type: "*TokenService"},
+		BaseMetadata: models.BaseMetadata{
+			Name:       "AuthMiddleware",
+			StructName: "AuthMiddleware",
+			Dependencies: []models.Dependency{
+				{Name: "TokenService", Type: "*TokenService"},
+			},
 		},
+		PackagePath: "/auth",
 	}
 	
 	loggingMiddleware := &models.MiddlewareMetadata{
-		Name:        "LoggingMiddleware",
-		PackagePath: "/logging",
-		StructName:  "LoggingMiddleware",
-		Dependencies: []models.Dependency{
-			{Name: "Logger", Type: "*Logger"},
+		BaseMetadata: models.BaseMetadata{
+			Name:       "LoggingMiddleware",
+			StructName: "LoggingMiddleware",
+			Dependencies: []models.Dependency{
+				{Name: "Logger", Type: "*Logger"},
+			},
 		},
+		PackagePath: "/logging",
 	}
 	
 	err := registry.Register("AuthMiddleware", authMiddleware)

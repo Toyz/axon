@@ -137,7 +137,7 @@ func (p *Parser) ParseDirectory(path string) (*models.PackageMetadata, error) {
 	// Parse all Go files in the directory using cached FileReader
 	files, packageName, err := p.parseDirectoryFiles(cleanPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse directory %s: %w", cleanPath, err)
+		return nil, utils.WrapParseError("directory "+cleanPath, err)
 	}
 
 	// Create package metadata
@@ -323,18 +323,20 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 		if annotation.Type == models.AnnotationTypeMiddleware {
 			// Register middleware in the registry for validation
 			middleware := &models.MiddlewareMetadata{
-				Name:         annotation.GetString("Name"),
-				PackagePath:  metadata.PackagePath,
-				StructName:   annotation.Target,
-				Dependencies: annotation.Dependencies,
-				Parameters:   annotation.Parameters,
-				IsGlobal:     annotation.HasParameter("Global"),
-				Priority:     annotation.GetInt("Priority", 100), // Default priority 100
+				BaseMetadata: models.BaseMetadata{
+					Name:         annotation.GetString("Name"),
+					StructName:   annotation.Target,
+					Dependencies: annotation.Dependencies,
+				},
+				PackagePath: metadata.PackagePath,
+				Parameters:  annotation.Parameters,
+				IsGlobal:    annotation.HasParameter("Global"),
+				Priority:    annotation.GetInt("Priority", 100), // Default priority 100
 			}
 
 			err := p.middlewareRegistry.Register(middleware.Name, middleware)
 			if err != nil {
-				return fmt.Errorf("failed to register middleware '%s': %w", middleware.Name, err)
+				return utils.WrapRegisterError("middleware '"+middleware.Name+"'", err)
 			}
 		}
 	}
@@ -344,12 +346,14 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 		switch annotation.Type {
 		case models.AnnotationTypeController:
 			controller := models.ControllerMetadata{
-				Name:         annotation.Target,
-				StructName:   annotation.Target,
-				Prefix:       annotation.GetString("Prefix", ""),
-				Middlewares:  annotation.GetStringSlice("Middleware"),
-				Priority:     annotation.GetInt("Priority", 100), // Default priority is 100
-				Dependencies: annotation.Dependencies,
+				BaseMetadata: models.BaseMetadata{
+					Name:         annotation.Target,
+					StructName:   annotation.Target,
+					Dependencies: annotation.Dependencies,
+				},
+				Prefix:      annotation.GetString("Prefix", ""),
+				Middlewares: annotation.GetStringSlice("Middleware"),
+				Priority:    annotation.GetInt("Priority", 100), // Default priority is 100
 			}
 			metadata.Controllers = append(metadata.Controllers, controller)
 
@@ -362,11 +366,13 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				}
 
 				iface := models.InterfaceMetadata{
-					Name:         annotation.Target + "Interface",
-					StructName:   annotation.Target,
-					PackagePath:  metadata.PackagePath,
-					Methods:      methods,
-					Dependencies: annotation.Dependencies,
+					BaseMetadata: models.BaseMetadata{
+						Name:         annotation.Target + "Interface",
+						StructName:   annotation.Target,
+						Dependencies: annotation.Dependencies,
+					},
+					PackagePath: metadata.PackagePath,
+					Methods:     methods,
 				}
 				metadata.Interfaces = append(metadata.Interfaces, iface)
 			}
@@ -396,7 +402,7 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 			// Parse path parameters from the route path
 			pathParams, err := p.parsePathParameters(route.Path)
 			if err != nil {
-				return fmt.Errorf("failed to parse path parameters for route %s: %w", annotation.Target, err)
+				return utils.WrapParseError("path parameters for route "+annotation.Target, err)
 			}
 
 			// Analyze handler method signature to detect all parameters
@@ -456,13 +462,15 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 
 		case models.AnnotationTypeMiddleware:
 			middleware := models.MiddlewareMetadata{
-				Name:         annotation.GetString("Name"),
-				PackagePath:  metadata.PackagePath,
-				StructName:   annotation.Target,
-				Dependencies: annotation.Dependencies,
-				Parameters:   annotation.Parameters,
-				IsGlobal:     annotation.HasParameter("Global"),
-				Priority:     annotation.GetInt("Priority", 100), // Default priority 100
+				BaseMetadata: models.BaseMetadata{
+					Name:         annotation.GetString("Name"),
+					StructName:   annotation.Target,
+					Dependencies: annotation.Dependencies,
+				},
+				PackagePath: metadata.PackagePath,
+				Parameters:  annotation.Parameters,
+				IsGlobal:    annotation.HasParameter("Global"),
+				Priority:    annotation.GetInt("Priority", 100), // Default priority 100
 			}
 			metadata.Middlewares = append(metadata.Middlewares, middleware)
 
@@ -477,9 +485,11 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 			}
 			
 			service := models.CoreServiceMetadata{
-				Name:         annotation.Target,
-				StructName:   annotation.Target,
-				Dependencies: annotation.Dependencies,
+				BaseMetadata: models.BaseMetadata{
+					Name:         annotation.Target,
+					StructName:   annotation.Target,
+					Dependencies: annotation.Dependencies,
+				},
 			}
 
 			// Check for Init parameter (now stored in Parameters map)
@@ -550,20 +560,24 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				}
 
 				iface := models.InterfaceMetadata{
-					Name:         annotation.Target + "Interface",
-					StructName:   annotation.Target,
-					PackagePath:  metadata.PackagePath,
-					Methods:      methods,
-					Dependencies: annotation.Dependencies,
+					BaseMetadata: models.BaseMetadata{
+						Name:         annotation.Target + "Interface",
+						StructName:   annotation.Target,
+						Dependencies: annotation.Dependencies,
+					},
+					PackagePath: metadata.PackagePath,
+					Methods:     methods,
 				}
 				metadata.Interfaces = append(metadata.Interfaces, iface)
 			}
 
 		case models.AnnotationTypeLogger:
 			logger := models.LoggerMetadata{
-				Name:         annotation.Target,
-				StructName:   annotation.Target,
-				Dependencies: annotation.Dependencies,
+				BaseMetadata: models.BaseMetadata{
+					Name:         annotation.Target,
+					StructName:   annotation.Target,
+					Dependencies: annotation.Dependencies,
+				},
 			}
 
 			// Check for Init parameter (now stored in Parameters map)

@@ -15,21 +15,12 @@ import (
 	"github.com/toyz/axon/pkg/axon"
 )
 
-// ParserRegistryInterface defines the interface for parser registry operations
-type ParserRegistryInterface interface {
-	RegisterParser(parser axon.RouteParserMetadata) error
-	GetParser(typeName string) (axon.RouteParserMetadata, bool)
-	ListParsers() []string
-	HasParser(typeName string) bool
-	Clear()
-	ClearCustomParsers()
-	GetAllParsers() map[string]axon.RouteParserMetadata
-}
+
 
 // Generator implements the CodeGenerator interface
 type Generator struct {
 	moduleResolver ModuleResolver
-	parserRegistry ParserRegistryInterface
+	parserRegistry axon.ParserRegistryInterface
 }
 
 // ModuleResolver interface for resolving module paths
@@ -169,7 +160,7 @@ func (g *Generator) generateControllerModuleWithModule(metadata *models.PackageM
 	for _, controller := range metadata.Controllers {
 		providerCode, err := g.generateControllerProvider(controller)
 		if err != nil {
-			return "", fmt.Errorf("failed to generate provider for controller %s: %w", controller.Name, err)
+			return "", utils.WrapGenerateError("provider for controller "+controller.Name, err)
 		}
 		moduleBuilder.WriteString(providerCode)
 		moduleBuilder.WriteString("\n\n")
@@ -180,7 +171,7 @@ func (g *Generator) generateControllerModuleWithModule(metadata *models.PackageM
 		for _, route := range controller.Routes {
 			wrapperCode, err := templates.GenerateRouteWrapper(route, controller.StructName, g.parserRegistry)
 			if err != nil {
-				return "", fmt.Errorf("failed to generate wrapper for route %s.%s: %w", controller.Name, route.HandlerName, err)
+				return "", utils.WrapGenerateError("wrapper for route "+controller.Name+"."+route.HandlerName, err)
 			}
 			moduleBuilder.WriteString(wrapperCode)
 			moduleBuilder.WriteString("\n\n")
@@ -671,7 +662,7 @@ func handleError(c echo.Context, err error) error {
 }
 
 // GetParserRegistry returns the parser registry for cross-package parser discovery
-func (g *Generator) GetParserRegistry() ParserRegistryInterface {
+func (g *Generator) GetParserRegistry() axon.ParserRegistryInterface {
 	return g.parserRegistry
 }
 // convertToEchoPath converts Axon path format to Echo path format

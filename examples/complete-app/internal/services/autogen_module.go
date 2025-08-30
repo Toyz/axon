@@ -11,12 +11,6 @@ import (
 	"go.uber.org/fx"
 )
 
-// CrawlerServiceInterface is the interface for CrawlerService
-type CrawlerServiceInterface interface {
-	Start(ctx context.Context) error
-	Stop(ctx context.Context) error
-}
-
 // NotificationServiceInterface is the interface for NotificationService
 type NotificationServiceInterface interface {
 	SendNotification(ctx context.Context, message string, channel string) error
@@ -24,24 +18,10 @@ type NotificationServiceInterface interface {
 	DisableChannel(channel string)
 }
 
-func NewCrawlerService() *CrawlerService {
-	return &CrawlerService{}
-}
-
-func initCrawlerServiceLifecycle(lc fx.Lifecycle, service *CrawlerService) {
-	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			go func() {
-				if err := service.Start(ctx); err != nil {
-					log.Printf("background start error in %s: %v", "CrawlerService", err)
-				}
-			}()
-			return nil
-		},
-		OnStop: func(ctx context.Context) error {
-			return service.Stop(ctx)
-		},
-	})
+// CrawlerServiceInterface is the interface for CrawlerService
+type CrawlerServiceInterface interface {
+	Start(ctx context.Context) error
+	Stop(ctx context.Context) error
 }
 
 func NewDatabaseService(Config *config.Config) *DatabaseService {
@@ -87,24 +67,44 @@ func initUserServiceLifecycle(lc fx.Lifecycle, service *UserService) {
 	})
 }
 
-func NewCrawlerServiceInterface(impl *CrawlerService) CrawlerServiceInterface {
-	return impl
+func NewCrawlerService() *CrawlerService {
+	return &CrawlerService{}
+}
+
+func initCrawlerServiceLifecycle(lc fx.Lifecycle, service *CrawlerService) {
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			go func() {
+				if err := service.Start(ctx); err != nil {
+					log.Printf("background start error in %s: %v", "CrawlerService", err)
+				}
+			}()
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			return service.Stop(ctx)
+		},
+	})
 }
 
 func NewNotificationServiceInterface(impl *NotificationService) NotificationServiceInterface {
 	return impl
 }
 
+func NewCrawlerServiceInterface(impl *CrawlerService) CrawlerServiceInterface {
+	return impl
+}
+
 // AutogenModule provides all core services in this package
 var AutogenModule = fx.Module("services",
-	fx.Provide(NewCrawlerService),
-	fx.Invoke(initCrawlerServiceLifecycle),
 	fx.Provide(NewDatabaseService),
 	fx.Invoke(initDatabaseServiceLifecycle),
 	fx.Provide(NewCustomNotificationService),
 	fx.Provide(NewSessionServiceFactory),
 	fx.Provide(NewUserService),
 	fx.Invoke(initUserServiceLifecycle),
-	fx.Provide(NewCrawlerServiceInterface),
+	fx.Provide(NewCrawlerService),
+	fx.Invoke(initCrawlerServiceLifecycle),
 	fx.Provide(NewNotificationServiceInterface),
+	fx.Provide(NewCrawlerServiceInterface),
 )

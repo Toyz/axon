@@ -7,16 +7,7 @@ import (
 	"github.com/toyz/axon/pkg/axon"
 )
 
-// ParserRegistryInterface defines the interface for parser registry operations
-type ParserRegistryInterface interface {
-	RegisterParser(parser axon.RouteParserMetadata) error
-	GetParser(typeName string) (axon.RouteParserMetadata, bool)
-	ListParsers() []string
-	HasParser(typeName string) bool
-	Clear()
-	ClearCustomParsers()
-	GetAllParsers() map[string]axon.RouteParserMetadata
-}
+
 
 // ParserRegistry manages route parameter parsers
 type ParserRegistry struct {

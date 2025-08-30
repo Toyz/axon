@@ -677,7 +677,7 @@ func (g *Generator) buildGlobalParserRegistry() error {
 	for _, parser := range g.globalParsers {
 		err := parserRegistry.RegisterParser(parser)
 		if err != nil {
-			return fmt.Errorf("failed to register parser %s: %w", parser.FunctionName, err)
+			return utils.WrapRegisterError("parser "+parser.FunctionName, err)
 		}
 	}
 

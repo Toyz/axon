@@ -6,10 +6,11 @@ import (
 
 	"github.com/toyz/axon/internal/models"
 	"github.com/toyz/axon/internal/registry"
+	"github.com/toyz/axon/pkg/axon"
 )
 
 // createTestParserRegistry creates a test parser registry for testing
-func createTestParserRegistry() ParserRegistryInterface {
+func createTestParserRegistry() axon.ParserRegistryInterface {
 	return registry.NewParserRegistry()
 }
 
@@ -178,11 +179,13 @@ func TestGenerateCoreServiceProvider(t *testing.T) {
 		{
 			name: "simple core service without dependencies",
 			service: models.CoreServiceMetadata{
-				Name:         "UserService",
-				StructName:   "UserService",
+				BaseMetadata: models.BaseMetadata{
+					Name:         "UserService",
+					StructName:   "UserService",
+					Dependencies: []models.Dependency{},
+				},
 				HasLifecycle: false,
 				IsManual:     false,
-				Dependencies: []models.Dependency{},
 			},
 			expected: `func NewUserService() *UserService {
 	return &UserService{
@@ -193,14 +196,16 @@ func TestGenerateCoreServiceProvider(t *testing.T) {
 		{
 			name: "core service with dependencies",
 			service: models.CoreServiceMetadata{
-				Name:         "UserService",
-				StructName:   "UserService",
+				BaseMetadata: models.BaseMetadata{
+					Name:         "UserService",
+					StructName:   "UserService",
+					Dependencies: []models.Dependency{
+						{Name: "UserRepository", Type: "UserRepository"},
+						{Name: "Config", Type: "*Config"},
+					},
+				},
 				HasLifecycle: false,
 				IsManual:     false,
-				Dependencies: []models.Dependency{
-					{Name: "UserRepository", Type: "UserRepository"},
-					{Name: "Config", Type: "*Config"},
-				},
 			},
 			expected: `func NewUserService(UserRepository UserRepository, Config *Config) *UserService {
 	return &UserService{
@@ -212,15 +217,19 @@ func TestGenerateCoreServiceProvider(t *testing.T) {
 		{
 			name: "lifecycle service with dependencies and Start method only",
 			service: models.CoreServiceMetadata{
-				Name:         "DatabaseService",
-				StructName:   "DatabaseService",
-				HasLifecycle: true,
-				HasStart:     true,
-				HasStop:      false,
-				IsManual:     false,
-				Dependencies: []models.Dependency{
-					{Name: "Config", Type: "*Config"},
+				BaseMetadata: models.BaseMetadata{
+					Name:         "DatabaseService",
+					StructName:   "DatabaseService",
+					Dependencies: []models.Dependency{
+						{Name: "Config", Type: "*Config"},
+					},
 				},
+				LifecycleMetadata: models.LifecycleMetadata{
+					HasStart: true,
+					HasStop:  false,
+				},
+				HasLifecycle: true,
+				IsManual:     false,
 			},
 			expected: `func NewDatabaseService(lc fx.Lifecycle, Config *Config) *DatabaseService {
 	service := &DatabaseService{
@@ -239,16 +248,20 @@ func TestGenerateCoreServiceProvider(t *testing.T) {
 		{
 			name: "lifecycle service with both Start and Stop methods",
 			service: models.CoreServiceMetadata{
-				Name:         "MessageConsumer",
-				StructName:   "MessageConsumer",
-				HasLifecycle: true,
-				HasStart:     true,
-				HasStop:      true,
-				IsManual:     false,
-				Dependencies: []models.Dependency{
-					{Name: "Config", Type: "*Config"},
-					{Name: "Logger", Type: "Logger"},
+				BaseMetadata: models.BaseMetadata{
+					Name:         "MessageConsumer",
+					StructName:   "MessageConsumer",
+					Dependencies: []models.Dependency{
+						{Name: "Config", Type: "*Config"},
+						{Name: "Logger", Type: "Logger"},
+					},
 				},
+				LifecycleMetadata: models.LifecycleMetadata{
+					HasStart: true,
+					HasStop:  true,
+				},
+				HasLifecycle: true,
+				IsManual:     false,
 			},
 			expected: `func NewMessageConsumer(lc fx.Lifecycle, Config *Config, Logger Logger) *MessageConsumer {
 	service := &MessageConsumer{
@@ -271,12 +284,14 @@ func TestGenerateCoreServiceProvider(t *testing.T) {
 		{
 			name: "manual service (should return empty)",
 			service: models.CoreServiceMetadata{
-				Name:         "ConfigService",
-				StructName:   "ConfigService",
+				BaseMetadata: models.BaseMetadata{
+					Name:         "ConfigService",
+					StructName:   "ConfigService",
+					Dependencies: []models.Dependency{},
+				},
 				HasLifecycle: false,
 				IsManual:     true,
 				ModuleName:   "CustomModule",
-				Dependencies: []models.Dependency{},
 			},
 			expected: "",
 		},
@@ -327,30 +342,36 @@ func TestGenerateCoreServiceModule(t *testing.T) {
 				PackagePath: "./services",
 				CoreServices: []models.CoreServiceMetadata{
 					{
-						Name:         "UserService",
-						StructName:   "UserService",
+						BaseMetadata: models.BaseMetadata{
+							Name:         "UserService",
+							StructName:   "UserService",
+							Dependencies: []models.Dependency{
+								{Name: "UserRepository", Type: "UserRepository"},
+							},
+						},
 						HasLifecycle: false,
 						IsManual:     false,
-						Dependencies: []models.Dependency{
-							{Name: "UserRepository", Type: "UserRepository"},
-						},
 					},
 					{
-						Name:         "DatabaseService",
-						StructName:   "DatabaseService",
+						BaseMetadata: models.BaseMetadata{
+							Name:         "DatabaseService",
+							StructName:   "DatabaseService",
+							Dependencies: []models.Dependency{
+								{Name: "Config", Type: "*Config"},
+							},
+						},
 						HasLifecycle: true,
 						IsManual:     false,
-						Dependencies: []models.Dependency{
-							{Name: "Config", Type: "*Config"},
-						},
 					},
 					{
-						Name:         "ConfigService",
-						StructName:   "ConfigService",
+						BaseMetadata: models.BaseMetadata{
+							Name:         "ConfigService",
+							StructName:   "ConfigService",
+							Dependencies: []models.Dependency{},
+						},
 						HasLifecycle: false,
 						IsManual:     true,
 						ModuleName:   "CustomModule",
-						Dependencies: []models.Dependency{},
 					},
 				},
 			},
@@ -374,12 +395,14 @@ func TestGenerateCoreServiceModule(t *testing.T) {
 				PackagePath: "./config",
 				CoreServices: []models.CoreServiceMetadata{
 					{
-						Name:         "ConfigService",
-						StructName:   "ConfigService",
+						BaseMetadata: models.BaseMetadata{
+							Name:         "ConfigService",
+							StructName:   "ConfigService",
+							Dependencies: []models.Dependency{},
+						},
 						HasLifecycle: false,
 						IsManual:     true,
 						ModuleName:   "Module",
-						Dependencies: []models.Dependency{},
 					},
 				},
 			},
@@ -459,8 +482,10 @@ func TestGenerateInterface(t *testing.T) {
 		{
 			name: "simple interface with basic methods",
 			iface: models.InterfaceMetadata{
-				Name:       "UserServiceInterface",
-				StructName: "UserService",
+				BaseMetadata: models.BaseMetadata{
+					Name:       "UserServiceInterface",
+					StructName: "UserService",
+				},
 				Methods: []models.Method{
 					{
 						Name: "GetUser",
@@ -487,8 +512,10 @@ type UserServiceInterface interface {
 		{
 			name: "interface with complex method signatures",
 			iface: models.InterfaceMetadata{
-				Name:       "ProcessorInterface",
-				StructName: "Processor",
+				BaseMetadata: models.BaseMetadata{
+					Name:       "ProcessorInterface",
+					StructName: "Processor",
+				},
 				Methods: []models.Method{
 					{
 						Name: "Process",
@@ -515,9 +542,11 @@ type ProcessorInterface interface {
 		{
 			name: "interface with no methods",
 			iface: models.InterfaceMetadata{
-				Name:       "EmptyInterface",
-				StructName: "Empty",
-				Methods:    []models.Method{},
+				BaseMetadata: models.BaseMetadata{
+					Name:       "EmptyInterface",
+					StructName: "Empty",
+				},
+				Methods: []models.Method{},
 			},
 			expected: `// EmptyInterface is the interface for Empty
 type EmptyInterface interface {
@@ -526,8 +555,10 @@ type EmptyInterface interface {
 		{
 			name: "interface with anonymous parameters",
 			iface: models.InterfaceMetadata{
-				Name:       "HandlerInterface",
-				StructName: "Handler",
+				BaseMetadata: models.BaseMetadata{
+					Name:       "HandlerInterface",
+					StructName: "Handler",
+				},
 				Methods: []models.Method{
 					{
 						Name: "Handle",
@@ -574,8 +605,10 @@ func TestGenerateInterfaceProvider(t *testing.T) {
 		{
 			name: "simple interface provider",
 			iface: models.InterfaceMetadata{
-				Name:       "UserServiceInterface",
-				StructName: "UserService",
+				BaseMetadata: models.BaseMetadata{
+					Name:       "UserServiceInterface",
+					StructName: "UserService",
+				},
 			},
 			expected: `func NewUserServiceInterface(impl *UserService) UserServiceInterface {
 	return impl
@@ -584,8 +617,10 @@ func TestGenerateInterfaceProvider(t *testing.T) {
 		{
 			name: "complex interface provider",
 			iface: models.InterfaceMetadata{
-				Name:       "MessageProcessorInterface",
-				StructName: "MessageProcessor",
+				BaseMetadata: models.BaseMetadata{
+					Name:       "MessageProcessorInterface",
+					StructName: "MessageProcessor",
+				},
 			},
 			expected: `func NewMessageProcessorInterface(impl *MessageProcessor) MessageProcessorInterface {
 	return impl
@@ -618,19 +653,23 @@ func TestGenerateCoreServiceModuleWithInterfaces(t *testing.T) {
 		PackagePath: "./services",
 		CoreServices: []models.CoreServiceMetadata{
 			{
-				Name:         "UserService",
-				StructName:   "UserService",
+				BaseMetadata: models.BaseMetadata{
+					Name:         "UserService",
+					StructName:   "UserService",
+					Dependencies: []models.Dependency{
+						{Name: "UserRepository", Type: "UserRepository"},
+					},
+				},
 				HasLifecycle: false,
 				IsManual:     false,
-				Dependencies: []models.Dependency{
-					{Name: "UserRepository", Type: "UserRepository"},
-				},
 			},
 		},
 		Interfaces: []models.InterfaceMetadata{
 			{
-				Name:       "UserServiceInterface",
-				StructName: "UserService",
+				BaseMetadata: models.BaseMetadata{
+					Name:       "UserServiceInterface",
+					StructName: "UserService",
+				},
 				Methods: []models.Method{
 					{
 						Name: "GetUser",
@@ -777,10 +816,12 @@ func TestGenerateCoreServiceProviderWithCustomConstructor(t *testing.T) {
 		{
 			name: "service without custom constructor should generate provider",
 			service: models.CoreServiceMetadata{
-				Name:       "UserService",
-				StructName: "UserService",
-				Dependencies: []models.Dependency{
-					{Name: "Config", Type: "*config.Config", IsInit: false},
+				BaseMetadata: models.BaseMetadata{
+					Name:       "UserService",
+					StructName: "UserService",
+					Dependencies: []models.Dependency{
+						{Name: "Config", Type: "*config.Config", IsInit: false},
+					},
 				},
 				Constructor: "", // No custom constructor
 			},
@@ -790,10 +831,12 @@ func TestGenerateCoreServiceProviderWithCustomConstructor(t *testing.T) {
 		{
 			name: "service with custom constructor should not generate provider",
 			service: models.CoreServiceMetadata{
-				Name:       "NotificationService",
-				StructName: "NotificationService",
-				Dependencies: []models.Dependency{
-					{Name: "Logger", Type: "*slog.Logger", IsInit: false},
+				BaseMetadata: models.BaseMetadata{
+					Name:       "NotificationService",
+					StructName: "NotificationService",
+					Dependencies: []models.Dependency{
+						{Name: "Logger", Type: "*slog.Logger", IsInit: false},
+					},
 				},
 				Constructor: "NewCustomNotificationService", // Custom constructor
 			},
@@ -803,9 +846,11 @@ func TestGenerateCoreServiceProviderWithCustomConstructor(t *testing.T) {
 		{
 			name: "manual service should not generate provider",
 			service: models.CoreServiceMetadata{
-				Name:       "ManualService",
-				StructName: "ManualService",
-				IsManual:   true,
+				BaseMetadata: models.BaseMetadata{
+					Name:       "ManualService",
+					StructName: "ManualService",
+				},
+				IsManual:    true,
 				Constructor: "", // No custom constructor but manual
 			},
 			expectEmpty: true,

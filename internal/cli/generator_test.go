@@ -205,7 +205,7 @@ func TestGenerator_hasNoAnnotations(t *testing.T) {
 				return &models.PackageMetadata{
 					PackageName: "test",
 					Controllers: []models.ControllerMetadata{
-						{Name: "TestController"},
+						{BaseMetadata: models.BaseMetadata{Name: "TestController"}},
 					},
 				}
 			},
@@ -217,7 +217,7 @@ func TestGenerator_hasNoAnnotations(t *testing.T) {
 				return &models.PackageMetadata{
 					PackageName: "test",
 					CoreServices: []models.CoreServiceMetadata{
-						{Name: "TestService"},
+						{BaseMetadata: models.BaseMetadata{Name: "TestService"}},
 					},
 				}
 			},
@@ -229,7 +229,7 @@ func TestGenerator_hasNoAnnotations(t *testing.T) {
 				return &models.PackageMetadata{
 					PackageName: "test",
 					Middlewares: []models.MiddlewareMetadata{
-						{Name: "TestMiddleware"},
+						{BaseMetadata: models.BaseMetadata{Name: "TestMiddleware"}},
 					},
 				}
 			},
@@ -241,7 +241,7 @@ func TestGenerator_hasNoAnnotations(t *testing.T) {
 				return &models.PackageMetadata{
 					PackageName: "test",
 					Interfaces: []models.InterfaceMetadata{
-						{Name: "TestInterface"},
+						{BaseMetadata: models.BaseMetadata{Name: "TestInterface"}},
 					},
 				}
 			},

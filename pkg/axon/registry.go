@@ -74,6 +74,17 @@ func (r *inMemoryMiddlewareRegistry) GetAllMiddlewares() []MiddlewareInstance {
 // DefaultMiddlewareRegistry is the global middleware registry
 var DefaultMiddlewareRegistry MiddlewareRegistry = NewInMemoryMiddlewareRegistry()
 
+// ParserRegistryInterface defines the interface for parser registry operations
+type ParserRegistryInterface interface {
+	RegisterParser(parser RouteParserMetadata) error
+	GetParser(typeName string) (RouteParserMetadata, bool)
+	ListParsers() []string
+	HasParser(typeName string) bool
+	Clear()
+	ClearCustomParsers()
+	GetAllParsers() map[string]RouteParserMetadata
+}
+
 // RouteInfo contains metadata about a registered route
 type RouteInfo struct {
 	// Method is the HTTP method (GET, POST, PUT, DELETE, etc.)
