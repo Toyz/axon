@@ -466,3 +466,118 @@ func (c *APIController) HealthCheck() (string, error) {
 		})
 	}
 }
+
+func TestParser_ConstructorValidation_Integration(t *testing.T) {
+	// Create a temporary directory for testing
+	tempDir, err := os.MkdirTemp("", "axon_constructor_validation_test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Test case: service with custom constructor and axon::inject (should fail)
+	testFile := `package testpkg
+
+//axon::service -Constructor=NewCustomService
+type CustomService struct {
+	//axon::inject
+	Config *Config
+	//axon::init
+	cache map[string]string
+}
+
+func NewCustomService(config *Config) (*CustomService, error) {
+	return &CustomService{
+		Config: config,
+		cache:  make(map[string]string),
+	}, nil
+}`
+
+	// Write test file
+	testFilePath := filepath.Join(tempDir, "service.go")
+	if err := os.WriteFile(testFilePath, []byte(testFile), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	// Parse the directory - this should fail with validation error
+	parser := NewParser()
+	_, err = parser.ParseDirectory(tempDir)
+
+	// Verify that we get the expected validation error
+	if err == nil {
+		t.Fatal("expected validation error for service with custom constructor and axon::inject/axon::init annotations, but got nil")
+	}
+
+	expectedErrorSubstring := "uses custom constructor 'NewCustomService' but has axon::inject or axon::init annotations"
+	if !containsSubstring(err.Error(), expectedErrorSubstring) {
+		t.Errorf("expected error to contain '%s', but got: %v", expectedErrorSubstring, err)
+	}
+}
+
+func TestParser_ConstructorValidation_ValidCase_Integration(t *testing.T) {
+	// Create a temporary directory for testing
+	tempDir, err := os.MkdirTemp("", "axon_constructor_valid_test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Test case: service with custom constructor and NO axon::inject/axon::init (should succeed)
+	testFile := `package testpkg
+
+//axon::service -Constructor=NewValidService
+type ValidService struct {
+	Config *Config
+	cache  map[string]string
+}
+
+func NewValidService(config *Config) (*ValidService, error) {
+	return &ValidService{
+		Config: config,
+		cache:  make(map[string]string),
+	}, nil
+}`
+
+	// Write test file
+	testFilePath := filepath.Join(tempDir, "service.go")
+	if err := os.WriteFile(testFilePath, []byte(testFile), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	// Parse the directory - this should succeed
+	parser := NewParser()
+	metadata, err := parser.ParseDirectory(tempDir)
+
+	// Verify that parsing succeeds
+	if err != nil {
+		t.Fatalf("expected parsing to succeed for valid custom constructor, but got error: %v", err)
+	}
+
+	// Verify that the service was parsed correctly
+	if len(metadata.CoreServices) != 1 {
+		t.Fatalf("expected 1 core service, got %d", len(metadata.CoreServices))
+	}
+
+	service := metadata.CoreServices[0]
+	if service.Constructor != "NewValidService" {
+		t.Errorf("expected constructor 'NewValidService', got '%s'", service.Constructor)
+	}
+
+	if len(service.Dependencies) != 0 {
+		t.Errorf("expected 0 dependencies for custom constructor service, got %d", len(service.Dependencies))
+	}
+}
+
+// Helper function to check if a string contains a substring
+func containsSubstring(str, substr string) bool {
+	return len(str) >= len(substr) && (str == substr || containsAnySubstring(str, substr))
+}
+
+func containsAnySubstring(str, substr string) bool {
+	for i := 0; i <= len(str)-len(substr); i++ {
+		if str[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

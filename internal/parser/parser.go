@@ -532,6 +532,11 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 			constructor := annotation.GetString("Constructor", "")
 			if constructor != "" {
 				service.Constructor = constructor
+				
+				// Validate that custom constructors don't use axon::inject or axon::init
+				if len(service.Dependencies) > 0 {
+					return fmt.Errorf("service %s uses custom constructor '%s' but has axon::inject or axon::init annotations. Custom constructors handle all dependency injection and initialization - remove the axon::inject and axon::init annotations", annotation.Target, constructor)
+				}
 			}
 
 			metadata.CoreServices = append(metadata.CoreServices, service)

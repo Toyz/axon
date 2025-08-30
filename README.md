@@ -359,12 +359,11 @@ type SessionService struct {
 
 //axon::service -Constructor=NewCustomDatabaseService
 type DatabaseService struct {
-    //axon::inject
     Config *config.Config
     db *sql.DB
 }
 
-// Custom constructor function
+// Custom constructor function - handles all initialization
 func NewCustomDatabaseService(config *config.Config) (*DatabaseService, error) {
     db, err := sql.Open("postgres", config.DatabaseURL)
     if err != nil {
@@ -512,12 +511,11 @@ When you need complex initialization logic or error handling during service crea
 ```go
 //axon::service -Constructor=NewDatabaseService
 type DatabaseService struct {
-    //axon::inject
     Config *config.Config
     db *sql.DB
 }
 
-// Custom constructor with error handling
+// Custom constructor with error handling - no axon::inject needed
 func NewDatabaseService(config *config.Config) (*DatabaseService, error) {
     db, err := sql.Open("postgres", config.DatabaseURL)
     if err != nil {
@@ -536,7 +534,6 @@ func NewDatabaseService(config *config.Config) (*DatabaseService, error) {
 
 //axon::service -Constructor=NewRedisClient -Mode=Singleton
 type RedisClient struct {
-    //axon::inject
     Config *config.Config
     client *redis.Client
 }
@@ -565,6 +562,8 @@ func NewRedisClient(config *config.Config) (*RedisClient, error) {
 - Connection validation during startup
 - Custom configuration or setup
 - Integration with third-party libraries that require specific initialization
+
+**Important**: When using `-Constructor`, you take full control of service creation. The `axon::inject` and `axon::init` annotations are not used since your custom constructor function handles all dependency injection and initialization.
 
 ### Service Lifecycle Best Practices
 ```go
