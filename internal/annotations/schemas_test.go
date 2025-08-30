@@ -190,7 +190,7 @@ func TestRouteParametersValidator(t *testing.T) {
 				},
 			},
 			expectError: true,
-			errorMsg:    "requires method parameter",
+			errorMsg:    "validation error for field 'method'",
 		},
 		{
 			name: "missing path",
@@ -201,7 +201,7 @@ func TestRouteParametersValidator(t *testing.T) {
 				},
 			},
 			expectError: true,
-			errorMsg:    "requires path parameter",
+			errorMsg:    "validation error for field 'path'",
 		},
 		{
 			name: "invalid path format",
@@ -269,7 +269,7 @@ func TestMiddlewareParametersValidator(t *testing.T) {
 				},
 			},
 			expectError: true,
-			errorMsg:    "route pattern cannot be empty",
+			errorMsg:    "validation error for field 'route'",
 		},
 		{
 			name: "invalid route pattern",

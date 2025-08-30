@@ -5,37 +5,43 @@ import (
 	"strings"
 
 	"github.com/toyz/axon/internal/models"
+	"github.com/toyz/axon/internal/utils"
 )
 
 // middlewareRegistry implements the MiddlewareRegistry interface
 type middlewareRegistry struct {
-	middlewares map[string]*models.MiddlewareMetadata
+	*utils.Registry[string, *models.MiddlewareMetadata]
 }
 
 // NewMiddlewareRegistry creates a new middleware registry
 func NewMiddlewareRegistry() MiddlewareRegistry {
 	return &middlewareRegistry{
-		middlewares: make(map[string]*models.MiddlewareMetadata),
+		Registry: utils.NewRegistry[string, *models.MiddlewareMetadata](),
 	}
 }
 
 // Register adds a middleware to the registry
 func (r *middlewareRegistry) Register(name string, middleware *models.MiddlewareMetadata) error {
-	if name == "" {
-		return fmt.Errorf("middleware name cannot be empty")
+	validator := func(key string, value *models.MiddlewareMetadata, existing map[string]*models.MiddlewareMetadata) error {
+		// Validate key
+		if err := utils.NotEmpty("name")(key); err != nil {
+			return fmt.Errorf("middleware %w", err)
+		}
+		
+		// Validate value
+		if err := utils.NotNil[models.MiddlewareMetadata]("metadata")(value); err != nil {
+			return fmt.Errorf("middleware %w", err)
+		}
+		
+		// Check for duplicate names
+		if existingMiddleware, exists := existing[key]; exists {
+			return fmt.Errorf("middleware '%s' is already registered in package '%s'", key, existingMiddleware.PackagePath)
+		}
+		
+		return nil
 	}
 	
-	if middleware == nil {
-		return fmt.Errorf("middleware metadata cannot be nil")
-	}
-	
-	// Check for duplicate names
-	if existing, exists := r.middlewares[name]; exists {
-		return fmt.Errorf("middleware '%s' is already registered in package '%s'", name, existing.PackagePath)
-	}
-	
-	r.middlewares[name] = middleware
-	return nil
+	return r.Registry.RegisterWithValidator(name, middleware, validator)
 }
 
 // Validate checks that all middleware names exist in the registry
@@ -48,7 +54,7 @@ func (r *middlewareRegistry) Validate(middlewareNames []string) error {
 			continue // Skip empty names
 		}
 		
-		if _, exists := r.middlewares[name]; !exists {
+		if !r.Registry.Has(name) {
 			missingMiddlewares = append(missingMiddlewares, name)
 		}
 	}
@@ -62,6 +68,5 @@ func (r *middlewareRegistry) Validate(middlewareNames []string) error {
 
 // Get retrieves a middleware by name
 func (r *middlewareRegistry) Get(name string) (*models.MiddlewareMetadata, bool) {
-	middleware, exists := r.middlewares[name]
-	return middleware, exists
+	return r.Registry.Get(name)
 }

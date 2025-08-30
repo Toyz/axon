@@ -551,9 +551,7 @@ func TestConcurrentValidation(t *testing.T) {
 }
 
 func TestValidateDefaultValue(t *testing.T) {
-	registry := &registry{
-		schemas: make(map[AnnotationType]AnnotationSchema),
-	}
+	registry := NewRegistry().(*registry)
 
 	tests := []struct {
 		name         string

@@ -8,38 +8,21 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
-	"time"
 )
 
 // FileReader provides common file reading functionality with caching
 type FileReader struct {
-	fileSet    *token.FileSet
-	astCache   map[string]*cachedAST
-	contentCache map[string]*cachedContent
-	mutex      sync.RWMutex
-}
-
-// cachedAST holds a cached AST file with metadata
-type cachedAST struct {
-	file    *ast.File
-	modTime time.Time
-	size    int64
-}
-
-// cachedContent holds cached file content with metadata
-type cachedContent struct {
-	content string
-	modTime time.Time
-	size    int64
+	fileSet      *token.FileSet
+	astCache     *Cache[string, *ast.File]
+	contentCache *Cache[string, string]
 }
 
 // NewFileReader creates a new FileReader instance with caching
 func NewFileReader() *FileReader {
 	return &FileReader{
 		fileSet:      token.NewFileSet(),
-		astCache:     make(map[string]*cachedAST),
-		contentCache: make(map[string]*cachedContent),
+		astCache:     NewCache[string, *ast.File](),
+		contentCache: NewCache[string, string](),
 	}
 }
 
@@ -52,19 +35,9 @@ func (fr *FileReader) ParseGoFile(filePath string) (*ast.File, error) {
 	}
 
 	// Check cache first
-	fr.mutex.RLock()
-	if cached, exists := fr.astCache[cleanPath]; exists {
-		// Check if file has been modified
-		if stat, err := os.Stat(cleanPath); err == nil {
-			if stat.ModTime().Equal(cached.modTime) && stat.Size() == cached.size {
-				fr.mutex.RUnlock()
-				return cached.file, nil
-			}
-		}
-		// File changed or error, remove from cache
-		delete(fr.astCache, cleanPath)
+	if cached, exists := fr.astCache.GetWithFileValidation(cleanPath, cleanPath); exists {
+		return cached, nil
 	}
-	fr.mutex.RUnlock()
 
 	// Parse the file
 	file, err := parser.ParseFile(fr.fileSet, cleanPath, nil, parser.ParseComments)
@@ -73,24 +46,14 @@ func (fr *FileReader) ParseGoFile(filePath string) (*ast.File, error) {
 	}
 
 	// Cache the result
-	if stat, err := os.Stat(cleanPath); err == nil {
-		fr.mutex.Lock()
-		fr.astCache[cleanPath] = &cachedAST{
-			file:    file,
-			modTime: stat.ModTime(),
-			size:    stat.Size(),
-		}
-		fr.mutex.Unlock()
-	}
+	fr.astCache.SetWithFileInfo(cleanPath, file, cleanPath)
 
 	return file, nil
 }
 
 // ParseGoSource parses Go source code from a string
 func (fr *FileReader) ParseGoSource(filename, source string) (*ast.File, error) {
-	fr.mutex.RLock()
 	file, err := parser.ParseFile(fr.fileSet, filename, source, parser.ParseComments)
-	fr.mutex.RUnlock()
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse Go source: %w", err)
 	}
@@ -105,19 +68,9 @@ func (fr *FileReader) ReadFile(filePath string) (string, error) {
 	}
 
 	// Check cache first
-	fr.mutex.RLock()
-	if cached, exists := fr.contentCache[cleanPath]; exists {
-		// Check if file has been modified
-		if stat, err := os.Stat(cleanPath); err == nil {
-			if stat.ModTime().Equal(cached.modTime) && stat.Size() == cached.size {
-				fr.mutex.RUnlock()
-				return cached.content, nil
-			}
-		}
-		// File changed or error, remove from cache
-		delete(fr.contentCache, cleanPath)
+	if cached, exists := fr.contentCache.GetWithFileValidation(cleanPath, cleanPath); exists {
+		return cached, nil
 	}
-	fr.mutex.RUnlock()
 
 	content, err := os.ReadFile(cleanPath)
 	if err != nil {
@@ -127,15 +80,7 @@ func (fr *FileReader) ReadFile(filePath string) (string, error) {
 	contentStr := string(content)
 
 	// Cache the result
-	if stat, err := os.Stat(cleanPath); err == nil {
-		fr.mutex.Lock()
-		fr.contentCache[cleanPath] = &cachedContent{
-			content: contentStr,
-			modTime: stat.ModTime(),
-			size:    stat.Size(),
-		}
-		fr.mutex.Unlock()
-	}
+	fr.contentCache.SetWithFileInfo(cleanPath, contentStr, cleanPath)
 
 	return contentStr, nil
 }
@@ -147,10 +92,8 @@ func (fr *FileReader) GetFileSet() *token.FileSet {
 
 // ClearCache clears all cached files
 func (fr *FileReader) ClearCache() {
-	fr.mutex.Lock()
-	defer fr.mutex.Unlock()
-	fr.astCache = make(map[string]*cachedAST)
-	fr.contentCache = make(map[string]*cachedContent)
+	fr.astCache.Clear()
+	fr.contentCache.Clear()
 }
 
 // InvalidateFile removes a specific file from the cache
@@ -160,23 +103,19 @@ func (fr *FileReader) InvalidateFile(filePath string) {
 		return
 	}
 
-	fr.mutex.Lock()
-	delete(fr.astCache, cleanPath)
-	delete(fr.contentCache, cleanPath)
-	fr.mutex.Unlock()
+	fr.astCache.Delete(cleanPath)
+	fr.contentCache.Delete(cleanPath)
 }
 
 // GetCacheStats returns statistics about the cache
 func (fr *FileReader) GetCacheStats() (astFiles, contentFiles int) {
-	fr.mutex.RLock()
-	defer fr.mutex.RUnlock()
-	return len(fr.astCache), len(fr.contentCache)
+	return fr.astCache.Size(), fr.contentCache.Size()
 }
 
 // validateAndCleanPath validates and cleans a file path
 func (fr *FileReader) validateAndCleanPath(filePath string) (string, error) {
-	if filePath == "" {
-		return "", fmt.Errorf("file path cannot be empty")
+	if err := NotEmpty("filePath")(filePath); err != nil {
+		return "", fmt.Errorf("file path %w", err)
 	}
 
 	// Clean the path to prevent path traversal

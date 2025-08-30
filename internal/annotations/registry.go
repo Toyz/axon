@@ -3,6 +3,8 @@ package annotations
 import (
 	"fmt"
 	"sync"
+
+	"github.com/toyz/axon/internal/utils"
 )
 
 // AnnotationRegistry defines the interface for managing annotation schemas
@@ -22,14 +24,13 @@ type AnnotationRegistry interface {
 
 // registry is the concrete implementation of AnnotationRegistry
 type registry struct {
-	mu      sync.RWMutex                        // Protects concurrent access
-	schemas map[AnnotationType]AnnotationSchema // Schema storage
+	*utils.Registry[AnnotationType, AnnotationSchema]
 }
 
 // NewRegistry creates a new annotation registry
 func NewRegistry() AnnotationRegistry {
 	return &registry{
-		schemas: make(map[AnnotationType]AnnotationSchema),
+		Registry: utils.NewRegistry[AnnotationType, AnnotationSchema](),
 	}
 }
 
@@ -49,35 +50,32 @@ func DefaultRegistry() AnnotationRegistry {
 
 // Register adds a new annotation type with its schema to the registry
 func (r *registry) Register(annotationType AnnotationType, schema AnnotationSchema) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	validator := func(key AnnotationType, value AnnotationSchema, existing map[AnnotationType]AnnotationSchema) error {
+		// Validate that the schema type matches the annotation type
+		if value.Type != key {
+			return fmt.Errorf("schema type %s does not match annotation type %s", 
+				value.Type.String(), key.String())
+		}
 
-	// Validate that the schema type matches the annotation type
-	if schema.Type != annotationType {
-		return fmt.Errorf("schema type %s does not match annotation type %s", 
-			schema.Type.String(), annotationType.String())
+		// Check if already registered
+		if _, exists := existing[key]; exists {
+			return fmt.Errorf("annotation type %s is already registered", key.String())
+		}
+
+		// Validate schema parameters
+		if err := r.validateSchema(value); err != nil {
+			return fmt.Errorf("invalid schema for %s: %w", key.String(), err)
+		}
+
+		return nil
 	}
-
-	// Check if already registered
-	if _, exists := r.schemas[annotationType]; exists {
-		return fmt.Errorf("annotation type %s is already registered", annotationType.String())
-	}
-
-	// Validate schema parameters
-	if err := r.validateSchema(schema); err != nil {
-		return fmt.Errorf("invalid schema for %s: %w", annotationType.String(), err)
-	}
-
-	r.schemas[annotationType] = schema
-	return nil
+	
+	return r.Registry.RegisterWithValidator(annotationType, schema, validator)
 }
 
 // GetSchema retrieves the schema for an annotation type
 func (r *registry) GetSchema(annotationType AnnotationType) (AnnotationSchema, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	schema, exists := r.schemas[annotationType]
+	schema, exists := r.Registry.Get(annotationType)
 	if !exists {
 		return AnnotationSchema{}, fmt.Errorf("annotation type %s is not registered", annotationType.String())
 	}
@@ -87,24 +85,12 @@ func (r *registry) GetSchema(annotationType AnnotationType) (AnnotationSchema, e
 
 // ListTypes returns all registered annotation types
 func (r *registry) ListTypes() []AnnotationType {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	types := make([]AnnotationType, 0, len(r.schemas))
-	for annotationType := range r.schemas {
-		types = append(types, annotationType)
-	}
-
-	return types
+	return r.Registry.List()
 }
 
 // IsRegistered checks if an annotation type is registered
 func (r *registry) IsRegistered(annotationType AnnotationType) bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	_, exists := r.schemas[annotationType]
-	return exists
+	return r.Registry.Has(annotationType)
 }
 
 // validateSchema performs basic validation on a schema

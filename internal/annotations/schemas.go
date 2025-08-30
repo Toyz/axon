@@ -2,7 +2,6 @@ package annotations
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/toyz/axon/internal/utils"
 )
@@ -198,21 +197,16 @@ func GetBuiltinSchemas() []AnnotationSchema {
 
 // ValidateRouteParameters is a custom validator for route annotations
 func ValidateRouteParameters(annotation *ParsedAnnotation) error {
-	// Ensure method and path are provided
+	// Validate method parameter
 	method := annotation.GetString("method")
+	if err := utils.ValidateHTTPMethod("method")(method); err != nil {
+		return fmt.Errorf("route annotation: %w", err)
+	}
+
+	// Validate path parameter
 	path := annotation.GetString("path")
-
-	if method == "" {
-		return fmt.Errorf("route annotation requires method parameter")
-	}
-
-	if path == "" {
-		return fmt.Errorf("route annotation requires path parameter")
-	}
-
-	// Validate path format
-	if !strings.HasPrefix(path, "/") {
-		return fmt.Errorf("route path must start with '/', got '%s'", path)
+	if err := utils.ValidateURLPath("path")(path); err != nil {
+		return fmt.Errorf("route annotation: %w", err)
 	}
 
 	return nil
@@ -222,13 +216,9 @@ func ValidateRouteParameters(annotation *ParsedAnnotation) error {
 func ValidateMiddlewareParameters(annotation *ParsedAnnotation) error {
 	// If Routes is specified, validate the patterns
 	if routes := annotation.GetStringSlice("Routes"); routes != nil {
-		for _, route := range routes {
-			if route == "" {
-				return fmt.Errorf("middleware route pattern cannot be empty")
-			}
-			if !strings.HasPrefix(route, "/") {
-				return fmt.Errorf("middleware route pattern must start with '/', got '%s'", route)
-			}
+		validator := utils.ValidateEach("Routes", utils.ValidateMiddlewareRoute("route"))
+		if err := validator(routes); err != nil {
+			return fmt.Errorf("middleware annotation: %w", err)
 		}
 	}
 

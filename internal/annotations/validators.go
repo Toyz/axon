@@ -3,6 +3,8 @@ package annotations
 import (
 	"fmt"
 	"strings"
+
+	"github.com/toyz/axon/internal/utils"
 )
 
 // Common validation functions to eliminate duplication
@@ -173,13 +175,14 @@ func ValidateConstructor(value interface{}) error {
 		return fmt.Errorf("constructor must be a string")
 	}
 
-	if constructor == "" {
-		return fmt.Errorf("constructor cannot be empty")
-	}
-
-	// Check if it's a valid Go function name
-	if !isValidGoIdentifier(constructor) {
-		return fmt.Errorf("constructor must be a valid Go function name")
+	// Use the validation framework for constructor validation
+	validator := utils.NewValidatorChain(
+		utils.NotEmpty("constructor"),
+		utils.IsValidGoIdentifier("constructor"),
+	)
+	
+	if err := validator.Validate(constructor); err != nil {
+		return err
 	}
 
 	// Convention: constructor functions should start with "New" or similar
