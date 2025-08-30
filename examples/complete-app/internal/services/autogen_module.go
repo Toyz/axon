@@ -24,6 +24,23 @@ type CrawlerServiceInterface interface {
 	Stop(ctx context.Context) error
 }
 
+func NewDatabaseService(Config *config.Config) *DatabaseService {
+	return &DatabaseService{
+		Config: Config,
+	}
+}
+
+func initDatabaseServiceLifecycle(lc fx.Lifecycle, service *DatabaseService) {
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			return service.Start(ctx)
+		},
+		OnStop: func(ctx context.Context) error {
+			return service.Stop(ctx)
+		},
+	})
+}
+
 // NewSessionServiceFactory creates a factory function for SessionService (Transient mode)
 func NewSessionServiceFactory(DatabaseService *DatabaseService) func() *SessionService {
 	return func() *SessionService {
@@ -70,23 +87,6 @@ func initCrawlerServiceLifecycle(lc fx.Lifecycle, service *CrawlerService) {
 	})
 }
 
-func NewDatabaseService(Config *config.Config) *DatabaseService {
-	return &DatabaseService{
-		Config: Config,
-	}
-}
-
-func initDatabaseServiceLifecycle(lc fx.Lifecycle, service *DatabaseService) {
-	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			return service.Start(ctx)
-		},
-		OnStop: func(ctx context.Context) error {
-			return service.Stop(ctx)
-		},
-	})
-}
-
 func NewNotificationServiceInterface(impl *NotificationService) NotificationServiceInterface {
 	return impl
 }
@@ -97,14 +97,14 @@ func NewCrawlerServiceInterface(impl *CrawlerService) CrawlerServiceInterface {
 
 // AutogenModule provides all core services in this package
 var AutogenModule = fx.Module("services",
+	fx.Provide(NewDatabaseService),
+	fx.Invoke(initDatabaseServiceLifecycle),
 	fx.Provide(NewCustomNotificationService),
 	fx.Provide(NewSessionServiceFactory),
 	fx.Provide(NewUserService),
 	fx.Invoke(initUserServiceLifecycle),
 	fx.Provide(NewCrawlerService),
 	fx.Invoke(initCrawlerServiceLifecycle),
-	fx.Provide(NewDatabaseService),
-	fx.Invoke(initDatabaseServiceLifecycle),
 	fx.Provide(NewNotificationServiceInterface),
 	fx.Provide(NewCrawlerServiceInterface),
 )

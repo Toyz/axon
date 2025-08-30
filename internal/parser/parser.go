@@ -1526,44 +1526,8 @@ func (p *Parser) parseParameterDefinition(paramDef string, isEchoSyntax bool) (m
 
 // parseDirectoryFiles parses all Go files in a directory using cached FileReader
 func (p *Parser) parseDirectoryFiles(dirPath string) (map[string]*ast.File, string, error) {
-	// Read directory contents
-	entries, err := os.ReadDir(dirPath)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to read directory: %w", err)
-	}
-
-	files := make(map[string]*ast.File)
-	var packageName string
-
-	// Parse each .go file using cached FileReader
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
-			continue
-		}
-
-		filePath := filepath.Join(dirPath, entry.Name())
-
-		// Use cached ParseGoFile instead of parsing directly
-		file, err := p.fileReader.ParseGoFile(filePath)
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to parse file %s: %w", entry.Name(), err)
-		}
-
-		// Verify all files belong to the same package
-		if packageName == "" {
-			packageName = file.Name.Name
-		} else if file.Name.Name != packageName {
-			return nil, "", fmt.Errorf("multiple packages found in directory: %s and %s", packageName, file.Name.Name)
-		}
-
-		files[filePath] = file
-	}
-
-	if len(files) == 0 {
-		return nil, "", fmt.Errorf("no Go files found in directory")
-	}
-
-	return files, packageName, nil
+	fileProcessor := utils.NewFileProcessorWithReader(p.fileReader)
+	return fileProcessor.ParseDirectoryFiles(dirPath)
 }
 
 // extractParametersFromPath extracts parameters from a URL path (e.g., /users/{id:int})

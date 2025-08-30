@@ -1,103 +1,96 @@
 package cli
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-
 	"github.com/toyz/axon/internal/utils"
 )
 
 // Cleaner handles cleaning up generated files
 type Cleaner struct {
-	scanner *DirectoryScanner
+	scanner       *DirectoryScanner
+	fileProcessor *utils.FileProcessor
 }
 
 // NewCleaner creates a new cleaner
 func NewCleaner() *Cleaner {
 	return &Cleaner{
-		scanner: NewDirectoryScanner(),
+		scanner:       NewDirectoryScanner(),
+		fileProcessor: utils.NewFileProcessor(),
 	}
 }
 
 // CleanGeneratedFiles removes all autogen_module.go files from the specified directories
 func (c *Cleaner) CleanGeneratedFiles(directories []string) error {
-	var removedFiles []string
-
-	for _, dir := range directories {
-		err := c.cleanDirectory(dir, &removedFiles)
-		if err != nil {
-			return utils.WrapProcessError(fmt.Sprintf("directory %s", dir), err)
-		}
-	}
-
-	return nil
-}
-
-// cleanDirectory recursively cleans a single directory
-func (c *Cleaner) cleanDirectory(dir string, removedFiles *[]string) error {
-	// Handle Go-style patterns like ./...
-	if strings.HasSuffix(dir, "/...") {
-		baseDir := strings.TrimSuffix(dir, "/...")
-		if baseDir == "." {
-			baseDir = ""
-		}
-		return c.cleanRecursively(baseDir, removedFiles)
-	}
-
-	// Clean specific directory
-	return c.cleanSingleDirectory(dir, removedFiles)
-}
-
-// cleanRecursively cleans directories recursively
-func (c *Cleaner) cleanRecursively(baseDir string, removedFiles *[]string) error {
-	startDir := "."
-	if baseDir != "" {
-		startDir = baseDir
-	}
-
-	return filepath.Walk(startDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			// Skip directories that don't exist or can't be accessed
-			return nil
-		}
-
-		if info.IsDir() {
-			err := c.cleanSingleDirectory(path, removedFiles)
-			if err != nil {
-				// Log error but continue with other directories
-				return nil
-			}
-		}
-
-		return nil
-	})
-}
-
-// cleanSingleDirectory cleans a single directory
-func (c *Cleaner) cleanSingleDirectory(dir string, removedFiles *[]string) error {
-	// Skip if directory doesn't exist
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		return nil
-	}
-
-	autogenFile := filepath.Join(dir, "autogen_module.go")
-
-	// Check if the file exists
-	if _, err := os.Stat(autogenFile); err != nil {
-		if os.IsNotExist(err) {
-			return nil // File doesn't exist, nothing to clean
-		}
-		return utils.WrapProcessError(fmt.Sprintf("file check %s", autogenFile), err)
-	}
-
-	// Remove the file
-	err := os.Remove(autogenFile)
+	// Expand directory patterns (like ./...) to actual directories
+	expandedDirs, err := c.expandDirectoryPatterns(directories)
 	if err != nil {
-		return utils.WrapProcessError(fmt.Sprintf("file removal %s", autogenFile), err)
+		return err
 	}
+	
+	// Clean the expanded directories
+	_, err = c.fileProcessor.CleanDirectories(expandedDirs)
+	return err
+}
 
-	*removedFiles = append(*removedFiles, autogenFile)
-	return nil
+// expandDirectoryPatterns expands directory patterns like "./..." to actual directories
+func (c *Cleaner) expandDirectoryPatterns(directories []string) ([]string, error) {
+	var expandedDirs []string
+	
+	for _, dir := range directories {
+		if strings.HasSuffix(dir, "/...") {
+			// Handle recursive pattern
+			baseDir := strings.TrimSuffix(dir, "/...")
+			if baseDir == "" {
+				baseDir = "."
+			}
+			
+			// Get all directories recursively
+			err := filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
+				if err != nil {
+					return nil // Skip directories that can't be accessed
+				}
+				
+				if info.IsDir() {
+					// Apply directory filter to skip unwanted directories
+					dirFilter := c.fileProcessor.GetDirectoryFilter()
+					if dirFilter != nil {
+						// Create a DirEntry from FileInfo for the filter
+						dirEntry := &fileInfoDirEntry{info}
+						if !dirFilter(path, dirEntry) {
+							if path != baseDir { // Don't skip the base directory itself
+								return filepath.SkipDir
+							}
+						}
+					}
+					expandedDirs = append(expandedDirs, path)
+				}
+				
+				return nil
+			})
+			
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			// Regular directory path
+			expandedDirs = append(expandedDirs, dir)
+		}
+	}
+	
+	return expandedDirs, nil
+}
+
+// fileInfoDirEntry adapts os.FileInfo to os.DirEntry interface
+type fileInfoDirEntry struct {
+	os.FileInfo
+}
+
+func (f *fileInfoDirEntry) Type() os.FileMode {
+	return f.FileInfo.Mode().Type()
+}
+
+func (f *fileInfoDirEntry) Info() (os.FileInfo, error) {
+	return f.FileInfo, nil
 }

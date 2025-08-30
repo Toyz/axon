@@ -7,7 +7,19 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/toyz/axon/internal/utils"
 )
+
+// mockDirEntry implements os.DirEntry for testing
+type mockDirEntry struct {
+	name  string
+	isDir bool
+}
+
+func (m *mockDirEntry) Name() string               { return m.name }
+func (m *mockDirEntry) IsDir() bool                { return m.isDir }
+func (m *mockDirEntry) Type() os.FileMode          { return 0 }
+func (m *mockDirEntry) Info() (os.FileInfo, error) { return nil, nil }
 
 func TestDirectoryScanner_ScanDirectories(t *testing.T) {
 	// Create temporary directory structure for testing
@@ -176,7 +188,7 @@ func TestDirectoryScanner_hasGoFiles(t *testing.T) {
 		goFile := filepath.Join(tempDir, "main.go")
 		require.NoError(t, os.WriteFile(goFile, []byte("package main"), 0644))
 
-		hasGo, err := scanner.hasGoFiles(tempDir)
+		hasGo, err := scanner.fileProcessor.HasGoFiles(tempDir)
 		require.NoError(t, err)
 		assert.True(t, hasGo)
 	})
@@ -188,7 +200,7 @@ func TestDirectoryScanner_hasGoFiles(t *testing.T) {
 		testFile := filepath.Join(testDir, "main_test.go")
 		require.NoError(t, os.WriteFile(testFile, []byte("package main"), 0644))
 
-		hasGo, err := scanner.hasGoFiles(testDir)
+		hasGo, err := scanner.fileProcessor.HasGoFiles(testDir)
 		require.NoError(t, err)
 		assert.False(t, hasGo)
 	})
@@ -200,7 +212,7 @@ func TestDirectoryScanner_hasGoFiles(t *testing.T) {
 		autogenFile := filepath.Join(autogenDir, "autogen_module.go")
 		require.NoError(t, os.WriteFile(autogenFile, []byte("package main"), 0644))
 
-		hasGo, err := scanner.hasGoFiles(autogenDir)
+		hasGo, err := scanner.fileProcessor.HasGoFiles(autogenDir)
 		require.NoError(t, err)
 		assert.False(t, hasGo)
 	})
@@ -209,15 +221,13 @@ func TestDirectoryScanner_hasGoFiles(t *testing.T) {
 		emptyDir := filepath.Join(tempDir, "empty")
 		require.NoError(t, os.MkdirAll(emptyDir, 0755))
 
-		hasGo, err := scanner.hasGoFiles(emptyDir)
+		hasGo, err := scanner.fileProcessor.HasGoFiles(emptyDir)
 		require.NoError(t, err)
 		assert.False(t, hasGo)
 	})
 }
 
 func TestDirectoryScanner_shouldSkipDirectory(t *testing.T) {
-	scanner := NewDirectoryScanner()
-
 	testCases := []struct {
 		name     string
 		dirname  string
@@ -235,7 +245,11 @@ func TestDirectoryScanner_shouldSkipDirectory(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := scanner.shouldSkipDirectory(tc.dirname)
+			// Test using the default directory filter
+			filter := utils.DefaultDirectoryFilter()
+			// Create a mock DirEntry for testing
+			mockEntry := &mockDirEntry{name: tc.dirname, isDir: true}
+			result := !filter("", mockEntry) // Invert because filter returns true for allowed dirs
 			assert.Equal(t, tc.expected, result)
 		})
 	}
