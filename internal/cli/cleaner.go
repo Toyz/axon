@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/toyz/axon/internal/utils"
 )
 
 // Cleaner handles cleaning up generated files
@@ -26,7 +28,7 @@ func (c *Cleaner) CleanGeneratedFiles(directories []string) error {
 	for _, dir := range directories {
 		err := c.cleanDirectory(dir, &removedFiles)
 		if err != nil {
-			return fmt.Errorf("failed to clean directory %s: %w", dir, err)
+			return utils.WrapProcessError(fmt.Sprintf("directory %s", dir), err)
 		}
 	}
 
@@ -87,13 +89,13 @@ func (c *Cleaner) cleanSingleDirectory(dir string, removedFiles *[]string) error
 		if os.IsNotExist(err) {
 			return nil // File doesn't exist, nothing to clean
 		}
-		return fmt.Errorf("failed to check file %s: %w", autogenFile, err)
+		return utils.WrapProcessError(fmt.Sprintf("file check %s", autogenFile), err)
 	}
 
 	// Remove the file
 	err := os.Remove(autogenFile)
 	if err != nil {
-		return fmt.Errorf("failed to remove file %s: %w", autogenFile, err)
+		return utils.WrapProcessError(fmt.Sprintf("file removal %s", autogenFile), err)
 	}
 
 	*removedFiles = append(*removedFiles, autogenFile)

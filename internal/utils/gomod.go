@@ -31,13 +31,13 @@ func (p *GoModParser) ParseModuleName(goModPath string) (string, error) {
 	// Use cached file reading
 	content, err := p.fileReader.ReadFile(cleanPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to read go.mod file: %w", err)
+		return "", WrapProcessError("go.mod file read", err)
 	}
 
 	// Parse using official modfile parser
 	modFile, err := modfile.Parse(cleanPath, []byte(content), nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse go.mod file: %w", err)
+		return "", WrapParseError("go.mod file", err)
 	}
 
 	if modFile.Module == nil {

@@ -244,7 +244,7 @@ func (g *Generator) Run(config Config) error {
 	// Build global parser registry and register with code generator
 	err = g.buildGlobalParserRegistry()
 	if err != nil {
-		return fmt.Errorf("failed to build global parser registry: %w", err)
+		return utils.WrapProcessError("global parser registry build", err)
 	}
 
 	g.summary.ParsersDiscovered = len(g.globalParsers)
@@ -393,7 +393,7 @@ func (g *Generator) Run(config Config) error {
 		// Build package import path for module references
 		packageImportPath, err := g.moduleResolver.BuildPackagePath(moduleName, packageDir)
 		if err != nil {
-			return fmt.Errorf("failed to build package path for %s: %w", packageDir, err)
+			return utils.WrapProcessError(fmt.Sprintf("package path build for %s", packageDir), err)
 		}
 
 		// Keep the original directory path for file generation
@@ -516,7 +516,7 @@ func (g *Generator) writeModuleFile(module *models.GeneratedModule) error {
 	// Create directory if it doesn't exist
 	dir := filepath.Dir(module.FilePath)
 	if err := g.ensureDirectory(dir); err != nil {
-		return fmt.Errorf("failed to create directory %s: %w", dir, err)
+		return utils.WrapCreateError(fmt.Sprintf("directory %s", dir), err)
 	}
 
 	// Write the file
@@ -551,7 +551,7 @@ func (g *Generator) collectParsersFromPackage(metadata *models.PackageMetadata, 
 		// Resolve import path for this parser
 		importPath, err := g.resolveParserImportPath(moduleName, packageDir, metadata.PackageName)
 		if err != nil {
-			return fmt.Errorf("failed to resolve import path for parser %s: %w", parser.FunctionName, err)
+			return utils.WrapProcessError(fmt.Sprintf("import path resolution for parser %s", parser.FunctionName), err)
 		}
 
 		// Create enhanced parser metadata with package path
@@ -690,7 +690,7 @@ func (g *Generator) resolveParserImportPath(moduleName, packageDir, packageName 
 		// Use the module resolver to build the proper package path
 		importPath, err := g.moduleResolver.BuildPackagePath(moduleName, packageDir)
 		if err != nil {
-			return "", fmt.Errorf("failed to build package path: %w", err)
+			return "", utils.WrapProcessError("package path build", err)
 		}
 		return importPath, nil
 	}

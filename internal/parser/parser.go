@@ -102,7 +102,7 @@ func (p *Parser) ParseSource(filename, source string) (*models.PackageMetadata, 
 	// Extract annotations
 	annotations, err := p.ExtractAnnotations(file, filename)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract annotations: %w", err)
+		return nil, utils.WrapProcessError("annotation extraction", err)
 	}
 
 	// Create file map
@@ -113,7 +113,7 @@ func (p *Parser) ParseSource(filename, source string) (*models.PackageMetadata, 
 	// Process annotations
 	err = p.processAnnotations(annotations, metadata, fileMap)
 	if err != nil {
-		return nil, fmt.Errorf("failed to process annotations: %w", err)
+		return nil, utils.WrapProcessError("annotation processing", err)
 	}
 
 	return metadata, nil
@@ -165,7 +165,7 @@ func (p *Parser) ParseDirectory(path string) (*models.PackageMetadata, error) {
 		// Extract annotations from this file
 		annotations, err := p.ExtractAnnotations(file, fileName)
 		if err != nil {
-			return nil, fmt.Errorf("failed to extract annotations from file %s: %w", fileName, err)
+			return nil, utils.WrapProcessError(fmt.Sprintf("annotation extraction from file %s", fileName), err)
 		}
 		allAnnotations = append(allAnnotations, annotations...)
 	}
@@ -173,7 +173,7 @@ func (p *Parser) ParseDirectory(path string) (*models.PackageMetadata, error) {
 	// Second pass: Process all annotations to build metadata structures
 	err = p.processAnnotations(allAnnotations, metadata, fileMap)
 	if err != nil {
-		return nil, fmt.Errorf("failed to process annotations: %w", err)
+		return nil, utils.WrapProcessError("annotation processing", err)
 	}
 
 	// Third pass: Validate middleware Handle methods in their respective files

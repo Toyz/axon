@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/toyz/axon/internal/utils"
 )
 
 // DirectoryScanner handles recursive directory scanning for Go files
@@ -33,13 +35,13 @@ func (s *DirectoryScanner) ScanDirectories(rootDirs []string) ([]string, error) 
 			// Clean and resolve the base path
 			cleanPath, err := filepath.Abs(baseDir)
 			if err != nil {
-				return nil, fmt.Errorf("failed to resolve path %s: %w", baseDir, err)
+				return nil, utils.WrapProcessError(fmt.Sprintf("path resolution %s", baseDir), err)
 			}
 
 			// Recursively scan this directory
 			dirs, err := s.scanDirectory(cleanPath, visited)
 			if err != nil {
-				return nil, fmt.Errorf("failed to scan directory %s: %w", baseDir, err)
+				return nil, utils.WrapProcessError(fmt.Sprintf("directory scan %s", baseDir), err)
 			}
 
 			packageDirs = append(packageDirs, dirs...)
@@ -47,13 +49,13 @@ func (s *DirectoryScanner) ScanDirectories(rootDirs []string) ([]string, error) 
 			// Clean and resolve the path
 			cleanPath, err := filepath.Abs(rootDir)
 			if err != nil {
-				return nil, fmt.Errorf("failed to resolve path %s: %w", rootDir, err)
+				return nil, utils.WrapProcessError(fmt.Sprintf("path resolution %s", rootDir), err)
 			}
 
 			// For specific directories (not using ./...), scan recursively
 			dirs, err := s.scanDirectory(cleanPath, visited)
 			if err != nil {
-				return nil, fmt.Errorf("failed to scan directory %s: %w", rootDir, err)
+				return nil, utils.WrapProcessError(fmt.Sprintf("directory scan %s", rootDir), err)
 			}
 
 			packageDirs = append(packageDirs, dirs...)
@@ -76,7 +78,7 @@ func (s *DirectoryScanner) scanDirectory(dir string, visited map[string]bool) ([
 	// Check if this directory contains Go files
 	hasGoFiles, err := s.hasGoFiles(dir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to check for Go files in %s: %w", dir, err)
+		return nil, utils.WrapProcessError(fmt.Sprintf("Go file check in %s", dir), err)
 	}
 
 	// If this directory has Go files, include it
@@ -87,7 +89,7 @@ func (s *DirectoryScanner) scanDirectory(dir string, visited map[string]bool) ([
 	// Recursively scan subdirectories
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read directory %s: %w", dir, err)
+		return nil, utils.WrapProcessError(fmt.Sprintf("directory read %s", dir), err)
 	}
 
 	for _, entry := range entries {

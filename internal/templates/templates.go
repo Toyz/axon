@@ -77,7 +77,7 @@ func GenerateRouteRegistrationFunction(data RouteRegistrationData) (string, erro
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("failed to execute route registration template: %w", err)
+		return "", utils.WrapProcessError("route registration template", err)
 	}
 
 	return buf.String(), nil
@@ -256,14 +256,19 @@ func getParameterSourceString(source models.ParameterSource) string {
 	}
 }
 
-// CoreServiceProviderData represents data needed for core service provider generation
-type CoreServiceProviderData struct {
+// BaseProviderData represents common data needed for provider generation
+type BaseProviderData struct {
 	StructName   string
 	Dependencies []DependencyData // All dependencies (for struct initialization)
 	InjectedDeps []DependencyData // Only injected dependencies (for function parameters)
 	HasStart     bool
 	HasStop      bool
-	StartMode    string // lifecycle start mode: "Same" (default) or "Background"
+}
+
+// CoreServiceProviderData represents data needed for core service provider generation
+type CoreServiceProviderData struct {
+	BaseProviderData
+	StartMode string // lifecycle start mode: "Same" (default) or "Background"
 }
 
 // DependencyData represents a dependency for template generation
@@ -280,6 +285,23 @@ func toCamelCase(s string) string {
 		return s
 	}
 	return strings.ToLower(s[:1]) + s[1:]
+}
+
+// generateImports creates an import block with the specified packages
+func generateImports(packages ...string) string {
+	if len(packages) == 0 {
+		return ""
+	}
+	
+	var builder strings.Builder
+	builder.WriteString("import (\n")
+	
+	for _, pkg := range packages {
+		builder.WriteString(fmt.Sprintf("\t\"%s\"\n", pkg))
+	}
+	
+	builder.WriteString(")\n\n")
+	return builder.String()
 }
 
 // generateInitCode generates initialization code for a given type
@@ -385,11 +407,13 @@ func GenerateCoreServiceProvider(service models.CoreServiceMetadata) (string, er
 	}
 
 	data := CoreServiceProviderData{
-		StructName:   service.StructName,
-		Dependencies: dependencies,
-		InjectedDeps: injectedDeps,
-		HasStart:     service.HasStart,
-		HasStop:      service.HasStop,
+		BaseProviderData: BaseProviderData{
+			StructName:   service.StructName,
+			Dependencies: dependencies,
+			InjectedDeps: injectedDeps,
+			HasStart:     service.HasStart,
+			HasStop:      service.HasStop,
+		},
 	}
 
 	// Handle different lifecycle modes
@@ -427,10 +451,12 @@ func GenerateInitInvokeFunction(service models.CoreServiceMetadata) (string, err
 	}
 
 	data := CoreServiceProviderData{
-		StructName: service.StructName,
-		HasStart:   service.HasStart,
-		HasStop:    service.HasStop,
-		StartMode:  service.StartMode,
+		BaseProviderData: BaseProviderData{
+			StructName: service.StructName,
+			HasStart:   service.HasStart,
+			HasStop:    service.HasStop,
+		},
+		StartMode: service.StartMode,
 	}
 
 	return executeTemplate("init-invoke", InitInvokeTemplate, data)
@@ -462,11 +488,7 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 	moduleBuilder.WriteString(fmt.Sprintf("package %s\n\n", metadata.PackageName))
 
 	// Generate minimal imports - goimports will handle the rest
-	moduleBuilder.WriteString("import (\n")
-	moduleBuilder.WriteString("\t\"context\"\n")
-	moduleBuilder.WriteString("\n")
-	moduleBuilder.WriteString("\t\"go.uber.org/fx\"\n")
-	moduleBuilder.WriteString(")\n\n")
+	moduleBuilder.WriteString(generateImports("context", "go.uber.org/fx"))
 	// Generate all code content first, then analyze imports
 	var contentBuilder strings.Builder
 
@@ -588,7 +610,7 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 
 		provider, err := GenerateLoggerProvider(logger)
 		if err != nil {
-			return "", fmt.Errorf("failed to generate provider for logger %s: %w", logger.Name, err)
+			return "", utils.WrapGenerateError(fmt.Sprintf("provider for logger %s", logger.Name), err)
 		}
 
 		if provider != "" {
@@ -601,7 +623,7 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 	for _, iface := range metadata.Interfaces {
 		providerCode, err := GenerateInterfaceProvider(iface)
 		if err != nil {
-			return "", fmt.Errorf("failed to generate interface provider %s: %w", iface.Name, err)
+			return "", utils.WrapGenerateError(fmt.Sprintf("interface provider %s", iface.Name), err)
 		}
 
 		contentBuilder.WriteString(providerCode)
@@ -711,9 +733,7 @@ func GenerateInterface(iface models.InterfaceMetadata) (string, error) {
 	builder.WriteString(fmt.Sprintf("package %s\n\n", packageName))
 
 	// Generate minimal imports
-	builder.WriteString("import (\n")
-	builder.WriteString("\t\"go.uber.org/fx\"\n")
-	builder.WriteString(")\n\n")
+	builder.WriteString(generateImports("go.uber.org/fx"))
 
 	return generateInterfaceContent(iface, &builder)
 }
@@ -758,12 +778,8 @@ func generateInterfaceContent(iface models.InterfaceMetadata, builder *strings.B
 
 // LoggerProviderData represents data needed for logger provider generation
 type LoggerProviderData struct {
-	StructName   string
-	Dependencies []DependencyData
-	InjectedDeps []DependencyData
-	HasStart     bool
-	HasStop      bool
-	ConfigParam  string // Name of the config parameter
+	BaseProviderData
+	ConfigParam string // Name of the config parameter
 }
 
 // GenerateLoggerProvider generates FX provider code for a logger
@@ -807,54 +823,64 @@ func GenerateLoggerProvider(logger models.LoggerMetadata) (string, error) {
 		if logger.HasLifecycle {
 			// Use lifecycle logger template
 			data := LoggerProviderData{
-				StructName:   logger.StructName,
-				Dependencies: dependencies,
-				InjectedDeps: injectedDeps,
-				HasStart:     logger.HasStart,
-				HasStop:      logger.HasStop,
-				ConfigParam:  configParam,
+				BaseProviderData: BaseProviderData{
+					StructName:   logger.StructName,
+					Dependencies: dependencies,
+					InjectedDeps: injectedDeps,
+					HasStart:     logger.HasStart,
+					HasStop:      logger.HasStop,
+				},
+				ConfigParam: configParam,
 			}
 			return executeTemplate("logger-provider", LoggerProviderTemplate, data)
 		} else {
 			// Use simple logger template without lifecycle
 			data := LoggerProviderData{
-				StructName:   logger.StructName,
-				Dependencies: dependencies,
-				InjectedDeps: injectedDeps,
-				HasStart:     logger.HasStart,
-				HasStop:      logger.HasStop,
-				ConfigParam:  configParam,
+				BaseProviderData: BaseProviderData{
+					StructName:   logger.StructName,
+					Dependencies: dependencies,
+					InjectedDeps: injectedDeps,
+					HasStart:     logger.HasStart,
+					HasStop:      logger.HasStop,
+				},
+				ConfigParam: configParam,
 			}
 			return executeTemplate("simple-logger-provider", SimpleLoggerProviderTemplate, data)
 		}
 	} else if logger.HasLifecycle {
 		// Use FX lifecycle template for other loggers with lifecycle
 		data := CoreServiceProviderData{
-			StructName:   logger.StructName,
-			Dependencies: dependencies,
-			InjectedDeps: injectedDeps,
-			HasStart:     logger.HasStart,
-			HasStop:      logger.HasStop,
+			BaseProviderData: BaseProviderData{
+				StructName:   logger.StructName,
+				Dependencies: dependencies,
+				InjectedDeps: injectedDeps,
+				HasStart:     logger.HasStart,
+				HasStop:      logger.HasStop,
+			},
 		}
 		return executeTemplate("fx-lifecycle-provider", FXLifecycleProviderTemplate, data)
 	} else if len(logger.Dependencies) > 0 {
 		// Use regular provider template for loggers with dependencies
 		data := CoreServiceProviderData{
-			StructName:   logger.StructName,
-			Dependencies: dependencies,
-			InjectedDeps: injectedDeps,
-			HasStart:     logger.HasStart,
-			HasStop:      logger.HasStop,
+			BaseProviderData: BaseProviderData{
+				StructName:   logger.StructName,
+				Dependencies: dependencies,
+				InjectedDeps: injectedDeps,
+				HasStart:     logger.HasStart,
+				HasStop:      logger.HasStop,
+			},
 		}
 		return executeTemplate("provider", ProviderTemplate, data)
 	} else {
 		// Use FX provider template for loggers with no dependencies
 		data := CoreServiceProviderData{
-			StructName:   logger.StructName,
-			Dependencies: dependencies,
-			InjectedDeps: injectedDeps,
-			HasStart:     logger.HasStart,
-			HasStop:      logger.HasStop,
+			BaseProviderData: BaseProviderData{
+				StructName:   logger.StructName,
+				Dependencies: dependencies,
+				InjectedDeps: injectedDeps,
+				HasStart:     logger.HasStart,
+				HasStop:      logger.HasStop,
+			},
 		}
 		return executeTemplate("fx-provider", FXProviderTemplate, data)
 	}
@@ -886,7 +912,7 @@ func executeTemplate(name, templateStr string, data interface{}) (string, error)
 	var buf bytes.Buffer
 	err = tmpl.Execute(&buf, data)
 	if err != nil {
-		return "", fmt.Errorf("failed to execute template %s: %w", name, err)
+		return "", utils.WrapProcessError(fmt.Sprintf("template %s", name), err)
 	}
 
 	return buf.String(), nil
@@ -961,7 +987,7 @@ func GenerateMiddlewareModule(metadata *models.PackageMetadata) (string, error) 
 	for _, middleware := range metadata.Middlewares {
 		providerCode, err := GenerateMiddlewareProvider(middleware)
 		if err != nil {
-			return "", fmt.Errorf("failed to generate provider for middleware %s: %w", middleware.Name, err)
+			return "", utils.WrapGenerateError(fmt.Sprintf("provider for middleware %s", middleware.Name), err)
 		}
 		contentBuilder.WriteString(providerCode)
 		contentBuilder.WriteString("\n")
@@ -970,7 +996,7 @@ func GenerateMiddlewareModule(metadata *models.PackageMetadata) (string, error) 
 	// Generate middleware registration function
 	registrationCode, err := GenerateMiddlewareRegistry(metadata.Middlewares)
 	if err != nil {
-		return "", fmt.Errorf("failed to generate middleware registration: %w", err)
+		return "", utils.WrapGenerateError("middleware registration", err)
 	}
 	contentBuilder.WriteString(registrationCode)
 	contentBuilder.WriteString("\n")
@@ -987,7 +1013,7 @@ func GenerateMiddlewareModule(metadata *models.PackageMetadata) (string, error) 
 	if hasGlobalMiddleware {
 		globalRegistrationCode, err := GenerateGlobalMiddlewareRegistration(metadata.Middlewares)
 		if err != nil {
-			return "", fmt.Errorf("failed to generate global middleware registration: %w", err)
+			return "", utils.WrapGenerateError("global middleware registration", err)
 		}
 		contentBuilder.WriteString(globalRegistrationCode)
 		contentBuilder.WriteString("\n")
@@ -1022,9 +1048,7 @@ func GenerateMiddlewareModule(metadata *models.PackageMetadata) (string, error) 
 	moduleBuilder.WriteString(fmt.Sprintf("package %s\n\n", metadata.PackageName))
 
 	// Generate minimal imports - goimports will handle the rest
-	moduleBuilder.WriteString("import (\n")
-	moduleBuilder.WriteString("\t\"go.uber.org/fx\"\n")
-	moduleBuilder.WriteString(")\n\n")
+	moduleBuilder.WriteString(generateImports("go.uber.org/fx"))
 
 	moduleBuilder.WriteString(generatedContent)
 

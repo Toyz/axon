@@ -248,11 +248,13 @@ func (g *Generator) generateControllerProvider(controller models.ControllerMetad
 	}
 
 	data := templates.CoreServiceProviderData{
-		StructName:   controller.StructName,
-		Dependencies: deps,
-		InjectedDeps: injectedDeps,
-		HasStart:     false,
-		HasStop:      false,
+		BaseProviderData: templates.BaseProviderData{
+			StructName:   controller.StructName,
+			Dependencies: deps,
+			InjectedDeps: injectedDeps,
+			HasStart:     false,
+			HasStop:      false,
+		},
 	}
 
 	return templates.ExecuteTemplate("controller-provider", templates.ProviderTemplate, data)

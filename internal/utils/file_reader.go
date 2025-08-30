@@ -42,7 +42,7 @@ func (fr *FileReader) ParseGoFile(filePath string) (*ast.File, error) {
 	// Parse the file
 	file, err := parser.ParseFile(fr.fileSet, cleanPath, nil, parser.ParseComments)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse Go file %s: %w", filepath.Base(cleanPath), err)
+		return nil, WrapParseError(fmt.Sprintf("Go file %s", filepath.Base(cleanPath)), err)
 	}
 
 	// Cache the result
@@ -55,7 +55,7 @@ func (fr *FileReader) ParseGoFile(filePath string) (*ast.File, error) {
 func (fr *FileReader) ParseGoSource(filename, source string) (*ast.File, error) {
 	file, err := parser.ParseFile(fr.fileSet, filename, source, parser.ParseComments)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse Go source: %w", err)
+		return nil, WrapParseError("Go source", err)
 	}
 	return file, nil
 }
@@ -74,7 +74,7 @@ func (fr *FileReader) ReadFile(filePath string) (string, error) {
 
 	content, err := os.ReadFile(cleanPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to read file %s: %w", filepath.Base(cleanPath), err)
+		return "", WrapProcessError(fmt.Sprintf("file read %s", filepath.Base(cleanPath)), err)
 	}
 
 	contentStr := string(content)
