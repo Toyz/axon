@@ -18,6 +18,7 @@ func NewRouteConverter() *RouteConverter {
 // Converts: /users/{id:int} -> /users/:id
 // Converts: /users/{id:string} -> /users/:id
 // Converts: /posts/{slug:string}/comments/{id:int} -> /posts/:slug/comments/:id
+// Converts: /users/{id} -> /users/:id
 // Converts: /files/{*} -> /files/*
 func (rc *RouteConverter) AxonToEcho(axonPath string) string {
 	// Handle wildcard first: /files/{*} -> /files/*
@@ -25,13 +26,15 @@ func (rc *RouteConverter) AxonToEcho(axonPath string) string {
 		axonPath = strings.ReplaceAll(axonPath, "{*}", "*")
 	}
 
-	// Regex to match Axon parameter syntax: {param:type}
-	axonParamRegex := regexp.MustCompile(`\{([^:}]+):[^}]+\}`)
+	// Regex to match Axon typed parameter syntax: {param:type}
+	typedParamRegex := regexp.MustCompile(`\{([^:}]+):[^}]+\}`)
+	axonPath = typedParamRegex.ReplaceAllString(axonPath, `:$1`)
 
-	// Replace with Echo parameter syntax: :param
-	echoPath := axonParamRegex.ReplaceAllString(axonPath, `:$1`)
+	// Regex to match Axon untyped parameter syntax: {param}
+	untypedParamRegex := regexp.MustCompile(`\{([^}]+)\}`)
+	axonPath = untypedParamRegex.ReplaceAllString(axonPath, `:$1`)
 
-	return echoPath
+	return axonPath
 }
 
 // EchoToAxon converts Echo route syntax to Axon route syntax (for reverse conversion)

@@ -49,6 +49,16 @@ func TestRouteConverter_AxonToEcho(t *testing.T) {
 			axonPath: "/{category:string}/items",
 			expected: "/:category/items",
 		},
+		{
+			name:     "untyped parameter",
+			axonPath: "/{id}/fish",
+			expected: "/:id/fish",
+		},
+		{
+			name:     "mixed typed and untyped parameters",
+			axonPath: "/users/{id}/posts/{slug:string}",
+			expected: "/users/:id/posts/:slug",
+		},
 	}
 
 	for _, tc := range testCases {

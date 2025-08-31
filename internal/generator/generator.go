@@ -664,9 +664,19 @@ func (g *Generator) GetParserRegistry() axon.ParserRegistryInterface {
 
 // convertToEchoPath converts Axon path format to Echo path format
 func (g *Generator) convertToEchoPath(axonPath string) string {
-	// Convert {param:type} to :param
-	re := regexp.MustCompile(`\{([^:}]+):[^}]+\}`)
-	return re.ReplaceAllString(axonPath, ":$1")
+	// Convert {*} to * (wildcard parameters) - Echo uses just * not /*
+	wildcardRe := regexp.MustCompile(`\{\*\}`)
+	axonPath = wildcardRe.ReplaceAllString(axonPath, "*")
+	
+	// Convert {param:type} to :param (typed parameters)
+	typedParamRe := regexp.MustCompile(`\{([^:}]+):[^}]+\}`)
+	axonPath = typedParamRe.ReplaceAllString(axonPath, ":$1")
+	
+	// Convert {param} to :param (untyped parameters)
+	untypedParamRe := regexp.MustCompile(`\{([^}]+)\}`)
+	axonPath = untypedParamRe.ReplaceAllString(axonPath, ":$1")
+	
+	return axonPath
 }
 
 // buildRouteTemplateData builds template data for a single route
