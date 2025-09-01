@@ -434,6 +434,10 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				switch returnType {
 				case "error":
 					returnTypeEnum = models.ReturnTypeError
+				case "response-error":
+					returnTypeEnum = models.ReturnTypeResponseError
+				case "data-error":
+					returnTypeEnum = models.ReturnTypeDataError
 				default:
 					returnTypeEnum = models.ReturnTypeDataError // Default assumption
 				}
@@ -1125,9 +1129,28 @@ func (p *Parser) analyzeReturnType(file *ast.File, controllerName, methodName st
 				if len(funcDecl.Recv.List) > 0 {
 					if starExpr, ok := funcDecl.Recv.List[0].Type.(*ast.StarExpr); ok {
 						if ident, ok := starExpr.X.(*ast.Ident); ok && ident.Name == controllerName {
-							// This is our method - extract return type
+							// This is our method - analyze return types
 							if funcDecl.Type.Results != nil && len(funcDecl.Type.Results.List) > 0 {
-								returnType = p.getTypeString(funcDecl.Type.Results.List[0].Type)
+								results := funcDecl.Type.Results.List
+								
+								if len(results) == 1 {
+									// Single return type
+									returnType = p.getTypeString(results[0].Type)
+								} else if len(results) == 2 {
+									// Two return types - check for (*axon.Response, error) pattern
+									firstType := p.getTypeString(results[0].Type)
+									secondType := p.getTypeString(results[1].Type)
+									
+									if (firstType == "*axon.Response" || firstType == "axon.Response") && secondType == "error" {
+										returnType = "response-error"
+									} else {
+										// Default to data-error pattern for (data, error)
+										returnType = "data-error"
+									}
+								} else {
+									// More than 2 return types - use first one
+									returnType = p.getTypeString(results[0].Type)
+								}
 							}
 							return false // Stop searching
 						}
