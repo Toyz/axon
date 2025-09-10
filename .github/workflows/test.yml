@@ -88,6 +88,7 @@ jobs:
         run: |
           cd examples/complete-app
           ../../axon ./internal/...
+          go get ./...
           go build -v .
 
   integration:
@@ -140,7 +141,7 @@ jobs:
         run: |
           cd examples/complete-app
           ../../axon ./...
-          go mod tidy
+          go get ./...
 
       - name: Build example app
         run: |
