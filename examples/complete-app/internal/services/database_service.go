@@ -9,11 +9,18 @@ import (
 )
 
 //axon::core -Init
+//axon::interface
 type DatabaseService struct {
 	//axon::inject
 	Config *config.Config
 	connected bool
 }
+
+// Start initializes the database connection
+func (s *DatabaseService) SpreadOp(args ...string) error {
+	return nil
+}
+
 
 // Start initializes the database connection
 func (s *DatabaseService) Start(ctx context.Context) error {

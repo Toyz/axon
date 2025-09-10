@@ -872,6 +872,8 @@ func (p *Parser) getTypeString(expr ast.Expr) string {
 		return "chan " + p.getTypeString(t.Value)
 	case *ast.FuncType:
 		return p.getFuncTypeString(t)
+	case *ast.Ellipsis:
+		return "..." + p.getTypeString(t.Elt)
 	default:
 		return "unknown"
 	}
