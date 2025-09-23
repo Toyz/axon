@@ -209,8 +209,8 @@ type {{.Name}} interface {
 func (tr *TemplateRegistry) registerMiddlewareTemplates() {
 	tr.templates["middleware-provider"] = `func New{{.StructName}}({{range $i, $dep := .InjectedDeps}}{{if $i}}, {{end}}{{$dep.Name}} {{$dep.Type}}{{end}}) *{{.StructName}} {
 	return &{{.StructName}}{
-{{range .Dependencies}}{{if .IsInit}}		{{.Name}}: {{generateInitCode .Type}},
-{{else}}		{{.Name}}: {{.Name}},
+{{range .Dependencies}}{{if .IsInit}}		{{.FieldName}}: {{generateInitCode .Type}},
+{{else}}		{{.FieldName}}: {{.Name}},
 {{end}}{{end}}	}
 }`
 
