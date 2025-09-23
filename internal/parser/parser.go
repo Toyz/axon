@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/toyz/axon/internal/annotations"
+	"github.com/toyz/axon/internal/errors"
 	"github.com/toyz/axon/internal/models"
 	"github.com/toyz/axon/internal/registry"
 	"github.com/toyz/axon/internal/utils"
@@ -102,7 +103,7 @@ func (p *Parser) ParseSource(filename, source string) (*models.PackageMetadata, 
 	// Extract annotations
 	annotations, err := p.ExtractAnnotations(file, filename)
 	if err != nil {
-		return nil, utils.WrapProcessError("annotation extraction", err)
+		return nil, errors.WrapWithOperation("extract", "annotations", err)
 	}
 
 	// Create file map
@@ -113,7 +114,7 @@ func (p *Parser) ParseSource(filename, source string) (*models.PackageMetadata, 
 	// Process annotations
 	err = p.processAnnotations(annotations, metadata, fileMap)
 	if err != nil {
-		return nil, utils.WrapProcessError("annotation processing", err)
+		return nil, errors.WrapWithOperation("process", "annotations", err)
 	}
 
 	return metadata, nil
@@ -137,7 +138,7 @@ func (p *Parser) ParseDirectory(path string) (*models.PackageMetadata, error) {
 	// Parse all Go files in the directory using cached FileReader
 	files, packageName, err := p.parseDirectoryFiles(cleanPath)
 	if err != nil {
-		return nil, utils.WrapParseError("directory "+cleanPath, err)
+		return nil, errors.WrapParseError("directory "+cleanPath, err)
 	}
 
 	// Create package metadata
@@ -165,7 +166,7 @@ func (p *Parser) ParseDirectory(path string) (*models.PackageMetadata, error) {
 		// Extract annotations from this file
 		annotations, err := p.ExtractAnnotations(file, fileName)
 		if err != nil {
-			return nil, utils.WrapProcessError(fmt.Sprintf("annotation extraction from file %s", fileName), err)
+			return nil, errors.WrapWithOperation("extract", fmt.Sprintf("annotations from file %s", fileName), err)
 		}
 		allAnnotations = append(allAnnotations, annotations...)
 	}
@@ -173,7 +174,7 @@ func (p *Parser) ParseDirectory(path string) (*models.PackageMetadata, error) {
 	// Second pass: Process all annotations to build metadata structures
 	err = p.processAnnotations(allAnnotations, metadata, fileMap)
 	if err != nil {
-		return nil, utils.WrapProcessError("annotation processing", err)
+		return nil, errors.WrapWithOperation("process", "annotations", err)
 	}
 
 	// Third pass: Validate middleware Handle methods in their respective files
@@ -323,20 +324,24 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 		if annotation.Type == models.AnnotationTypeMiddleware {
 			// Register middleware in the registry for validation
 			middleware := &models.MiddlewareMetadata{
-				BaseMetadata: models.BaseMetadata{
+				BaseMetadataTrait: models.BaseMetadataTrait{
 					Name:         annotation.GetString("Name"),
 					StructName:   annotation.Target,
 					Dependencies: annotation.Dependencies,
 				},
-				PackagePath: metadata.PackagePath,
-				Parameters:  annotation.Parameters,
-				IsGlobal:    annotation.HasParameter("Global"),
-				Priority:    annotation.GetInt("Priority", 100), // Default priority 100
+				PathTrait: models.PathTrait{
+					PackagePath: metadata.PackagePath,
+				},
+				PriorityTrait: models.PriorityTrait{
+					Priority: annotation.GetInt("Priority", 100), // Default priority 100
+				},
+				Parameters: annotation.Parameters,
+				IsGlobal:   annotation.HasParameter("Global"),
 			}
 
-			err := p.middlewareRegistry.Register(middleware.Name, middleware)
+			err := p.middlewareRegistry.Register(middleware.GetName(), middleware)
 			if err != nil {
-				return utils.WrapRegisterError("middleware '"+middleware.Name+"'", err)
+				return errors.WrapRegisterError("middleware", middleware.GetName(), err)
 			}
 		}
 	}
@@ -345,16 +350,11 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 	for _, annotation := range annotations {
 		switch annotation.Type {
 		case models.AnnotationTypeController:
-			controller := models.ControllerMetadata{
-				BaseMetadata: models.BaseMetadata{
-					Name:         annotation.Target,
-					StructName:   annotation.Target,
-					Dependencies: annotation.Dependencies,
-				},
-				Prefix:      annotation.GetString("Prefix", ""),
-				Middlewares: annotation.GetStringSlice("Middleware"),
-				Priority:    annotation.GetInt("Priority", 100), // Default priority is 100
-			}
+			controller := *models.NewMetadataBuilder(annotation.Target, annotation.Target).
+				WithDependencies(annotation.Dependencies...).
+				WithPriority(annotation.GetInt("Priority", 100)).
+				WithMiddlewares(annotation.GetStringSlice("Middleware")...).
+				BuildController(annotation.GetString("Prefix", ""), []models.RouteMetadata{})
 			metadata.Controllers = append(metadata.Controllers, controller)
 
 			// If this controller also has an interface annotation, generate interface
@@ -365,15 +365,10 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 					return fmt.Errorf("failed to extract methods for interface %s: %w", annotation.Target, err)
 				}
 
-				iface := models.InterfaceMetadata{
-					BaseMetadata: models.BaseMetadata{
-						Name:         annotation.Target + "Interface",
-						StructName:   annotation.Target,
-						Dependencies: annotation.Dependencies,
-					},
-					PackagePath: metadata.PackagePath,
-					Methods:     methods,
-				}
+				iface := *models.NewMetadataBuilder(annotation.Target+"Interface", annotation.Target).
+					WithDependencies(annotation.Dependencies...).
+					WithPackagePath(metadata.PackagePath).
+					BuildInterface(methods)
 				metadata.Interfaces = append(metadata.Interfaces, iface)
 			}
 
@@ -402,7 +397,7 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 			// Parse path parameters from the route path
 			pathParams, err := p.parsePathParameters(route.Path)
 			if err != nil {
-				return utils.WrapParseError("path parameters for route "+annotation.Target, err)
+				return errors.WrapParseError("path parameters for route "+annotation.Target, err)
 			}
 
 			// Analyze handler method signature to detect all parameters
@@ -465,17 +460,11 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 			p.addRouteToController(route, metadata)
 
 		case models.AnnotationTypeMiddleware:
-			middleware := models.MiddlewareMetadata{
-				BaseMetadata: models.BaseMetadata{
-					Name:         annotation.GetString("Name"),
-					StructName:   annotation.Target,
-					Dependencies: annotation.Dependencies,
-				},
-				PackagePath: metadata.PackagePath,
-				Parameters:  annotation.Parameters,
-				IsGlobal:    annotation.HasParameter("Global"),
-				Priority:    annotation.GetInt("Priority", 100), // Default priority 100
-			}
+			middleware := *models.NewMetadataBuilder(annotation.GetString("Name"), annotation.Target).
+				WithDependencies(annotation.Dependencies...).
+				WithPackagePath(metadata.PackagePath).
+				WithPriority(annotation.GetInt("Priority", 100)).
+				BuildMiddleware(annotation.Parameters, annotation.HasParameter("Global"))
 			metadata.Middlewares = append(metadata.Middlewares, middleware)
 
 		case models.AnnotationTypeService, models.AnnotationTypeCore:
@@ -488,29 +477,23 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 				)
 			}
 
-			service := models.CoreServiceMetadata{
-				BaseMetadata: models.BaseMetadata{
-					Name:         annotation.Target,
-					StructName:   annotation.Target,
-					Dependencies: annotation.Dependencies,
-				},
-			}
+			builder := models.NewMetadataBuilder(annotation.Target, annotation.Target).
+				WithDependencies(annotation.Dependencies...)
+
+			var service *models.CoreServiceMetadata
 
 			// Check for Init parameter (now stored in Parameters map)
 			hasInitParam := annotation.HasParameter("Init")
 
 			if hasInitParam {
 				// Enable lifecycle when Init parameter is present
-				service.HasLifecycle = true
 				initMode := annotation.GetString("Init", "Same")
-				service.StartMode = initMode
 
 				// Detect Start and Stop methods when lifecycle is enabled
 				file := fileMap[annotation.FileName]
+				var hasStart, hasStop bool
 				if file != nil {
-					hasStart, hasStop := p.extractLifecycleMethods(file, annotation.Target)
-					service.HasStart = hasStart
-					service.HasStop = hasStop
+					hasStart, hasStop = p.extractLifecycleMethods(file, annotation.Target)
 
 					// Validate that Start method exists when Init is used
 					if !hasStart {
@@ -518,26 +501,23 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 					}
 				} else {
 					// If file is not available (e.g., in unit tests), skip method detection
-					service.HasStart = true // Assume valid for unit tests
-					service.HasStop = false // Default to no Stop method
+					hasStart = true // Assume valid for unit tests
+					hasStop = false // Default to no Stop method
 				}
-			} else {
-				// Default Init mode - no lifecycle required
-				service.HasLifecycle = false
-				service.StartMode = "Same"
+
+				builder = builder.WithLifecycle(hasStart, hasStop).WithStartMode(initMode)
 			}
 
 			// Check for Manual parameter
 			manualModule := annotation.GetString("Manual", "")
 			if manualModule != "" {
-				service.IsManual = true
-				service.ModuleName = manualModule
+				builder = builder.WithManualModule(manualModule)
 			}
 
 			// Check for Mode parameter (default to Singleton)
 			mode := annotation.GetString("Mode", LifecycleModeSingleton)
 			if mode == LifecycleModeTransient || mode == LifecycleModeSingleton {
-				service.Mode = mode
+				builder = builder.WithServiceMode(mode)
 			} else {
 				return fmt.Errorf("service %s has invalid mode '%s': must be 'Singleton' or 'Transient'", annotation.Target, mode)
 			}
@@ -545,15 +525,16 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 			// Check for Constructor parameter (custom constructor function)
 			constructor := annotation.GetString("Constructor", "")
 			if constructor != "" {
-				service.Constructor = constructor
+				builder = builder.WithConstructor(constructor)
 
 				// Validate that custom constructors don't use axon::inject or axon::init
-				if len(service.Dependencies) > 0 {
+				if len(annotation.Dependencies) > 0 {
 					return fmt.Errorf("service %s uses custom constructor '%s' but has axon::inject or axon::init annotations. Custom constructors handle all dependency injection and initialization - remove the axon::inject and axon::init annotations", annotation.Target, constructor)
 				}
 			}
 
-			metadata.CoreServices = append(metadata.CoreServices, service)
+			service = builder.BuildCoreService()
+			metadata.CoreServices = append(metadata.CoreServices, *service)
 
 			// If this core service also has an interface annotation, generate interface
 			if interfaceTargets[annotation.Target] {
@@ -563,39 +544,28 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 					return fmt.Errorf("failed to extract methods for interface %s: %w", annotation.Target, err)
 				}
 
-				iface := models.InterfaceMetadata{
-					BaseMetadata: models.BaseMetadata{
-						Name:         annotation.Target + "Interface",
-						StructName:   annotation.Target,
-						Dependencies: annotation.Dependencies,
-					},
-					PackagePath: metadata.PackagePath,
-					Methods:     methods,
-				}
+				iface := *models.NewMetadataBuilder(annotation.Target+"Interface", annotation.Target).
+					WithDependencies(annotation.Dependencies...).
+					WithPackagePath(metadata.PackagePath).
+					BuildInterface(methods)
 				metadata.Interfaces = append(metadata.Interfaces, iface)
 			}
 
 		case models.AnnotationTypeLogger:
-			logger := models.LoggerMetadata{
-				BaseMetadata: models.BaseMetadata{
-					Name:         annotation.Target,
-					StructName:   annotation.Target,
-					Dependencies: annotation.Dependencies,
-				},
-			}
+			builder := models.NewMetadataBuilder(annotation.Target, annotation.Target).
+				WithDependencies(annotation.Dependencies...)
+
+			var logger *models.LoggerMetadata
 
 			// Check for Init parameter (now stored in Parameters map)
 			hasInitParam := annotation.HasParameter("Init")
 
 			if hasInitParam {
-				// Enable lifecycle when Init parameter is present
-				logger.HasLifecycle = true
 				// Detect Start and Stop methods when lifecycle is enabled
 				file := fileMap[annotation.FileName]
+				var hasStart, hasStop bool
 				if file != nil {
-					hasStart, hasStop := p.extractLifecycleMethods(file, annotation.Target)
-					logger.HasStart = hasStart
-					logger.HasStop = hasStop
+					hasStart, hasStop = p.extractLifecycleMethods(file, annotation.Target)
 
 					// Validate that Start method exists when Init is used
 					if !hasStart {
@@ -603,22 +573,21 @@ func (p *Parser) processAnnotations(annotations []models.Annotation, metadata *m
 					}
 				} else {
 					// If file is not available (e.g., in unit tests), skip method detection
-					logger.HasStart = true // Assume valid for unit tests
-					logger.HasStop = false // Default to no Stop method
+					hasStart = true // Assume valid for unit tests
+					hasStop = false // Default to no Stop method
 				}
-			} else {
-				// Default Init mode - no lifecycle required
-				logger.HasLifecycle = false
+
+				builder = builder.WithLifecycle(hasStart, hasStop)
 			}
 
 			// Check for Manual parameter
 			manualModule := annotation.GetString("Manual", "")
 			if manualModule != "" {
-				logger.IsManual = true
-				logger.ModuleName = manualModule
+				builder = builder.WithManualModule(manualModule)
 			}
 
-			metadata.Loggers = append(metadata.Loggers, logger)
+			logger = builder.BuildLogger()
+			metadata.Loggers = append(metadata.Loggers, *logger)
 
 		case models.AnnotationTypeRouteParser:
 			// Route parser annotations should be on function declarations

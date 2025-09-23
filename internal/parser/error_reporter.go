@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/toyz/axon/internal/errors"
 	"github.com/toyz/axon/internal/models"
 )
 
@@ -64,19 +65,13 @@ func (r *ParserErrorReporter) ReportParserValidationError(functionName, fileName
 		suggestions = append(suggestions, "Example implementation:", example)
 	}
 
-	return &models.GeneratorError{
-		Type:        models.ErrorTypeParserValidation,
-		File:        fileName,
-		Line:        line,
-		Message:     fmt.Sprintf("Parser function '%s' has invalid signature: %s", functionName, issue),
-		Suggestions: suggestions,
-		Context: map[string]interface{}{
-			"function_name":      functionName,
-			"expected_signature": expectedSignature,
-			"actual_signature":   actualSignature,
-			"issue":              issue,
-		},
+	baseErr := errors.NewModelsParserValidationError(functionName, fileName, line, expectedSignature, issue)
+	// Add additional context to the underlying error
+	if axonErr, ok := baseErr.AxonError.(*errors.BaseError); ok {
+		axonErr.WithSuggestions(suggestions...).
+			WithContext("actual_signature", actualSignature)
 	}
+	return baseErr
 }
 
 // ReportParserNotFoundError creates a detailed error when a parser is not found for a type
@@ -115,20 +110,7 @@ func (r *ParserErrorReporter) ReportParserNotFoundError(typeName, routeMethod, r
 		suggestions = append(suggestions, "Example parser implementation:", example)
 	}
 
-	return &models.GeneratorError{
-		Type:        models.ErrorTypeParserValidation,
-		File:        fileName,
-		Line:        line,
-		Message:     fmt.Sprintf("No parser registered for custom type '%s' used in route %s %s (parameter '%s')", typeName, routeMethod, routePath, paramName),
-		Suggestions: suggestions,
-		Context: map[string]interface{}{
-			"type_name":         typeName,
-			"route_method":      routeMethod,
-			"route_path":        routePath,
-			"parameter_name":    paramName,
-			"available_parsers": availableParsers,
-		},
-	}
+	return errors.NewParserNotFoundError(typeName, routeMethod, routePath, paramName, fileName, line, availableParsers)
 }
 
 // ReportParserImportError creates a detailed error when required imports are missing
@@ -155,42 +137,23 @@ func (r *ParserErrorReporter) ReportParserImportError(typeName, fileName string,
 		)
 	}
 
-	return &models.GeneratorError{
-		Type:        models.ErrorTypeParserImport,
-		File:        fileName,
-		Line:        line,
-		Message:     fmt.Sprintf("Parser for type '%s' requires missing import: %s", typeName, requiredImport),
-		Suggestions: suggestions,
-		Context: map[string]interface{}{
-			"type_name":       typeName,
-			"required_import": requiredImport,
-		},
-	}
+	return errors.NewParserImportError(typeName, fileName, line, requiredImport)
 }
 
 // ReportParserConflictError creates a detailed error when parser conflicts are detected
 func (r *ParserErrorReporter) ReportParserConflictError(typeName string, conflicts []models.ParserConflict) error {
-	var conflictDetails []string
+	// Convert models.ParserConflict to errors.ParserConflict
+	var errorConflicts []errors.ParserConflict
 	for _, conflict := range conflicts {
-		conflictDetails = append(conflictDetails, fmt.Sprintf("%s:%d (%s)", conflict.FileName, conflict.Line, conflict.FunctionName))
+		errorConflicts = append(errorConflicts, errors.ParserConflict{
+			FileName:     conflict.FileName,
+			Line:         conflict.Line,
+			FunctionName: conflict.FunctionName,
+			PackagePath:  conflict.PackagePath,
+		})
 	}
 
-	suggestions := []string{
-		"Keep only one parser registration for each type",
-		"Remove duplicate parser annotations",
-		"Consider using different type names if you need multiple parsers",
-		fmt.Sprintf("Conflicting registrations found at: %s", strings.Join(conflictDetails, ", ")),
-	}
-
-	return &models.GeneratorError{
-		Type:        models.ErrorTypeParserConflict,
-		Message:     fmt.Sprintf("Multiple parsers registered for type '%s'", typeName),
-		Suggestions: suggestions,
-		Context: map[string]interface{}{
-			"type_name": typeName,
-			"conflicts": conflicts,
-		},
-	}
+	return errors.NewParserConflictError(typeName, errorConflicts)
 }
 
 // generateParserExample generates an example parser implementation based on the function name

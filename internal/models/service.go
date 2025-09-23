@@ -7,35 +7,24 @@ type Dependency struct {
 	IsInit bool   // whether this should be initialized (not injected)
 }
 
-// LifecycleMetadata contains common lifecycle-related fields
-type LifecycleMetadata struct {
-	HasStart bool // whether service has Start(context.Context) error method
-	HasStop  bool // whether service has Stop(context.Context) error method
-}
-
-// CoreServiceMetadata represents a core service
+// CoreServiceMetadata represents a core service using composition
 type CoreServiceMetadata struct {
-	BaseMetadata
-	LifecycleMetadata
-	HasLifecycle bool   // whether service has lifecycle methods
-	StartMode    string // lifecycle start mode: "Same" (default) or "Background"
-	IsManual     bool   // whether service uses manual module
-	ModuleName   string // name of manual module (if applicable)
-	Mode         string // lifecycle mode: "Singleton" (default) or "Transient"
-	Constructor  string // custom constructor function name (if provided)
+	BaseMetadataTrait
+	LifecycleTrait
+	ManualModuleTrait
+	ServiceModeTrait
+	ConstructorTrait
 }
 
-// LoggerMetadata represents a logger service
+// LoggerMetadata represents a logger service using composition
 type LoggerMetadata struct {
-	BaseMetadata
-	LifecycleMetadata
-	HasLifecycle bool   // whether logger has lifecycle methods
-	IsManual     bool   // whether logger uses manual module
-	ModuleName   string // name of manual module (if applicable)
+	BaseMetadataTrait
+	LifecycleTrait
+	ManualModuleTrait
 }
 
-// ServiceMetadata represents service information for lifecycle management
+// ServiceMetadata represents service information for lifecycle management using composition
 type ServiceMetadata struct {
-	BaseMetadata
-	LifecycleMetadata
+	BaseMetadataTrait
+	LifecycleTrait
 }

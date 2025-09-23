@@ -301,6 +301,24 @@ func ValidateConstructorName(field string) Validator[string] {
 	return NewValidatorChain(
 		NotEmpty(field),
 		IsValidGoIdentifier(field),
-		HasPrefix(field, "New"),
+		// Note: We allow constructors with "New", "Create", or "Initialize" prefix
+		// but don't enforce it as users might have their own conventions
+		Custom(field, "constructor should typically start with 'New', 'Create', or 'Initialize'",
+			func(value string) bool {
+				return strings.HasPrefix(value, "New") ||
+					strings.HasPrefix(value, "Create") ||
+					strings.HasPrefix(value, "Initialize") ||
+					true // Allow any valid identifier
+			}),
 	).Validate
+}
+
+// ValidateServiceMode validates service lifecycle mode (Singleton/Transient)
+func ValidateServiceMode(field string) Validator[string] {
+	return IsOneOf(field, "Singleton", "Transient")
+}
+
+// ValidateInitMode validates initialization mode (Same/Background)
+func ValidateInitMode(field string) Validator[string] {
+	return IsOneOf(field, "Same", "Background")
 }

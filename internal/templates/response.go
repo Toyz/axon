@@ -5,8 +5,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/toyz/axon/internal/errors"
 	"github.com/toyz/axon/internal/models"
-	"github.com/toyz/axon/internal/utils"
 	"github.com/toyz/axon/pkg/axon"
 )
 
@@ -250,7 +250,7 @@ func GenerateRouteWrapper(route models.RouteMetadata, controllerName string, par
 	// Generate parameter binding code
 	paramBindingCode, err := GenerateParameterBindingCode(route.Parameters, parserRegistry)
 	if err != nil {
-		return "", utils.WrapGenerateError("parameter binding", err)
+		return "", errors.WrapGenerateError("parameter", "binding", err)
 	}
 
 	// Generate body binding code if needed
@@ -259,7 +259,7 @@ func GenerateRouteWrapper(route models.RouteMetadata, controllerName string, par
 	// Generate response handling code
 	responseHandlingCode, err := GenerateResponseHandling(route, controllerName)
 	if err != nil {
-		return "", utils.WrapGenerateError("response handling", err)
+		return "", errors.WrapGenerateError("response", "handling", err)
 	}
 
 	// Use template for route wrapper generation

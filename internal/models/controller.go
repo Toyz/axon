@@ -1,19 +1,16 @@
 package models
 
-// BaseMetadata contains common fields shared across different metadata types
-type BaseMetadata struct {
-	Name         string       // name of the component
-	StructName   string       // name of the struct
-	Dependencies []Dependency // dependencies injected via fx.In
-}
+// Backward compatibility aliases for external packages
+type BaseMetadata = BaseMetadataTrait
+type LifecycleMetadata = LifecycleTrait
 
-// ControllerMetadata represents a controller and its routes
+// ControllerMetadata represents a controller and its routes using composition
 type ControllerMetadata struct {
-	BaseMetadata
-	Prefix      string          // URL prefix for all routes in this controller
-	Middlewares []string        // middleware names to apply to all routes in this controller
-	Priority    int             // registration priority (lower = first, higher = last)
-	Routes      []RouteMetadata // all routes defined on this controller
+	BaseMetadataTrait
+	PriorityTrait
+	MiddlewareTrait
+	Prefix string          // URL prefix for all routes in this controller
+	Routes []RouteMetadata // all routes defined on this controller
 }
 
 // RouteMetadata represents an HTTP route handler

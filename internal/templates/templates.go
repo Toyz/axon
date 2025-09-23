@@ -8,8 +8,8 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/toyz/axon/internal/errors"
 	"github.com/toyz/axon/internal/models"
-	"github.com/toyz/axon/internal/utils"
 	"github.com/toyz/axon/pkg/axon"
 )
 
@@ -66,18 +66,18 @@ func GenerateRouteRegistrationFunction(data RouteRegistrationData) (string, erro
 	// Parse the main template
 	tmpl, err := template.New("routeRegistration").Parse(DefaultTemplateRegistry.MustGet("route-registration-function"))
 	if err != nil {
-		return "", utils.WrapParseError("route registration template", err)
+		return "", errors.WrapParseError("route registration template", err)
 	}
 
 	// Add the route registration sub-template
 	_, err = tmpl.New("RouteRegistration").Parse(DefaultTemplateRegistry.MustGet("route-registration"))
 	if err != nil {
-		return "", utils.WrapParseError("route registration sub-template", err)
+		return "", errors.WrapParseError("route registration sub-template", err)
 	}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", utils.WrapProcessError("route registration template", err)
+		return "", errors.WrapWithOperation("execute", "route registration template", err)
 	}
 
 	return buf.String(), nil
@@ -85,65 +85,19 @@ func GenerateRouteRegistrationFunction(data RouteRegistrationData) (string, erro
 
 // Helper functions for building template data
 func BuildMiddlewareInstancesArray(middlewares []string) string {
-	if len(middlewares) == 0 {
-		return "[]axon.MiddlewareInstance{}"
-	}
-
-	var instances []string
-	for _, mw := range middlewares {
-		varName := strings.ToLower(mw)
-		instance := fmt.Sprintf(`{
-		Name:     "%s",
-		Handler:  %s.Handle,
-		Instance: %s,
-	}`, mw, varName, varName)
-		instances = append(instances, instance)
-	}
-
-	return fmt.Sprintf("[]axon.MiddlewareInstance{%s}", strings.Join(instances, ", "))
+	return DefaultTemplateUtils.BuildMiddlewareInstancesArray(middlewares)
 }
 
 func BuildMiddlewaresArray(middlewares []string) string {
-	if len(middlewares) == 0 {
-		return "[]string{}"
-	}
-
-	var quoted []string
-	for _, mw := range middlewares {
-		quoted = append(quoted, fmt.Sprintf(`"%s"`, mw))
-	}
-
-	return fmt.Sprintf("[]string{%s}", strings.Join(quoted, ", "))
+	return DefaultTemplateUtils.BuildMiddlewaresArray(middlewares)
 }
 
 func BuildParameterInstancesArray(paramTypes map[string]string) string {
-	if len(paramTypes) == 0 {
-		return "[]axon.ParameterInstance{}"
-	}
-
-	var instances []string
-	for name, typ := range paramTypes {
-		instance := fmt.Sprintf(`{
-		Name: "%s",
-		Type: "%s",
-	}`, name, typ)
-		instances = append(instances, instance)
-	}
-
-	return fmt.Sprintf("[]axon.ParameterInstance{%s}", strings.Join(instances, ", "))
+	return DefaultTemplateUtils.BuildParameterInstancesArray(paramTypes)
 }
 
 func BuildMiddlewareList(middlewares []string) string {
-	if len(middlewares) == 0 {
-		return ""
-	}
-
-	var handlers []string
-	for _, mw := range middlewares {
-		handlers = append(handlers, fmt.Sprintf("%s.Handle", strings.ToLower(mw)))
-	}
-
-	return strings.Join(handlers, ", ")
+	return DefaultTemplateUtils.BuildMiddlewareList(middlewares)
 }
 
 // ExtractParameterTypes extracts parameter types from a route path
@@ -287,6 +241,7 @@ func toCamelCase(s string) string {
 	return strings.ToLower(s[:1]) + s[1:]
 }
 
+
 // generateImports creates an import block with the specified packages
 func generateImports(packages ...string) string {
 	if len(packages) == 0 {
@@ -329,47 +284,7 @@ func generateInitCode(fieldType string) string {
 // These were making assumptions about project structure.
 // Templates now receive actual package paths from the generator.
 
-// isConfigLikeType checks if a type represents a configuration dependency
-func isConfigLikeType(typeName string) bool {
-	// Remove pointer prefix for analysis
-	baseType := strings.TrimPrefix(typeName, "*")
 
-	// Check for common config patterns (more flexible than before)
-	lowerType := strings.ToLower(baseType)
-	configPatterns := []string{"config", "configuration", "settings", "options"}
-
-	for _, pattern := range configPatterns {
-		if strings.Contains(lowerType, pattern) {
-			return true
-		}
-	}
-
-	return false
-}
-
-// isLoggerType checks if a type represents a logger dependency
-func isLoggerType(typeName string) bool {
-	// Remove pointer prefix for analysis
-	baseType := strings.TrimPrefix(typeName, "*")
-
-	// Check for common logger patterns
-	loggerPatterns := []string{
-		"slog.Logger",
-		"log.Logger",
-		"Logger",
-		"log.Entry",
-		"logrus.Logger",
-		"zap.Logger",
-	}
-
-	for _, pattern := range loggerPatterns {
-		if strings.Contains(baseType, pattern) {
-			return true
-		}
-	}
-
-	return false
-}
 
 // extractPackageFromType is now available as utils.ExtractPackageFromType
 
@@ -419,7 +334,7 @@ func GenerateCoreServiceProvider(service models.CoreServiceMetadata) (string, er
 	// Handle different lifecycle modes
 	if service.Mode == "Transient" {
 		// For transient services, generate a factory function
-		return generateTransientServiceProvider(data)
+		return executeRegistryTemplate("transient-provider", data)
 	} else {
 		// Default Singleton mode
 		if service.HasLifecycle && service.StartMode != "" {
@@ -439,10 +354,6 @@ func GenerateCoreServiceProvider(service models.CoreServiceMetadata) (string, er
 	}
 }
 
-// generateTransientServiceProvider generates a factory function for transient services
-func generateTransientServiceProvider(data CoreServiceProviderData) (string, error) {
-	return executeRegistryTemplate("transient-provider", data)
-}
 
 // GenerateInitInvokeFunction generates an invoke function for lifecycle management
 func GenerateInitInvokeFunction(service models.CoreServiceMetadata) (string, error) {
@@ -565,7 +476,7 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 	for _, iface := range metadata.Interfaces {
 		interfaceCode, err := GenerateInterface(iface)
 		if err != nil {
-			return "", utils.WrapGenerateError("interface "+iface.Name, err)
+			return "", errors.WrapGenerateError("interface", iface.Name, err)
 		}
 
 		contentBuilder.WriteString(interfaceCode)
@@ -580,7 +491,7 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 
 		provider, err := GenerateCoreServiceProvider(service)
 		if err != nil {
-			return "", utils.WrapGenerateError("provider for service "+service.Name, err)
+			return "", errors.WrapGenerateError("provider", "service "+service.Name, err)
 		}
 
 		if provider != "" {
@@ -592,7 +503,7 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 		if service.HasLifecycle {
 			invokeFunc, err := GenerateInitInvokeFunction(service)
 			if err != nil {
-				return "", utils.WrapGenerateError("invoke function for service "+service.Name, err)
+				return "", errors.WrapGenerateError("invoke function", "service "+service.Name, err)
 			}
 
 			if invokeFunc != "" {
@@ -610,7 +521,7 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 
 		provider, err := GenerateLoggerProvider(logger)
 		if err != nil {
-			return "", utils.WrapGenerateError(fmt.Sprintf("provider for logger %s", logger.Name), err)
+			return "", errors.WrapGenerateError("provider", fmt.Sprintf("logger %s", logger.Name), err)
 		}
 
 		if provider != "" {
@@ -623,7 +534,7 @@ func GenerateCoreServiceModuleWithResolver(metadata *models.PackageMetadata, mod
 	for _, iface := range metadata.Interfaces {
 		providerCode, err := GenerateInterfaceProvider(iface)
 		if err != nil {
-			return "", utils.WrapGenerateError(fmt.Sprintf("interface provider %s", iface.Name), err)
+			return "", errors.WrapGenerateError("interface provider", iface.Name, err)
 		}
 
 		contentBuilder.WriteString(providerCode)
@@ -769,10 +680,6 @@ func generateInterfaceContent(iface models.InterfaceMetadata, builder *strings.B
 		return "", err
 	}
 
-	// If ImportManager is provided, we can add import detection logic here
-	// For now, just return the interface code as the imports will be handled
-	// at the module level by the calling function
-
 	return interfaceCode, nil
 }
 
@@ -803,7 +710,7 @@ func GenerateLoggerProvider(logger models.LoggerMetadata) (string, error) {
 			injectedDeps = append(injectedDeps, depData)
 
 			// Check if this dependency can be used for logger configuration
-			if isConfigLikeType(dep.Type) {
+			if DefaultTemplateUtils.IsConfigLikeType(dep.Type) {
 				configParam = depData.Name
 			}
 		}
@@ -812,7 +719,7 @@ func GenerateLoggerProvider(logger models.LoggerMetadata) (string, error) {
 	// Check if this is a logger that needs immediate initialization
 	hasLoggerField := false
 	for _, dep := range dependencies {
-		if dep.IsInit && isLoggerType(dep.Type) {
+		if dep.IsInit && DefaultTemplateUtils.IsLoggerType(dep.Type) {
 			hasLoggerField = true
 			break
 		}
@@ -906,13 +813,13 @@ func executeTemplate(name, templateStr string, data interface{}) (string, error)
 
 	tmpl, err := template.New(name).Funcs(funcMap).Parse(templateStr)
 	if err != nil {
-		return "", utils.WrapParseError("template "+name, err)
+		return "", errors.WrapParseError("template "+name, err)
 	}
 
 	var buf bytes.Buffer
 	err = tmpl.Execute(&buf, data)
 	if err != nil {
-		return "", utils.WrapProcessError(fmt.Sprintf("template %s", name), err)
+		return "", errors.WrapWithOperation("execute", fmt.Sprintf("template %s", name), err)
 	}
 
 	return buf.String(), nil
@@ -942,6 +849,17 @@ func GenerateMiddlewareProvider(middleware models.MiddlewareMetadata) (string, e
 	}
 
 	return executeRegistryTemplate("middleware-provider", data)
+}
+
+// filterInjectedDependencies filters out dependencies that are initialized (IsInit=true)
+func filterInjectedDependencies(dependencies []models.Dependency) []models.Dependency {
+	var injected []models.Dependency
+	for _, dep := range dependencies {
+		if !dep.IsInit {
+			injected = append(injected, dep)
+		}
+	}
+	return injected
 }
 
 // GenerateGlobalMiddlewareRegistration generates function to register global middleware with Echo
@@ -993,7 +911,7 @@ func GenerateMiddlewareModule(metadata *models.PackageMetadata) (string, error) 
 	for _, middleware := range metadata.Middlewares {
 		providerCode, err := GenerateMiddlewareProvider(middleware)
 		if err != nil {
-			return "", utils.WrapGenerateError(fmt.Sprintf("provider for middleware %s", middleware.Name), err)
+			return "", errors.WrapGenerateError("provider", fmt.Sprintf("middleware %s", middleware.Name), err)
 		}
 		contentBuilder.WriteString(providerCode)
 		contentBuilder.WriteString("\n")
@@ -1002,7 +920,7 @@ func GenerateMiddlewareModule(metadata *models.PackageMetadata) (string, error) 
 	// Generate middleware registration function
 	registrationCode, err := GenerateMiddlewareRegistry(metadata.Middlewares)
 	if err != nil {
-		return "", utils.WrapGenerateError("middleware registration", err)
+		return "", errors.WrapGenerateError("middleware", "registration", err)
 	}
 	contentBuilder.WriteString(registrationCode)
 	contentBuilder.WriteString("\n")
@@ -1019,7 +937,7 @@ func GenerateMiddlewareModule(metadata *models.PackageMetadata) (string, error) 
 	if hasGlobalMiddleware {
 		globalRegistrationCode, err := GenerateGlobalMiddlewareRegistration(metadata.Middlewares)
 		if err != nil {
-			return "", utils.WrapGenerateError("global middleware registration", err)
+			return "", errors.WrapGenerateError("global middleware", "registration", err)
 		}
 		contentBuilder.WriteString(globalRegistrationCode)
 		contentBuilder.WriteString("\n")
@@ -1089,13 +1007,3 @@ func resolveDependencyImportPath(packageName string, metadata *models.PackageMet
 	return strings.Replace(metadata.PackagePath, "/middleware", "/"+packageName, 1)
 }
 
-// filterInjectedDependencies filters out dependencies that are initialized (IsInit=true)
-func filterInjectedDependencies(dependencies []models.Dependency) []models.Dependency {
-	var injected []models.Dependency
-	for _, dep := range dependencies {
-		if !dep.IsInit {
-			injected = append(injected, dep)
-		}
-	}
-	return injected
-}

@@ -113,7 +113,7 @@ func TestMiddlewareRegistry_Register(t *testing.T) {
 				},
 			},
 			expectError: true,
-			errorMsg:    "validation error for field 'name'",
+			errorMsg:    "middleware name cannot be empty",
 		},
 		{
 			name: "register with nil middleware",
@@ -127,7 +127,7 @@ func TestMiddlewareRegistry_Register(t *testing.T) {
 				},
 			},
 			expectError: true,
-			errorMsg:    "validation error for field 'metadata'",
+			errorMsg:    "middleware metadata cannot be nil",
 		},
 	}
 

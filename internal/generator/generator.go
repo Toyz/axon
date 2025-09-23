@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/toyz/axon/internal/errors"
 	"github.com/toyz/axon/internal/models"
 	"github.com/toyz/axon/internal/registry"
 	"github.com/toyz/axon/internal/templates"
@@ -158,7 +159,7 @@ func (g *Generator) generateControllerModuleWithModule(metadata *models.PackageM
 	for _, controller := range metadata.Controllers {
 		providerCode, err := g.generateControllerProvider(controller)
 		if err != nil {
-			return "", utils.WrapGenerateError("provider for controller "+controller.Name, err)
+			return "", errors.WrapGenerateError("generate", "provider for controller "+controller.Name, err)
 		}
 		moduleBuilder.WriteString(providerCode)
 		moduleBuilder.WriteString("\n\n")
@@ -169,7 +170,7 @@ func (g *Generator) generateControllerModuleWithModule(metadata *models.PackageM
 		for _, route := range controller.Routes {
 			wrapperCode, err := templates.GenerateRouteWrapper(route, controller.StructName, g.parserRegistry)
 			if err != nil {
-				return "", utils.WrapGenerateError("wrapper for route "+controller.Name+"."+route.HandlerName, err)
+				return "", errors.WrapGenerateError("generate", "wrapper for route "+controller.Name+"."+route.HandlerName, err)
 			}
 			moduleBuilder.WriteString(wrapperCode)
 			moduleBuilder.WriteString("\n\n")

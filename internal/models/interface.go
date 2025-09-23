@@ -1,10 +1,10 @@
 package models
 
-// InterfaceMetadata represents an interface to be generated from a struct
+// InterfaceMetadata represents an interface to be generated from a struct using composition
 type InterfaceMetadata struct {
-	BaseMetadata
-	PackagePath string   // package where struct is defined
-	Methods     []Method // public methods to include in interface
+	BaseMetadataTrait
+	PathTrait
+	Methods []Method // public methods to include in interface
 }
 
 // Method represents a method signature for interface generation
