@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/toyz/axon/pkg/axon"
 )
 
 // DateRange represents a date range in format "2024-01-01_2024-12-31"
@@ -15,7 +15,7 @@ type DateRange struct {
 }
 
 //axon::route_parser DateRange
-func ParseDateRange(c echo.Context, paramValue string) (DateRange, error) {
+func ParseDateRange(c axon.RequestContext, paramValue string) (DateRange, error) {
 	parts := strings.Split(paramValue, "_")
 	if len(parts) != 2 {
 		return DateRange{}, fmt.Errorf("date range must be in format 'YYYY-MM-DD_YYYY-MM-DD'")

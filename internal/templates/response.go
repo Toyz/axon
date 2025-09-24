@@ -197,7 +197,7 @@ func generateResponseErrorResponse(handlerCall string, errAlreadyDeclared bool) 
 			return handleError(c, err)
 		}
 		if response == nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
+			return axon.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
 		}%s`, handlerCall, responseHandling)
 		} else {
 			return fmt.Sprintf(`		response, err := %s
@@ -205,7 +205,7 @@ func generateResponseErrorResponse(handlerCall string, errAlreadyDeclared bool) 
 			return handleError(c, err)
 		}
 		if response == nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
+			return axon.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
 		}%s`, handlerCall, responseHandling)
 		}
 	}
@@ -310,7 +310,7 @@ func generateBodyBindingCode(parameters []models.Parameter, method string) strin
 				// Fallback to old behavior if template fails
 				return fmt.Sprintf(`		var body %s
 		if err := c.Bind(&body); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+			return axon.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
 `, param.Type)
 			}

@@ -3,7 +3,6 @@ package controllers
 import (
 	"net/http"
 
-	"github.com/labstack/echo/v4"
 	"github.com/toyz/axon/examples/complete-app/internal/models"
 	"github.com/toyz/axon/examples/complete-app/internal/services"
 	"github.com/toyz/axon/pkg/axon"
@@ -21,7 +20,7 @@ func (c *UserController) GetAllUsers() ([]*models.User, error) {
 }
 
 //axon::route GET /search -Priority=10
-func (c *UserController) SearchUsers(ctx echo.Context, query axon.QueryMap) ([]*models.User, error) {
+func (c *UserController) SearchUsers(ctx axon.RequestContext, query axon.QueryMap) ([]*models.User, error) {
 	// Access query parameters easily
 	name := query.Get("name")
 	age := query.GetInt("age")
@@ -71,11 +70,11 @@ func (c *UserController) UpdateUser(id int, req models.UpdateUserRequest) (*axon
 }
 
 //axon::route DELETE /{id:int}
-func (c *UserController) DeleteUser(ctx echo.Context, id int) error {
+func (c *UserController) DeleteUser(ctx axon.RequestContext, id int) error {
 	err := c.UserService.DeleteUser(id)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, err.Error())
+		return axon.NewHTTPError(http.StatusNotFound, err.Error())
 	}
 	
-	return ctx.NoContent(http.StatusNoContent)
+	return ctx.Response().JSON(http.StatusNoContent, nil)
 }

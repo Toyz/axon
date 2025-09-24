@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -9,46 +10,90 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/labstack/echo/v4"
-	echomiddleware "github.com/labstack/echo/v4/middleware"
+	"github.com/toyz/axon/examples/complete-app/internal/adapters/echo"
 	"github.com/toyz/axon/examples/complete-app/internal/config"
 	"github.com/toyz/axon/examples/complete-app/internal/controllers"
 	"github.com/toyz/axon/examples/complete-app/internal/interfaces"
+	"github.com/toyz/axon/examples/complete-app/internal/logging"
 	"github.com/toyz/axon/examples/complete-app/internal/middleware"
 	"github.com/toyz/axon/examples/complete-app/internal/services"
-	"github.com/toyz/axon/examples/complete-app/internal/logging"
+	"github.com/toyz/axon/pkg/axon"
+	"github.com/toyz/axon/pkg/axon/adapters"
 	"go.uber.org/fx"
 )
 
 func main() {
+	// Define CLI flags
+	var adapter = flag.String("adapter", "echo", "Web server adapter to use (echo or gin)")
+	var port = flag.Int("port", 8080, "Port to run the server on")
+	var help = flag.Bool("help", false, "Show help information")
+	flag.Parse()
+
+	if *help {
+		fmt.Println("Complete App - Axon Framework Demo")
+		fmt.Println("")
+		fmt.Println("Usage:")
+		fmt.Printf("  %s [options]\n", os.Args[0])
+		fmt.Println("")
+		fmt.Println("Options:")
+		flag.PrintDefaults()
+		fmt.Println("")
+		fmt.Println("Examples:")
+		fmt.Printf("  %s -adapter=echo -port=8080\n", os.Args[0])
+		fmt.Printf("  %s -adapter=gin -port=3000\n", os.Args[0])
+		os.Exit(0)
+	}
+
+	// Validate adapter choice
+	if *adapter != "echo" && *adapter != "gin" {
+		log.Fatalf("Invalid adapter '%s'. Must be 'echo' or 'gin'", *adapter)
+	}
+
+	fmt.Printf("🚀 Starting Complete App with %s adapter on port %d\n", *adapter, *port)
+
 	app := fx.New(
-		// Provide configuration
-		fx.Provide(config.LoadConfig),
-		
-		// Provide Echo instance
-		fx.Provide(func() *echo.Echo {
-			e := echo.New()
-			e.Use(echomiddleware.Recover())
-			e.Use(echomiddleware.CORS())
-			return e
+		// Provide configuration with command line overrides
+		fx.Provide(func() *config.Config {
+			cfg := config.LoadConfig()
+			if *port != 8080 { // Only override if user specified a different port
+				cfg.Port = *port
+			}
+			return cfg
 		}),
-		
+
+		// Provide selected adapter as WebServerInterface
+		fx.Provide(func() axon.WebServerInterface {
+			switch *adapter {
+			case "gin":
+				fmt.Println("📦 Using Gin web framework")
+				return adapters.NewDefaultGinAdapter()
+			case "echo":
+				fmt.Println("📦 Using Echo web framework")
+				return echo.NewEchoAdapter()
+			default:
+				// This should never happen due to validation above
+				panic(fmt.Sprintf("Unknown adapter: %s", *adapter))
+			}
+		}),
+
 		// Include generated modules
 		controllers.AutogenModule,
 		services.AutogenModule,
 		middleware.AutogenModule,
 		interfaces.AutogenModule,
 		logging.AutogenModule,
-		
-		// invoke echo
-		fx.Invoke(func(lc fx.Lifecycle, e *echo.Echo, cfg *config.Config) {
+
+		// invoke server lifecycle
+		fx.Invoke(func(lc fx.Lifecycle, server axon.WebServerInterface, cfg *config.Config) {
 			lc.Append(fx.Hook{
 				OnStart: func(ctx context.Context) error {
-					go e.Start(fmt.Sprintf(":%d", cfg.Port))
+					fmt.Printf("🌐 Starting %s server on http://localhost:%d\n", server.Name(), cfg.Port)
+					go server.Start(fmt.Sprintf(":%d", cfg.Port))
 					return nil
 				},
 				OnStop: func(ctx context.Context) error {
-					return e.Shutdown(ctx)
+					fmt.Printf("⏹️  Stopping %s server...\n", server.Name())
+					return server.Stop(ctx)
 				},
 			})
 		}),

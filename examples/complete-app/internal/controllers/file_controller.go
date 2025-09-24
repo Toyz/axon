@@ -1,11 +1,12 @@
 package controllers
 
+/*
 import (
 	"fmt"
 	"path/filepath"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/toyz/axon/pkg/axon"
 )
 
 // axon::controller -Prefix=/files
@@ -13,8 +14,8 @@ type FileController struct{}
 
 // ServeStaticFiles handles all requests under /files/* path
 // This demonstrates wildcard route functionality
-// axon::route GET /{*}
-func (c *FileController) ServeStaticFiles(ctx echo.Context, wildcardPath string) (map[string]interface{}, error) {
+// axon::route GET /{*} -Priority=999
+func (c *FileController) ServeStaticFiles(ctx axon.RequestContext, wildcardPath string) (map[string]interface{}, error) {
 	// Basic security check to prevent directory traversal
 	if strings.Contains(wildcardPath, "..") {
 		return nil, fmt.Errorf("invalid path")
@@ -54,7 +55,7 @@ func (c *FileController) ServeStaticFiles(ctx echo.Context, wildcardPath string)
 
 // UploadFile handles file uploads (more specific route)
 // This demonstrates that specific routes still work alongside wildcards
-// axon::route POST /upload
+// axon::route POST /upload -Priority=10
 func (c *FileController) UploadFile() (map[string]interface{}, error) {
 	return map[string]interface{}{
 		"message": "File upload endpoint",
@@ -64,7 +65,7 @@ func (c *FileController) UploadFile() (map[string]interface{}, error) {
 
 // GetFileInfo shows information about a specific file
 // This also demonstrates specific routes working with wildcards
-// axon::route GET /finfo/{filename:string}
+// axon::route GET /finfo/{filename:string} -Priority=10
 func (c *FileController) GetFileInfo(filename string) (map[string]interface{}, error) {
 	return map[string]interface{}{
 		"message":  "File info endpoint",
@@ -72,3 +73,4 @@ func (c *FileController) GetFileInfo(filename string) (map[string]interface{}, e
 		"note":     "This specific parameterized route also takes precedence over wildcard",
 	}, nil
 }
+*/

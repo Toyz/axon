@@ -1057,8 +1057,8 @@ func (p *Parser) analyzeHandlerSignature(file *ast.File, controllerName, methodN
 											// Determine parameter source based on type and position
 											source := models.ParameterSourceBody // Default
 
-											// Check if this is an echo.Context parameter
-											if paramType == "echo.Context" {
+											// Check if this is a context parameter
+											if paramType == "echo.Context" || paramType == "axon.RequestContext" {
 												source = models.ParameterSourceContext
 											} else if paramType == "axon.QueryMap" {
 												source = models.ParameterSourceQuery

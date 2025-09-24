@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/labstack/echo/v4"
+	"github.com/toyz/axon/pkg/axon"
 	"github.com/toyz/axon/examples/complete-app/internal/models"
 	"github.com/toyz/axon/examples/complete-app/internal/parsers"
 	"github.com/toyz/axon/examples/complete-app/internal/services"
@@ -59,7 +59,7 @@ func (c *ProductController) GetProductSales(dateRange parsers.DateRange) ([]mode
 
 // Mixed parameter types with auth middleware and PassContext
 //axon::route POST /products/{categoryId:UUID}/items -Middleware=AuthMiddleware -PassContext
-func (c *ProductController) CreateProductInCategory(ctx echo.Context, categoryId uuid.UUID, req models.CreateProductRequest) (*models.Product, error) {
+func (c *ProductController) CreateProductInCategory(ctx axon.RequestContext, categoryId uuid.UUID, req models.CreateProductRequest) (*models.Product, error) {
 	// Mock implementation showing built-in UUID parser
 	product := &models.Product{
 		ID:          uuid.New(),

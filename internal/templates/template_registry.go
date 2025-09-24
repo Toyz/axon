@@ -10,13 +10,13 @@ func NewTemplateRegistry() *TemplateRegistry {
 	registry := &TemplateRegistry{
 		templates: make(map[string]string),
 	}
-	
+
 	registry.registerProviderTemplates()
 	registry.registerResponseTemplates()
 	registry.registerInterfaceTemplates()
 	registry.registerMiddlewareTemplates()
 	registry.registerRouteTemplates()
-	
+
 	return registry
 }
 
@@ -45,7 +45,7 @@ func (tr *TemplateRegistry) registerProviderTemplates() {
 {{end}}{{end}}{{if not .Dependencies}}
 {{end}}	}
 }`
-	
+
 	// Provider with lifecycle
 	tr.templates["lifecycle-provider"] = `func New{{.StructName}}(lc fx.Lifecycle{{range .Dependencies}}{{if not .IsInit}}, {{.Name}} {{.Type}}{{end}}{{end}}) *{{.StructName}} {
 	service := &{{.StructName}}{
@@ -64,14 +64,14 @@ func (tr *TemplateRegistry) registerProviderTemplates() {
 	
 	return service
 }`
-	
+
 	// Simple provider without dependencies
 	tr.templates["simple-provider"] = `func New{{.StructName}}() *{{.StructName}} {
 	return &{{.StructName}}{
 		
 	}
 }`
-	
+
 	// Transient factory provider
 	tr.templates["transient-provider"] = `// New{{.StructName}}Factory creates a factory function for {{.StructName}} (Transient mode)
 func New{{.StructName}}Factory({{range $i, $dep := .InjectedDeps}}{{if $i}}, {{end}}{{$dep.Name}} {{$dep.Type}}{{end}}) func() *{{.StructName}} {
@@ -156,39 +156,39 @@ func New{{.StructName}}Factory({{range $i, $dep := .InjectedDeps}}{{if $i}}, {{e
 
 // registerResponseTemplates registers all response handling templates
 func (tr *TemplateRegistry) registerResponseTemplates() {
-	tr.templates["route-wrapper"] = `func {{.WrapperName}}(handler *{{.ControllerName}}) echo.HandlerFunc {
-	return func(c echo.Context) error {
+	tr.templates["route-wrapper"] = `func {{.WrapperName}}(handler *{{.ControllerName}}) axon.HandlerFunc {
+	return func(c axon.RequestContext) error {
 {{.ParameterBindingCode}}{{.BodyBindingCode}}
 {{.ResponseHandlingCode}}
 	}
 }`
-	
+
 	tr.templates["data-error-response"] = `		{{if .ErrAlreadyDeclared}}var data interface{}
 		data, err = {{.HandlerCall}}{{else}}data, err := {{.HandlerCall}}{{end}}
 		if err != nil {
 			return handleError(c, err)
 		}
-		return c.JSON(http.StatusOK, data)`
-		
+		return c.Response().JSON(http.StatusOK, data)`
+
 	tr.templates["response-error-response"] = `		{{if .ErrAlreadyDeclared}}var response *axon.Response
 		response, err = {{.HandlerCall}}{{else}}response, err := {{.HandlerCall}}{{end}}
 		if err != nil {
 			return handleError(c, err)
 		}
 		if response == nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
+			return axon.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
 		}
 		return handleAxonResponse(c, response)`
-		
+
 	tr.templates["error-response"] = `		{{if .ErrAlreadyDeclared}}err = {{.HandlerCall}}{{else}}err := {{.HandlerCall}}{{end}}
 		if err != nil {
 			return err
 		}
 		return nil`
-	
+
 	tr.templates["body-binding"] = `		var body {{.BodyType}}
 		if err := c.Bind(&body); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+			return axon.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
 `
 }
@@ -214,27 +214,79 @@ func (tr *TemplateRegistry) registerMiddlewareTemplates() {
 {{end}}{{end}}	}
 }`
 
-	tr.templates["global-middleware-registration"] = `// RegisterGlobalMiddleware registers all global middleware with Echo
-func RegisterGlobalMiddleware(e *echo.Echo{{range .GlobalMiddlewares}}, {{toCamelCase .Name}} *{{.StructName}}{{end}}) {
-{{range .GlobalMiddlewares}}	e.Use({{toCamelCase .Name}}.Handle)
+	tr.templates["global-middleware-registration"] = `// RegisterGlobalMiddleware registers all global middleware with the web server
+func RegisterGlobalMiddleware(server axon.WebServerInterface{{range .GlobalMiddlewares}}, {{toCamelCase .Name}} *{{.StructName}}{{end}}) {
+{{range .GlobalMiddlewares}}	server.Use({{toCamelCase .Name}}.Handle)
 {{end}}}`
 
 	tr.templates["middleware-registry"] = `// RegisterMiddlewares registers all middleware with the axon middleware registry
 func RegisterMiddlewares({{range $i, $mw := .Middlewares}}{{if $i}}, {{end}}{{toCamelCase $mw.Name}} *{{$mw.StructName}}{{end}}) {
 {{range .Middlewares}}	axon.RegisterMiddlewareHandler("{{.Name}}", {{toCamelCase .Name}})
 {{end}}}`
+
+	// Helper function templates
+	tr.templates["axon-response-handler"] = `// handleAxonResponse processes an axon.Response and applies headers, cookies, and content type
+func handleAxonResponse(c axon.RequestContext, response *axon.Response) error {
+	// Set headers
+	for key, value := range response.Headers {
+		c.Response().SetHeader(key, value)
+	}
+
+	// Set cookies
+	for _, cookie := range response.Cookies {
+		axonCookie := axon.AxonCookie{
+			Name:     cookie.Name,
+			Value:    cookie.Value,
+			Path:     cookie.Path,
+			Domain:   cookie.Domain,
+			MaxAge:   cookie.MaxAge,
+			Secure:   cookie.Secure,
+			HttpOnly: cookie.HttpOnly,
+		}
+		if cookie.SameSite != "" {
+			switch cookie.SameSite {
+			case "Strict":
+				axonCookie.SameSite = axon.SameSiteStrictMode
+			case "Lax":
+				axonCookie.SameSite = axon.SameSiteLaxMode
+			case "None":
+				axonCookie.SameSite = axon.SameSiteNoneMode
+			}
+		}
+		c.Response().SetCookie(axonCookie)
+	}
+
+	// Set content type and return response
+	if response.ContentType != "" {
+		return c.Response().Blob(response.StatusCode, response.ContentType, []byte(fmt.Sprintf("%v", response.Body)))
+	}
+	return c.Response().JSON(response.StatusCode, response.Body)
+}`
+
+	tr.templates["http-error-handler"] = `// handleHttpError processes an axon.HttpError and returns appropriate JSON response
+func handleHttpError(c axon.RequestContext, httpErr *axon.HttpError) error {
+	return c.Response().JSON(httpErr.StatusCode, httpErr)
+}`
+
+	tr.templates["error-handler"] = `// handleError processes any error and returns appropriate response (HttpError or generic error)
+func handleError(c axon.RequestContext, err error) error {
+	if httpErr, ok := err.(*axon.HttpError); ok {
+		return handleHttpError(c, httpErr)
+	}
+	return axon.NewHTTPError(http.StatusInternalServerError, err.Error())
+}`
 }
 
 // registerRouteTemplates registers all route-related templates
 func (tr *TemplateRegistry) registerRouteTemplates() {
-	tr.templates["route-registration-function"] = `// RegisterRoutes registers all HTTP routes with the Echo instance
-func RegisterRoutes(e *echo.Echo{{range .Controllers}}, {{.VarName}} *{{.StructName}}{{end}}{{range .MiddlewareDeps}}, {{.VarName}} *{{.PackageName}}.{{.Name}}{{end}}) {
-{{range .Controllers}}{{if .Prefix}}	{{.VarName}}Group := e.Group("{{.EchoPrefix}}")
+	tr.templates["route-registration-function"] = `// RegisterRoutes registers all HTTP routes with the web server
+func RegisterRoutes(server axon.WebServerInterface{{range .Controllers}}, {{.VarName}} *{{.StructName}}{{end}}{{range .MiddlewareDeps}}, {{.VarName}} *{{.PackageName}}.{{.Name}}{{end}}) {
+{{range .Controllers}}{{if .Prefix}}	{{.VarName}}Group := server.RegisterGroup("{{.EchoPrefix}}")
 {{end}}{{range .Routes}}{{template "RouteRegistration" .}}{{end}}{{end}}}`
 
 	tr.templates["route-registration"] = `	{{.HandlerVar}} := {{.WrapperFunc}}({{.ControllerVar}})
-{{if .HasMiddleware}}	{{.GroupVar}}.{{.Method}}("{{.EchoPath}}", {{.HandlerVar}}, {{.MiddlewareList}})
-{{else}}	{{.GroupVar}}.{{.Method}}("{{.EchoPath}}", {{.HandlerVar}})
+{{if .HasMiddleware}}	{{.GroupVar}}.RegisterRoute("{{.Method}}", "{{.EchoPath}}", {{.HandlerVar}}, {{.MiddlewareList}})
+{{else}}	{{.GroupVar}}.RegisterRoute("{{.Method}}", "{{.EchoPath}}", {{.HandlerVar}})
 {{end}}	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
 		Method:              "{{.Method}}",
 		Path:                "{{.Path}}",

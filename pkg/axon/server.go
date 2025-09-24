@@ -96,7 +96,19 @@ func (s *Server) Echo() *echo.Echo {
 
 // RegisterRoutes registers all routes from the global route registry
 func (s *Server) RegisterRoutes() {
-	RegisterAllRoutes(s.echo)
+	// For now, register routes directly with Echo
+	// TODO: Refactor this to use WebServerInterface abstraction
+	routes := DefaultRouteRegistry.GetAllRoutes()
+	for _, route := range routes {
+		// Convert back to Echo handler for now
+		echoHandler := func(c echo.Context) error {
+			// This is a temporary bridge - we need to create proper adapters
+			return nil
+		}
+
+		// Use EchoPath for registration with Echo (converts {id:int} to :id)
+		s.echo.Add(route.Method, route.EchoPath, echoHandler)
+	}
 }
 
 // Start starts the server and blocks until shutdown

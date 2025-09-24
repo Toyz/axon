@@ -39,6 +39,7 @@ type RouteTemplateData struct {
 	GroupVar                 string
 	Method                   string
 	Path                     string
+	RelativePath             string // Path relative to group (for adapter registration)
 	EchoPath                 string
 	HandlerName              string
 	ControllerName           string
@@ -171,7 +172,7 @@ func GenerateParameterBindingCode(parameters []models.Parameter, parserRegistry 
 
 			bindingCode.WriteString(fmt.Sprintf(`		%s, err := %s(c, c.Param("%s"))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid %s: %%v", err))
+			return axon.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid %s: %%v", err))
 		}
 `, actualParamName, functionCall, paramSource, actualParamName))
 		case models.ParameterSourceContext:

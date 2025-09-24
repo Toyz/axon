@@ -4,7 +4,6 @@ import (
 	"strconv"
 
 	"github.com/google/uuid"
-	"github.com/labstack/echo/v4"
 )
 
 // BuiltinParsers contains metadata for all built-in parsers
@@ -13,7 +12,7 @@ var BuiltinParsers = map[string]RouteParserMetadata{
 		TypeName:       "int",
 		FunctionName:   "ParseInt",
 		PackagePath:    "builtin",
-		ParameterTypes: []string{"echo.Context", "string"},
+		ParameterTypes: []string{"RequestContext", "string"},
 		ReturnTypes:    []string{"int", "error"},
 		FileName:       "builtin",
 		Line:           0,
@@ -22,7 +21,7 @@ var BuiltinParsers = map[string]RouteParserMetadata{
 		TypeName:       "string",
 		FunctionName:   "ParseString",
 		PackagePath:    "builtin",
-		ParameterTypes: []string{"echo.Context", "string"},
+		ParameterTypes: []string{"RequestContext", "string"},
 		ReturnTypes:    []string{"string", "error"},
 		FileName:       "builtin",
 		Line:           0,
@@ -31,7 +30,7 @@ var BuiltinParsers = map[string]RouteParserMetadata{
 		TypeName:       "float64",
 		FunctionName:   "ParseFloat64",
 		PackagePath:    "builtin",
-		ParameterTypes: []string{"echo.Context", "string"},
+		ParameterTypes: []string{"RequestContext", "string"},
 		ReturnTypes:    []string{"float64", "error"},
 		FileName:       "builtin",
 		Line:           0,
@@ -40,7 +39,7 @@ var BuiltinParsers = map[string]RouteParserMetadata{
 		TypeName:       "float32",
 		FunctionName:   "ParseFloat32",
 		PackagePath:    "builtin",
-		ParameterTypes: []string{"echo.Context", "string"},
+		ParameterTypes: []string{"RequestContext", "string"},
 		ReturnTypes:    []string{"float32", "error"},
 		FileName:       "builtin",
 		Line:           0,
@@ -49,7 +48,7 @@ var BuiltinParsers = map[string]RouteParserMetadata{
 		TypeName:       "uuid.UUID",
 		FunctionName:   "ParseUUID",
 		PackagePath:    "builtin",
-		ParameterTypes: []string{"echo.Context", "string"},
+		ParameterTypes: []string{"RequestContext", "string"},
 		ReturnTypes:    []string{"uuid.UUID", "error"},
 		FileName:       "builtin",
 		Line:           0,
@@ -64,22 +63,22 @@ var ParserAliases = map[string]string{
 }
 
 // ParseInt parses a string parameter to int
-func ParseInt(c echo.Context, paramValue string) (int, error) {
+func ParseInt(c RequestContext, paramValue string) (int, error) {
 	return strconv.Atoi(paramValue)
 }
 
 // ParseString returns the string parameter as-is (no conversion needed)
-func ParseString(c echo.Context, paramValue string) (string, error) {
+func ParseString(c RequestContext, paramValue string) (string, error) {
 	return paramValue, nil
 }
 
 // ParseFloat64 parses a string parameter to float64
-func ParseFloat64(c echo.Context, paramValue string) (float64, error) {
+func ParseFloat64(c RequestContext, paramValue string) (float64, error) {
 	return strconv.ParseFloat(paramValue, 64)
 }
 
 // ParseFloat32 parses a string parameter to float32
-func ParseFloat32(c echo.Context, paramValue string) (float32, error) {
+func ParseFloat32(c RequestContext, paramValue string) (float32, error) {
 	val, err := strconv.ParseFloat(paramValue, 32)
 	if err != nil {
 		return 0, err
@@ -88,7 +87,7 @@ func ParseFloat32(c echo.Context, paramValue string) (float32, error) {
 }
 
 // ParseUUID parses a string parameter to uuid.UUID
-func ParseUUID(c echo.Context, paramValue string) (uuid.UUID, error) {
+func ParseUUID(c RequestContext, paramValue string) (uuid.UUID, error) {
 	return uuid.Parse(paramValue)
 }
 
