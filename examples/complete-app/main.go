@@ -10,7 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/toyz/axon/examples/complete-app/internal/adapters/echo"
 	"github.com/toyz/axon/examples/complete-app/internal/config"
 	"github.com/toyz/axon/examples/complete-app/internal/controllers"
 	"github.com/toyz/axon/examples/complete-app/internal/interfaces"
@@ -69,7 +68,7 @@ func main() {
 				return adapters.NewDefaultGinAdapter()
 			case "echo":
 				fmt.Println("📦 Using Echo web framework")
-				return echo.NewEchoAdapter()
+				return adapters.NewDefaultEchoAdapter()
 			default:
 				// This should never happen due to validation above
 				panic(fmt.Sprintf("Unknown adapter: %s", *adapter))
