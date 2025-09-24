@@ -23,7 +23,7 @@ import (
 
 func main() {
 	// Define CLI flags
-	var adapter = flag.String("adapter", "echo", "Web server adapter to use (echo or gin)")
+	var adapter = flag.String("adapter", "echo", "Web server adapter to use (echo, gin, or fiber)")
 	var port = flag.Int("port", 8080, "Port to run the server on")
 	var help = flag.Bool("help", false, "Show help information")
 	flag.Parse()
@@ -40,12 +40,13 @@ func main() {
 		fmt.Println("Examples:")
 		fmt.Printf("  %s -adapter=echo -port=8080\n", os.Args[0])
 		fmt.Printf("  %s -adapter=gin -port=3000\n", os.Args[0])
+		fmt.Printf("  %s -adapter=fiber -port=3000\n", os.Args[0])
 		os.Exit(0)
 	}
 
 	// Validate adapter choice
-	if *adapter != "echo" && *adapter != "gin" {
-		log.Fatalf("Invalid adapter '%s'. Must be 'echo' or 'gin'", *adapter)
+	if *adapter != "echo" && *adapter != "gin" && *adapter != "fiber" {
+		log.Fatalf("Invalid adapter '%s'. Must be 'echo', 'gin', or 'fiber'", *adapter)
 	}
 
 	fmt.Printf("🚀 Starting Complete App with %s adapter on port %d\n", *adapter, *port)
@@ -69,6 +70,9 @@ func main() {
 			case "echo":
 				fmt.Println("📦 Using Echo web framework")
 				return adapters.NewDefaultEchoAdapter()
+			case "fiber":
+				fmt.Println("📦 Using Fiber web framework")
+				return adapters.NewDefaultFiberAdapter()
 			default:
 				// This should never happen due to validation above
 				panic(fmt.Sprintf("Unknown adapter: %s", *adapter))
