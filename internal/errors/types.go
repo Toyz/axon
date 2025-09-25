@@ -114,10 +114,15 @@ type BaseError struct {
 
 // Error implements the error interface
 func (e *BaseError) Error() string {
-	if e.Loc.IsEmpty() {
-		return e.Message
+	message := e.Message
+	if e.Cause != nil {
+		message = fmt.Sprintf("%s: %s", message, e.Cause.Error())
 	}
-	return fmt.Sprintf("%s: %s", e.Loc.String(), e.Message)
+
+	if e.Loc.IsEmpty() {
+		return message
+	}
+	return fmt.Sprintf("%s: %s", e.Loc.String(), message)
 }
 
 // ErrorCode returns the error code

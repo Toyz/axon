@@ -100,12 +100,6 @@ func NewModelsParserValidationError(functionName, fileName string, line int, exp
 	err := &ParserError{
 		BaseError: New(ParserValidationErrorCode, message).
 			WithLocation(loc).
-			WithSuggestions(
-				fmt.Sprintf("Expected signature: %s", expectedSignature),
-				"Ensure the first parameter is echo.Context",
-				"Ensure the second parameter is string",
-				"Ensure the function returns (T, error)",
-			).
 			WithContext("function_name", functionName).
 			WithContext("expected_signature", expectedSignature).
 			WithContext("actual_issue", actualIssue),
@@ -123,7 +117,7 @@ func NewParserImportError(typeName, fileName string, line int, requiredImport st
 		Line: line,
 	}
 
-	message := fmt.Sprintf("Parser for type '%s' requires missing import", typeName)
+	message := fmt.Sprintf("Parser for type '%s' requires missing import: %s", typeName, requiredImport)
 	err := New(ParserImportErrorCode, message).
 		WithLocation(loc).
 		WithContext("type_name", typeName).

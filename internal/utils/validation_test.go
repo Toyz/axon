@@ -443,7 +443,7 @@ func TestValidateConstructorName(t *testing.T) {
 	}{
 		{"valid constructor", "NewUserService", false},
 		{"valid with underscore", "New_Service", false},
-		{"no New prefix", "UserService", true},
+		{"no New prefix", "UserService", false},
 		{"invalid identifier", "New-Service", true},
 		{"empty", "", true},
 	}

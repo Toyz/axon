@@ -155,10 +155,22 @@ func IsOneOf[T comparable](field string, allowed ...T) Validator[T] {
 			}
 		}
 
+		var quotedAllowed []string
+		for _, val := range allowed {
+			quotedAllowed = append(quotedAllowed, fmt.Sprintf("'%v'", val))
+		}
+
+		var message string
+		if len(quotedAllowed) == 2 {
+			message = fmt.Sprintf("must be %s or %s", quotedAllowed[0], quotedAllowed[1])
+		} else {
+			message = fmt.Sprintf("must be one of: %v", allowed)
+		}
+
 		return ValidationError{
 			Field:   field,
 			Value:   value,
-			Message: fmt.Sprintf("must be one of: %v", allowed),
+			Message: message,
 		}
 	}
 }

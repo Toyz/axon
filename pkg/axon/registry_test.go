@@ -3,7 +3,6 @@ package axon
 import (
 	"testing"
 
-	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -17,7 +16,7 @@ func TestInMemoryRouteRegistry_RegisterRoute(t *testing.T) {
 		ControllerName: "UserController",
 		PackageName:    "controllers",
 		Middlewares:    []string{"auth", "logging"},
-		Handler:        func(c echo.Context) error { return nil },
+		Handler:        func(c RequestContext) error { return nil },
 	}
 
 	registry.RegisterRoute(route)
@@ -142,8 +141,8 @@ func TestMiddlewareRegistry(t *testing.T) {
 	DefaultMiddlewareRegistry = NewInMemoryMiddlewareRegistry()
 
 	// Test middleware registration
-	mockHandler := func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+	mockHandler := func(next HandlerFunc) HandlerFunc {
+		return func(c RequestContext) error {
 			return next(c)
 		}
 	}
@@ -175,8 +174,8 @@ func TestRouteWithMiddlewareInstances(t *testing.T) {
 	DefaultMiddlewareRegistry = NewInMemoryMiddlewareRegistry()
 
 	// Register middleware
-	authHandler := func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+	authHandler := func(next HandlerFunc) HandlerFunc {
+		return func(c RequestContext) error {
 			return next(c)
 		}
 	}

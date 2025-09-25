@@ -34,7 +34,7 @@ func TestGenerateParameterBindingCode(t *testing.T) {
 			},
 			expected: `		id, err := axon.ParseInt(c, c.Param("id"))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid id: %v", err))
+			return axon.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid id: %v", err))
 		}
 `,
 		},
@@ -50,7 +50,7 @@ func TestGenerateParameterBindingCode(t *testing.T) {
 			},
 			expected: `		name, err := axon.ParseString(c, c.Param("name"))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid name: %v", err))
+			return axon.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid name: %v", err))
 		}
 `,
 		},
@@ -72,11 +72,11 @@ func TestGenerateParameterBindingCode(t *testing.T) {
 			},
 			expected: `		id, err := axon.ParseInt(c, c.Param("id"))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid id: %v", err))
+			return axon.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid id: %v", err))
 		}
 		slug, err := axon.ParseString(c, c.Param("slug"))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid slug: %v", err))
+			return axon.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid slug: %v", err))
 		}
 `,
 		},
@@ -103,7 +103,7 @@ func TestGenerateParameterBindingCode(t *testing.T) {
 			},
 			expected: `		id, err := axon.ParseInt(c, c.Param("id"))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid id: %v", err))
+			return axon.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid id: %v", err))
 		}
 `,
 		},
@@ -177,13 +177,17 @@ func TestGenerateCoreServiceProvider(t *testing.T) {
 		{
 			name: "simple core service without dependencies",
 			service: models.CoreServiceMetadata{
-				BaseMetadata: models.BaseMetadata{
+				BaseMetadataTrait: models.BaseMetadataTrait{
 					Name:         "UserService",
 					StructName:   "UserService",
 					Dependencies: []models.Dependency{},
 				},
+				LifecycleTrait: models.LifecycleTrait{
 				HasLifecycle: false,
-				IsManual:     false,
+			},
+				ManualModuleTrait: models.ManualModuleTrait{
+				IsManual: false,
+			},
 			},
 			expected: `func NewUserService() *UserService {
 	return &UserService{
@@ -194,7 +198,7 @@ func TestGenerateCoreServiceProvider(t *testing.T) {
 		{
 			name: "core service with dependencies",
 			service: models.CoreServiceMetadata{
-				BaseMetadata: models.BaseMetadata{
+				BaseMetadataTrait: models.BaseMetadataTrait{
 					Name:       "UserService",
 					StructName: "UserService",
 					Dependencies: []models.Dependency{
@@ -202,51 +206,57 @@ func TestGenerateCoreServiceProvider(t *testing.T) {
 						{Name: "Config", Type: "*Config"},
 					},
 				},
+				LifecycleTrait: models.LifecycleTrait{
 				HasLifecycle: false,
-				IsManual:     false,
 			},
-			expected: `func NewUserService(UserRepository UserRepository, Config *Config) *UserService {
+				ManualModuleTrait: models.ManualModuleTrait{
+				IsManual: false,
+			},
+			},
+			expected: `func NewUserService(userRepository UserRepository, config *Config) *UserService {
 	return &UserService{
-		UserRepository: UserRepository,
-		Config: Config,
+		UserRepository: userRepository,
+		Config: config,
 	}
 }`,
 		},
 		{
 			name: "lifecycle service with dependencies and Start method only",
 			service: models.CoreServiceMetadata{
-				BaseMetadata: models.BaseMetadata{
+				BaseMetadataTrait: models.BaseMetadataTrait{
 					Name:       "DatabaseService",
 					StructName: "DatabaseService",
 					Dependencies: []models.Dependency{
 						{Name: "Config", Type: "*Config"},
 					},
 				},
-				LifecycleMetadata: models.LifecycleMetadata{
-					HasStart: true,
-					HasStop:  false,
+				LifecycleTrait: models.LifecycleTrait{
+					HasStart:     true,
+					HasStop:      false,
+					HasLifecycle: true,
 				},
-				HasLifecycle: true,
-				IsManual:     false,
+				ManualModuleTrait: models.ManualModuleTrait{
+				IsManual: false,
 			},
-			expected: `func NewDatabaseService(lc fx.Lifecycle, Config *Config) *DatabaseService {
+			},
+			expected: `func NewDatabaseService(lc fx.Lifecycle, config *Config) *DatabaseService {
 	service := &DatabaseService{
-		Config: Config,
+		Config: config,
 	}
-	
+
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			return service.Start(ctx)
 		},
 	})
-	
+
 	return service
 }`,
 		},
 		{
 			name: "lifecycle service with both Start and Stop methods",
 			service: models.CoreServiceMetadata{
-				BaseMetadata: models.BaseMetadata{
+				BaseMetadataTrait: models.BaseMetadataTrait{
 					Name:       "MessageConsumer",
 					StructName: "MessageConsumer",
 					Dependencies: []models.Dependency{
@@ -254,19 +264,21 @@ func TestGenerateCoreServiceProvider(t *testing.T) {
 						{Name: "Logger", Type: "Logger"},
 					},
 				},
-				LifecycleMetadata: models.LifecycleMetadata{
-					HasStart: true,
-					HasStop:  true,
+				LifecycleTrait: models.LifecycleTrait{
+					HasStart:     true,
+					HasStop:      true,
+					HasLifecycle: true,
 				},
-				HasLifecycle: true,
-				IsManual:     false,
+				ManualModuleTrait: models.ManualModuleTrait{
+				IsManual: false,
 			},
-			expected: `func NewMessageConsumer(lc fx.Lifecycle, Config *Config, Logger Logger) *MessageConsumer {
+			},
+			expected: `func NewMessageConsumer(lc fx.Lifecycle, config *Config, logger Logger) *MessageConsumer {
 	service := &MessageConsumer{
-		Config: Config,
-		Logger: Logger,
+		Config: config,
+		Logger: logger,
 	}
-	
+
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			return service.Start(ctx)
@@ -275,21 +287,25 @@ func TestGenerateCoreServiceProvider(t *testing.T) {
 			return service.Stop(ctx)
 		},
 	})
-	
+
 	return service
 }`,
 		},
 		{
 			name: "manual service (should return empty)",
 			service: models.CoreServiceMetadata{
-				BaseMetadata: models.BaseMetadata{
+				BaseMetadataTrait: models.BaseMetadataTrait{
 					Name:         "ConfigService",
 					StructName:   "ConfigService",
 					Dependencies: []models.Dependency{},
 				},
-				HasLifecycle: false,
-				IsManual:     true,
-				ModuleName:   "CustomModule",
+				LifecycleTrait: models.LifecycleTrait{
+					HasLifecycle: false,
+				},
+				ManualModuleTrait: models.ManualModuleTrait{
+					IsManual:   true,
+					ModuleName: "CustomModule",
+				},
 			},
 			expected: "",
 		},
@@ -340,36 +356,48 @@ func TestGenerateCoreServiceModule(t *testing.T) {
 				PackagePath: "./services",
 				CoreServices: []models.CoreServiceMetadata{
 					{
-						BaseMetadata: models.BaseMetadata{
+						BaseMetadataTrait: models.BaseMetadataTrait{
 							Name:       "UserService",
 							StructName: "UserService",
 							Dependencies: []models.Dependency{
 								{Name: "UserRepository", Type: "UserRepository"},
 							},
 						},
-						HasLifecycle: false,
-						IsManual:     false,
+						LifecycleTrait: models.LifecycleTrait{
+				HasLifecycle: false,
+			},
+						ManualModuleTrait: models.ManualModuleTrait{
+				IsManual: false,
+			},
 					},
 					{
-						BaseMetadata: models.BaseMetadata{
+						BaseMetadataTrait: models.BaseMetadataTrait{
 							Name:       "DatabaseService",
 							StructName: "DatabaseService",
 							Dependencies: []models.Dependency{
 								{Name: "Config", Type: "*Config"},
 							},
 						},
-						HasLifecycle: true,
-						IsManual:     false,
+						LifecycleTrait: models.LifecycleTrait{
+							HasLifecycle: true,
+						},
+						ManualModuleTrait: models.ManualModuleTrait{
+				IsManual: false,
+			},
 					},
 					{
-						BaseMetadata: models.BaseMetadata{
+						BaseMetadataTrait: models.BaseMetadataTrait{
 							Name:         "ConfigService",
 							StructName:   "ConfigService",
 							Dependencies: []models.Dependency{},
 						},
-						HasLifecycle: false,
-						IsManual:     true,
-						ModuleName:   "CustomModule",
+						LifecycleTrait: models.LifecycleTrait{
+				HasLifecycle: false,
+			},
+						ManualModuleTrait: models.ManualModuleTrait{
+							IsManual: true,
+							ModuleName: "CustomModule",
+						},
 					},
 				},
 			},
@@ -393,14 +421,18 @@ func TestGenerateCoreServiceModule(t *testing.T) {
 				PackagePath: "./config",
 				CoreServices: []models.CoreServiceMetadata{
 					{
-						BaseMetadata: models.BaseMetadata{
+						BaseMetadataTrait: models.BaseMetadataTrait{
 							Name:         "ConfigService",
 							StructName:   "ConfigService",
 							Dependencies: []models.Dependency{},
 						},
-						HasLifecycle: false,
-						IsManual:     true,
-						ModuleName:   "Module",
+						LifecycleTrait: models.LifecycleTrait{
+				HasLifecycle: false,
+			},
+						ManualModuleTrait: models.ManualModuleTrait{
+							IsManual: true,
+							ModuleName: "Module",
+						},
 					},
 				},
 			},
@@ -480,7 +512,7 @@ func TestGenerateInterface(t *testing.T) {
 		{
 			name: "simple interface with basic methods",
 			iface: models.InterfaceMetadata{
-				BaseMetadata: models.BaseMetadata{
+				BaseMetadataTrait: models.BaseMetadataTrait{
 					Name:       "UserServiceInterface",
 					StructName: "UserService",
 				},
@@ -510,7 +542,7 @@ type UserServiceInterface interface {
 		{
 			name: "interface with complex method signatures",
 			iface: models.InterfaceMetadata{
-				BaseMetadata: models.BaseMetadata{
+				BaseMetadataTrait: models.BaseMetadataTrait{
 					Name:       "ProcessorInterface",
 					StructName: "Processor",
 				},
@@ -540,7 +572,7 @@ type ProcessorInterface interface {
 		{
 			name: "interface with no methods",
 			iface: models.InterfaceMetadata{
-				BaseMetadata: models.BaseMetadata{
+				BaseMetadataTrait: models.BaseMetadataTrait{
 					Name:       "EmptyInterface",
 					StructName: "Empty",
 				},
@@ -553,7 +585,7 @@ type EmptyInterface interface {
 		{
 			name: "interface with anonymous parameters",
 			iface: models.InterfaceMetadata{
-				BaseMetadata: models.BaseMetadata{
+				BaseMetadataTrait: models.BaseMetadataTrait{
 					Name:       "HandlerInterface",
 					StructName: "Handler",
 				},
@@ -603,7 +635,7 @@ func TestGenerateInterfaceProvider(t *testing.T) {
 		{
 			name: "simple interface provider",
 			iface: models.InterfaceMetadata{
-				BaseMetadata: models.BaseMetadata{
+				BaseMetadataTrait: models.BaseMetadataTrait{
 					Name:       "UserServiceInterface",
 					StructName: "UserService",
 				},
@@ -615,7 +647,7 @@ func TestGenerateInterfaceProvider(t *testing.T) {
 		{
 			name: "complex interface provider",
 			iface: models.InterfaceMetadata{
-				BaseMetadata: models.BaseMetadata{
+				BaseMetadataTrait: models.BaseMetadataTrait{
 					Name:       "MessageProcessorInterface",
 					StructName: "MessageProcessor",
 				},
@@ -651,20 +683,24 @@ func TestGenerateCoreServiceModuleWithInterfaces(t *testing.T) {
 		PackagePath: "./services",
 		CoreServices: []models.CoreServiceMetadata{
 			{
-				BaseMetadata: models.BaseMetadata{
+				BaseMetadataTrait: models.BaseMetadataTrait{
 					Name:       "UserService",
 					StructName: "UserService",
 					Dependencies: []models.Dependency{
 						{Name: "UserRepository", Type: "UserRepository"},
 					},
 				},
+				LifecycleTrait: models.LifecycleTrait{
 				HasLifecycle: false,
-				IsManual:     false,
+			},
+				ManualModuleTrait: models.ManualModuleTrait{
+				IsManual: false,
+			},
 			},
 		},
 		Interfaces: []models.InterfaceMetadata{
 			{
-				BaseMetadata: models.BaseMetadata{
+				BaseMetadataTrait: models.BaseMetadataTrait{
 					Name:       "UserServiceInterface",
 					StructName: "UserService",
 				},
@@ -730,11 +766,11 @@ func TestGenerateParameterBindingCode_WithContextParameters(t *testing.T) {
 			},
 			expected: `		id, err := axon.ParseInt(c, c.Param("id"))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid id: %v", err))
+			return axon.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid id: %v", err))
 		}
 		slug, err := axon.ParseString(c, c.Param("slug"))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid slug: %v", err))
+			return axon.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid slug: %v", err))
 		}
 `,
 			expectError: false,
@@ -772,7 +808,7 @@ func TestGenerateParameterBindingCode_WithContextParameters(t *testing.T) {
 			},
 			expected: `		id, err := axon.ParseInt(c, c.Param("id"))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid id: %v", err))
+			return axon.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid id: %v", err))
 		}
 `,
 			expectError: false,
@@ -814,14 +850,16 @@ func TestGenerateCoreServiceProviderWithCustomConstructor(t *testing.T) {
 		{
 			name: "service without custom constructor should generate provider",
 			service: models.CoreServiceMetadata{
-				BaseMetadata: models.BaseMetadata{
+				BaseMetadataTrait: models.BaseMetadataTrait{
 					Name:       "UserService",
 					StructName: "UserService",
 					Dependencies: []models.Dependency{
 						{Name: "Config", Type: "*config.Config", IsInit: false},
 					},
 				},
-				Constructor: "", // No custom constructor
+				ConstructorTrait: models.ConstructorTrait{
+					Constructor: "", // No custom constructor
+				},
 			},
 			expectEmpty: false,
 			expectError: false,
@@ -829,14 +867,16 @@ func TestGenerateCoreServiceProviderWithCustomConstructor(t *testing.T) {
 		{
 			name: "service with custom constructor should not generate provider",
 			service: models.CoreServiceMetadata{
-				BaseMetadata: models.BaseMetadata{
+				BaseMetadataTrait: models.BaseMetadataTrait{
 					Name:       "NotificationService",
 					StructName: "NotificationService",
 					Dependencies: []models.Dependency{
 						{Name: "Logger", Type: "*slog.Logger", IsInit: false},
 					},
 				},
-				Constructor: "NewCustomNotificationService", // Custom constructor
+				ConstructorTrait: models.ConstructorTrait{
+					Constructor: "NewCustomNotificationService", // Custom constructor
+				},
 			},
 			expectEmpty: true,
 			expectError: false,
@@ -844,12 +884,16 @@ func TestGenerateCoreServiceProviderWithCustomConstructor(t *testing.T) {
 		{
 			name: "manual service should not generate provider",
 			service: models.CoreServiceMetadata{
-				BaseMetadata: models.BaseMetadata{
+				BaseMetadataTrait: models.BaseMetadataTrait{
 					Name:       "ManualService",
 					StructName: "ManualService",
 				},
-				IsManual:    true,
-				Constructor: "", // No custom constructor but manual
+				ManualModuleTrait: models.ManualModuleTrait{
+					IsManual: true,
+				},
+				ConstructorTrait: models.ConstructorTrait{
+					Constructor: "", // No custom constructor but manual
+				},
 			},
 			expectEmpty: true,
 			expectError: false,

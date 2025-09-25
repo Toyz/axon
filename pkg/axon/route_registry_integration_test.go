@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
@@ -32,7 +31,7 @@ func (suite *RouteRegistryIntegrationTestSuite) TestCompleteRouteDiscoveryWorkfl
 			PackageName:        "controllers",
 			Middlewares:        []string{"Auth", "Logging"},
 			ParameterInstances: []ParameterInstance{{Name: "id", Type: "int"}},
-			Handler:            func(c echo.Context) error { return nil },
+			Handler:            func(c RequestContext) error { return nil },
 		},
 		{
 			Method:             "POST",
@@ -43,7 +42,7 @@ func (suite *RouteRegistryIntegrationTestSuite) TestCompleteRouteDiscoveryWorkfl
 			PackageName:        "controllers",
 			Middlewares:        []string{"Auth", "Validation"},
 			ParameterInstances: []ParameterInstance{},
-			Handler:            func(c echo.Context) error { return nil },
+			Handler:            func(c RequestContext) error { return nil },
 		},
 		{
 			Method:             "GET",
@@ -54,7 +53,7 @@ func (suite *RouteRegistryIntegrationTestSuite) TestCompleteRouteDiscoveryWorkfl
 			PackageName:        "controllers",
 			Middlewares:        []string{"Logging"},
 			ParameterInstances: []ParameterInstance{{Name: "slug", Type: "string"}},
-			Handler:            func(c echo.Context) error { return nil },
+			Handler:            func(c RequestContext) error { return nil },
 		},
 		{
 			Method:             "GET",
@@ -65,7 +64,7 @@ func (suite *RouteRegistryIntegrationTestSuite) TestCompleteRouteDiscoveryWorkfl
 			PackageName:        "health",
 			Middlewares:        []string{},
 			ParameterInstances: []ParameterInstance{},
-			Handler:            func(c echo.Context) error { return nil },
+			Handler:            func(c RequestContext) error { return nil },
 		},
 		{
 			Method:             "PUT",
@@ -76,7 +75,7 @@ func (suite *RouteRegistryIntegrationTestSuite) TestCompleteRouteDiscoveryWorkfl
 			PackageName:        "controllers",
 			Middlewares:        []string{"Auth", "Validation", "RateLimit"},
 			ParameterInstances: []ParameterInstance{{Name: "id", Type: "int"}},
-			Handler:            func(c echo.Context) error { return nil },
+			Handler:            func(c RequestContext) error { return nil },
 		},
 	}
 
@@ -129,7 +128,7 @@ func (suite *RouteRegistryIntegrationTestSuite) TestRouteMetadataIntegrity() {
 		PackageName:        "api.controllers",
 		Middlewares:        []string{"Auth", "Validation", "RateLimit", "Logging"},
 		ParameterInstances: []ParameterInstance{{Name: "id", Type: "int"}, {Name: "slug", Type: "string"}},
-		Handler:            func(c echo.Context) error { return nil },
+		Handler:            func(c RequestContext) error { return nil },
 	}
 
 	suite.registry.RegisterRoute(route)
@@ -237,55 +236,7 @@ func (suite *RouteRegistryIntegrationTestSuite) TestGlobalRegistryIntegration() 
 	assert.Len(suite.T(), controllerRoutes, 1)
 }
 
-func (suite *RouteRegistryIntegrationTestSuite) TestEchoIntegration() {
-	// Test integration with Echo server registration
-	e := echo.New()
-
-	routes := []RouteInfo{
-		{
-			Method:   "GET",
-			EchoPath: "/users/:id",
-			Handler:  func(c echo.Context) error { return c.String(200, "user") },
-		},
-		{
-			Method:   "POST",
-			EchoPath: "/users",
-			Handler:  func(c echo.Context) error { return c.String(201, "created") },
-		},
-	}
-
-	for _, route := range routes {
-		suite.registry.RegisterRoute(route)
-	}
-
-	// Replace global registry temporarily
-	originalRegistry := DefaultRouteRegistry
-	DefaultRouteRegistry = suite.registry
-	defer func() {
-		DefaultRouteRegistry = originalRegistry
-	}()
-
-	// Test RegisterAllRoutes function
-	RegisterAllRoutes(e)
-
-	// Verify routes were registered with Echo
-	echoRoutes := e.Routes()
-	assert.Len(suite.T(), echoRoutes, 2)
-
-	// Find our routes in Echo's route list
-	var getUserRoute, createUserRoute *echo.Route
-	for _, echoRoute := range echoRoutes {
-		if echoRoute.Method == "GET" && echoRoute.Path == "/users/:id" {
-			getUserRoute = echoRoute
-		}
-		if echoRoute.Method == "POST" && echoRoute.Path == "/users" {
-			createUserRoute = echoRoute
-		}
-	}
-
-	assert.NotNil(suite.T(), getUserRoute)
-	assert.NotNil(suite.T(), createUserRoute)
-}
+// TestEchoIntegration removed - Echo integration should be tested via adapters package
 
 func (suite *RouteRegistryIntegrationTestSuite) TestMiddlewareInstancesIntegration() {
 	// Test that middleware instances are properly stored and retrieved
@@ -293,13 +244,13 @@ func (suite *RouteRegistryIntegrationTestSuite) TestMiddlewareInstancesIntegrati
 	// First register some middleware
 	authMiddleware := MiddlewareInstance{
 		Name:     "Auth",
-		Handler:  func(next echo.HandlerFunc) echo.HandlerFunc { return next },
+		Handler:  func(next HandlerFunc) HandlerFunc { return next },
 		Instance: "AuthInstance",
 	}
 
 	loggingMiddleware := MiddlewareInstance{
 		Name:     "Logging",
-		Handler:  func(next echo.HandlerFunc) echo.HandlerFunc { return next },
+		Handler:  func(next HandlerFunc) HandlerFunc { return next },
 		Instance: "LoggingInstance",
 	}
 

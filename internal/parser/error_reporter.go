@@ -67,8 +67,8 @@ func (r *ParserErrorReporter) ReportParserValidationError(functionName, fileName
 
 	baseErr := errors.NewModelsParserValidationError(functionName, fileName, line, expectedSignature, issue)
 	// Add additional context to the underlying error
-	if axonErr, ok := baseErr.AxonError.(*errors.BaseError); ok {
-		axonErr.WithSuggestions(suggestions...).
+	if parserErr, ok := baseErr.AxonError.(*errors.ParserError); ok {
+		parserErr.BaseError.WithSuggestions(suggestions...).
 			WithContext("actual_signature", actualSignature)
 	}
 	return baseErr
@@ -110,7 +110,12 @@ func (r *ParserErrorReporter) ReportParserNotFoundError(typeName, routeMethod, r
 		suggestions = append(suggestions, "Example parser implementation:", example)
 	}
 
-	return errors.NewParserNotFoundError(typeName, routeMethod, routePath, paramName, fileName, line, availableParsers)
+	baseErr := errors.NewParserNotFoundError(typeName, routeMethod, routePath, paramName, fileName, line, availableParsers)
+	// Replace the default suggestions with our context-specific ones
+	if axonErr, ok := baseErr.AxonError.(*errors.BaseError); ok {
+		axonErr.Hints = suggestions
+	}
+	return baseErr
 }
 
 // ReportParserImportError creates a detailed error when required imports are missing
@@ -137,7 +142,12 @@ func (r *ParserErrorReporter) ReportParserImportError(typeName, fileName string,
 		)
 	}
 
-	return errors.NewParserImportError(typeName, fileName, line, requiredImport)
+	baseErr := errors.NewParserImportError(typeName, fileName, line, requiredImport)
+	// Replace the default suggestions with our context-specific ones
+	if axonErr, ok := baseErr.AxonError.(*errors.BaseError); ok {
+		axonErr.Hints = suggestions
+	}
+	return baseErr
 }
 
 // ReportParserConflictError creates a detailed error when parser conflicts are detected

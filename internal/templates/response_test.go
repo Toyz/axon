@@ -34,7 +34,7 @@ func TestGenerateResponseHandling(t *testing.T) {
 		if err != nil {
 			return handleError(c, err)
 		}
-		return c.JSON(http.StatusOK, data)`,
+		return c.Response().JSON(http.StatusOK, data)`,
 		},
 		{
 			name: "response error return type",
@@ -55,7 +55,7 @@ func TestGenerateResponseHandling(t *testing.T) {
 			return handleError(c, err)
 		}
 		if response == nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
+			return axon.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
 		}
 		return handleAxonResponse(c, response)`,
 		},
@@ -197,11 +197,11 @@ func TestGenerateRouteWrapper(t *testing.T) {
 			},
 			controllerName: "UserController",
 			shouldContain: []string{
-				"func wrapUserControllerGetUser(handler *UserController) echo.HandlerFunc",
+				"func wrapUserControllerGetUser(handler *UserController) axon.HandlerFunc",
 				"id, err := axon.ParseInt(c, c.Param(\"id\"))",
 				"var data interface{}",
 				"data, err = handler.GetUser(id)",
-				"return c.JSON(http.StatusOK, data)",
+				"return c.Response().JSON(http.StatusOK, data)",
 			},
 		},
 		{
@@ -221,7 +221,7 @@ func TestGenerateRouteWrapper(t *testing.T) {
 			},
 			controllerName: "UserController",
 			shouldContain: []string{
-				"func wrapUserControllerCreateUser(handler *UserController) echo.HandlerFunc",
+				"func wrapUserControllerCreateUser(handler *UserController) axon.HandlerFunc",
 				"var body User",
 				"if err := c.Bind(&body); err != nil",
 				"response, err := handler.CreateUser(body)",
@@ -246,8 +246,8 @@ func TestGenerateRouteWrapper(t *testing.T) {
 			},
 			controllerName: "UserController",
 			shouldContain: []string{
-				"func wrapUserControllerCreateUser(handler *UserController) echo.HandlerFunc",
-				"return func(c echo.Context) error {",
+				"func wrapUserControllerCreateUser(handler *UserController) axon.HandlerFunc",
+				"return func(c axon.RequestContext) error {",
 				"var body User",
 				"if err := c.Bind(&body); err != nil {",
 				"data, err := handler.CreateUser(body)",
@@ -271,8 +271,8 @@ func TestGenerateRouteWrapper(t *testing.T) {
 			},
 			controllerName: "UserController",
 			shouldContain: []string{
-				"func wrapUserControllerCreateUser(handler *UserController) echo.HandlerFunc",
-				"return func(c echo.Context) error {",
+				"func wrapUserControllerCreateUser(handler *UserController) axon.HandlerFunc",
+				"return func(c axon.RequestContext) error {",
 				"var body User",
 				"if err := c.Bind(&body); err != nil {",
 				"data, err := handler.CreateUser(body)",
@@ -360,7 +360,7 @@ func TestGenerateBodyBindingCode(t *testing.T) {
 			method: "POST",
 			expected: `		var body User
 		if err := c.Bind(&body); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+			return axon.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
 `,
 		},

@@ -56,31 +56,37 @@ func TestGeneratedCoreServiceModuleCompilation(t *testing.T) {
 		PackagePath: moduleDir,
 		CoreServices: []models.CoreServiceMetadata{
 			{
-				BaseMetadata: models.BaseMetadata{
+				BaseMetadataTrait: models.BaseMetadataTrait{
 					Name:         "UserService",
 					StructName:   "UserService",
 					Dependencies: []models.Dependency{{Name: "UserRepository", Type: "UserRepository"}},
 				},
-				HasLifecycle: false,
-				IsManual:     false,
+				LifecycleTrait: models.LifecycleTrait{
+					HasLifecycle: false,
+				},
+				ManualModuleTrait: models.ManualModuleTrait{
+					IsManual: false,
+				},
 			},
 			{
-				BaseMetadata: models.BaseMetadata{
+				BaseMetadataTrait: models.BaseMetadataTrait{
 					Name:         "DatabaseService",
 					StructName:   "DatabaseService",
 					Dependencies: []models.Dependency{{Name: "Config", Type: "*Config"}},
 				},
-				LifecycleMetadata: models.LifecycleMetadata{
-					HasStart: true,
-					HasStop:  true,
+				LifecycleTrait: models.LifecycleTrait{
+					HasStart:     true,
+					HasStop:      true,
+					HasLifecycle: true,
 				},
-				HasLifecycle: true,
-				IsManual:     false,
+				ManualModuleTrait: models.ManualModuleTrait{
+					IsManual: false,
+				},
 			},
 		},
 		Interfaces: []models.InterfaceMetadata{
 			{
-				BaseMetadata: models.BaseMetadata{
+				BaseMetadataTrait: models.BaseMetadataTrait{
 					Name:       "UserServiceInterface",
 					StructName: "UserService",
 				},
