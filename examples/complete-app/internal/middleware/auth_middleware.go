@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -10,10 +9,10 @@ import (
 	"github.com/toyz/axon/pkg/axon"
 )
 
-//axon::middleware AuthMiddleware
+// axon::middleware AuthMiddleware
 type AuthMiddleware struct {
 	// axon::inject
-	sessionFactory func() *services.SessionService 
+	sessionFactory func() *services.SessionService
 
 	//axon::inject
 	Config *config.Config
@@ -22,8 +21,6 @@ type AuthMiddleware struct {
 // Handle implements the middleware logic for authentication
 func (m *AuthMiddleware) Handle(next axon.HandlerFunc) axon.HandlerFunc {
 	return func(c axon.RequestContext) error {
-		fmt.Println("AuthMiddleware: Handle")
-
 		// Check for Authorization header
 		auth := c.Request().Header("Authorization")
 		if auth == "" {
@@ -39,11 +36,11 @@ func (m *AuthMiddleware) Handle(next axon.HandlerFunc) axon.HandlerFunc {
 		if token != "valid-token" {
 			return axon.NewHTTPError(http.StatusUnauthorized, "invalid token")
 		}
-		
+
 		// Set user context (in real app, decode from JWT)
 		c.Set("user_id", 1)
 		c.Set("user_name", "authenticated_user")
-		
+
 		return next(c)
 	}
 }

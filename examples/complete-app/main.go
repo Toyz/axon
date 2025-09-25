@@ -49,8 +49,6 @@ func main() {
 		log.Fatalf("Invalid adapter '%s'. Must be 'echo', 'gin', or 'fiber'", *adapter)
 	}
 
-	fmt.Printf("🚀 Starting Complete App with %s adapter on port %d\n", *adapter, *port)
-
 	app := fx.New(
 		// Provide configuration with command line overrides
 		fx.Provide(func() *config.Config {
@@ -65,13 +63,13 @@ func main() {
 		fx.Provide(func() axon.WebServerInterface {
 			switch *adapter {
 			case "gin":
-				fmt.Println("📦 Using Gin web framework")
+				fmt.Println("Using Gin web framework")
 				return adapters.NewDefaultGinAdapter()
 			case "echo":
-				fmt.Println("📦 Using Echo web framework")
+				fmt.Println("Using Echo web framework")
 				return adapters.NewDefaultEchoAdapter()
 			case "fiber":
-				fmt.Println("📦 Using Fiber web framework")
+				fmt.Println("Using Fiber web framework")
 				return adapters.NewDefaultFiberAdapter()
 			default:
 				// This should never happen due to validation above
@@ -90,12 +88,12 @@ func main() {
 		fx.Invoke(func(lc fx.Lifecycle, server axon.WebServerInterface, cfg *config.Config) {
 			lc.Append(fx.Hook{
 				OnStart: func(ctx context.Context) error {
-					fmt.Printf("🌐 Starting %s server on http://localhost:%d\n", server.Name(), cfg.Port)
+					fmt.Printf("Starting %s server on http://localhost:%d\n", server.Name(), cfg.Port)
 					go server.Start(fmt.Sprintf(":%d", cfg.Port))
 					return nil
 				},
 				OnStop: func(ctx context.Context) error {
-					fmt.Printf("⏹️  Stopping %s server...\n", server.Name())
+					fmt.Printf("Stopping %s server...\n", server.Name())
 					return server.Stop(ctx)
 				},
 			})

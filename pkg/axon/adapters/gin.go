@@ -64,6 +64,29 @@ func NewDefaultGinAdapter() *GinAdapter {
 	return &GinAdapter{engine: gin.Default()}
 }
 
+// convertAxonPathToGin converts AxonPath to Gin path format
+func (ga *GinAdapter) convertAxonPathToGin(path axon.AxonPath) string {
+	parts := path.Parts()
+	ginPath := ""
+	for _, part := range parts {
+		if part.Value == "" || part.Value == "/" {
+			continue
+		}
+
+		switch part.Type {
+		case axon.StaticPart:
+			ginPath += part.Value
+		case axon.ParameterPart:
+			ginPath += ":" + part.Value
+		case axon.WildcardPart:
+			ginPath += "/*path"
+		default:
+			ginPath += part.Value
+		}
+	}
+	return ginPath
+}
+
 // RegisterRoute registers a route with the Gin server
 func (ga *GinAdapter) RegisterRoute(method string, path axon.AxonPath, handler axon.HandlerFunc, middlewares ...axon.MiddlewareFunc) {
 	// Convert axon.HandlerFunc to gin.HandlerFunc
@@ -76,20 +99,7 @@ func (ga *GinAdapter) RegisterRoute(method string, path axon.AxonPath, handler a
 	}
 
 	// Convert Axon path to Gin path format
-	parts := path.Parts()
-	ginPath := ""
-	for _, part := range parts {
-		switch part.Type {
-		case axon.StaticPart:
-			ginPath += part.Value
-		case axon.ParameterPart:
-			ginPath += ":" + part.Value
-		case axon.WildcardPart:
-			ginPath += "/*path"
-		default:
-			ginPath += part.Value
-		}
-	}
+	ginPath := ga.convertAxonPathToGin(path)
 
 	// Register the route with middlewares
 	handlers := append(ginMiddlewares, ginHandler)
@@ -145,20 +155,7 @@ func (grg *GinRouteGroup) RegisterRoute(method string, path axon.AxonPath, handl
 		ginMiddlewares = append(ginMiddlewares, grg.adapter.convertMiddleware(middleware))
 	}
 
-	parts := path.Parts()
-	ginPath := ""
-	for _, part := range parts {
-		switch part.Type {
-		case axon.StaticPart:
-			ginPath += part.Value
-		case axon.ParameterPart:
-			ginPath += ":" + part.Value
-		case axon.WildcardPart:
-			ginPath += "/*path"
-		default:
-			ginPath += part.Value
-		}
-	}
+	ginPath := grg.adapter.convertAxonPathToGin(path)
 	handlers := append(ginMiddlewares, ginHandler)
 	grg.group.Handle(method, ginPath, handlers...)
 }
@@ -203,7 +200,12 @@ func (ga *GinAdapter) convertMiddleware(middleware axon.MiddlewareFunc) gin.Hand
 
 		wrappedHandler := middleware(next)
 		if err := wrappedHandler(requestContext); err != nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			// Handle error properly - convert axon.HTTPError
+			if httpErr, ok := err.(*axon.HTTPError); ok {
+				c.AbortWithStatusJSON(httpErr.Code, gin.H{"error": httpErr.Message})
+			} else {
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			}
 		}
 	}
 }

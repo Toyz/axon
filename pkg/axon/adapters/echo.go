@@ -24,12 +24,15 @@ func NewDefaultEchoAdapter() *EchoAdapter {
 	return &EchoAdapter{engine: echo.New()}
 }
 
-// RegisterRoute registers a route with the Echo server
-func (ea *EchoAdapter) RegisterRoute(method string, path axon.AxonPath, handler axon.HandlerFunc, middlewares ...axon.MiddlewareFunc) {
-	// Convert Axon path format to Echo path format
+// convertAxonPathToEcho converts AxonPath to Echo path format
+func (ea *EchoAdapter) convertAxonPathToEcho(path axon.AxonPath) string {
 	parts := path.Parts()
 	echoPath := ""
 	for _, part := range parts {
+		if part.Value == "" || part.Value == "/" {
+			continue
+		}
+
 		switch part.Type {
 		case axon.StaticPart:
 			echoPath += part.Value
@@ -41,6 +44,14 @@ func (ea *EchoAdapter) RegisterRoute(method string, path axon.AxonPath, handler 
 			echoPath += part.Value
 		}
 	}
+	return echoPath
+}
+
+// RegisterRoute registers a route with the Echo server
+func (ea *EchoAdapter) RegisterRoute(method string, path axon.AxonPath, handler axon.HandlerFunc, middlewares ...axon.MiddlewareFunc) {
+	// Convert Axon path format to Echo path format
+	echoPath := ea.convertAxonPathToEcho(path)
+
 	// Convert axon.HandlerFunc to echo.HandlerFunc
 	echoHandler := ea.convertHandler(handler)
 
@@ -95,20 +106,7 @@ type EchoGroupAdapter struct {
 // RegisterRoute registers a route with the group
 func (ega *EchoGroupAdapter) RegisterRoute(method string, path axon.AxonPath, handler axon.HandlerFunc, middlewares ...axon.MiddlewareFunc) {
 	// Convert Axon path format to Echo path format
-	parts := path.Parts()
-	echoPath := ""
-	for _, part := range parts {
-		switch part.Type {
-		case axon.StaticPart:
-			echoPath += part.Value
-		case axon.ParameterPart:
-			echoPath += ":" + part.Value
-		case axon.WildcardPart:
-			echoPath += "*"
-		default:
-			echoPath += part.Value
-		}
-	}
+	echoPath := ega.adapter.convertAxonPathToEcho(path)
 	echoHandler := ega.adapter.convertHandler(handler)
 
 	echoMiddlewares := make([]echo.MiddlewareFunc, len(middlewares))
@@ -135,7 +133,16 @@ func (ega *EchoGroupAdapter) Group(prefix string) axon.RouteGroup {
 func (ea *EchoAdapter) convertHandler(handler axon.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		ctx := &EchoRequestContext{context: c}
-		return handler(ctx)
+		err := handler(ctx)
+		if err != nil {
+			// Convert axon.HTTPError to echo.HTTPError
+			if httpErr, ok := err.(*axon.HTTPError); ok {
+				return echo.NewHTTPError(httpErr.Code, httpErr.Message)
+			}
+			// For other errors, return as-is
+			return err
+		}
+		return nil
 	}
 }
 
@@ -153,7 +160,16 @@ func (ea *EchoAdapter) convertMiddleware(middleware axon.MiddlewareFunc) echo.Mi
 
 			// Convert back to echo context and call
 			ctx := &EchoRequestContext{context: c}
-			return axonHandler(ctx)
+			err := axonHandler(ctx)
+			if err != nil {
+				// Convert axon.HTTPError to echo.HTTPError
+				if httpErr, ok := err.(*axon.HTTPError); ok {
+					return echo.NewHTTPError(httpErr.Code, httpErr.Message)
+				}
+				// For other errors, return as-is
+				return err
+			}
+			return nil
 		}
 	}
 }

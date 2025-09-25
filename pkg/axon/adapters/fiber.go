@@ -45,12 +45,15 @@ func NewDefaultFiberAdapter() *FiberAdapter {
 	return adapter
 }
 
-// RegisterRoute registers a route with the Fiber app
-func (fa *FiberAdapter) RegisterRoute(method string, path axon.AxonPath, handler axon.HandlerFunc, middlewares ...axon.MiddlewareFunc) {
-	// Convert Axon path format to Fiber format
+// convertAxonPathToFiber converts AxonPath to Fiber path format
+func (fa *FiberAdapter) convertAxonPathToFiber(path axon.AxonPath) string {
 	parts := path.Parts()
 	fiberPath := ""
 	for _, part := range parts {
+		if part.Value == "" || part.Value == "/" {
+			continue
+		}
+
 		switch part.Type {
 		case axon.StaticPart:
 			fiberPath += part.Value
@@ -62,6 +65,13 @@ func (fa *FiberAdapter) RegisterRoute(method string, path axon.AxonPath, handler
 			fiberPath += part.Value
 		}
 	}
+	return fiberPath
+}
+
+// RegisterRoute registers a route with the Fiber app
+func (fa *FiberAdapter) RegisterRoute(method string, path axon.AxonPath, handler axon.HandlerFunc, middlewares ...axon.MiddlewareFunc) {
+	// Convert Axon path format to Fiber format
+	fiberPath := fa.convertAxonPathToFiber(path)
 
 	// Convert middlewares to Fiber handlers
 	var fiberMiddlewares []fiber.Handler
@@ -97,7 +107,7 @@ func (fa *FiberAdapter) RegisterRoute(method string, path axon.AxonPath, handler
 // RegisterGroup creates a new route group with the given prefix
 func (fa *FiberAdapter) RegisterGroup(prefix string) axon.RouteGroup {
 	fiberGroup := fa.app.Group(prefix)
-	return &FiberRouteGroup{group: fiberGroup}
+	return &FiberRouteGroup{group: fiberGroup, adapter: fa}
 }
 
 // Use adds middleware to the Fiber app
@@ -117,31 +127,19 @@ func (fa *FiberAdapter) Stop(ctx context.Context) error {
 
 // Name returns the adapter name
 func (fa *FiberAdapter) Name() string {
-	return "fiber"
+	return "Fiber"
 }
 
 // FiberRouteGroup wraps a Fiber route group to implement axon.RouteGroup
 type FiberRouteGroup struct {
-	group fiber.Router
+	group   fiber.Router
+	adapter *FiberAdapter
 }
 
 // RegisterRoute registers a route with this group
 func (frg *FiberRouteGroup) RegisterRoute(method string, path axon.AxonPath, handler axon.HandlerFunc, middlewares ...axon.MiddlewareFunc) {
 	// Convert Axon path format to Fiber format
-	parts := path.Parts()
-	fiberPath := ""
-	for _, part := range parts {
-		switch part.Type {
-		case axon.StaticPart:
-			fiberPath += part.Value
-		case axon.ParameterPart:
-			fiberPath += ":" + part.Value
-		case axon.WildcardPart:
-			fiberPath += "*"
-		default:
-			fiberPath += part.Value
-		}
-	}
+	fiberPath := frg.adapter.convertAxonPathToFiber(path)
 
 	// Convert middlewares to Fiber handlers
 	var fiberMiddlewares []fiber.Handler
@@ -182,7 +180,7 @@ func (frg *FiberRouteGroup) Use(middleware axon.MiddlewareFunc) {
 // Group creates a sub-group with the given prefix
 func (frg *FiberRouteGroup) Group(prefix string) axon.RouteGroup {
 	subGroup := frg.group.Group(prefix)
-	return &FiberRouteGroup{group: subGroup}
+	return &FiberRouteGroup{group: subGroup, adapter: frg.adapter}
 }
 
 // convertAxonHandlerToFiber converts an Axon handler to a Fiber handler
@@ -195,8 +193,8 @@ func convertAxonHandlerToFiber(handler axon.HandlerFunc) fiber.Handler {
 		err := handler(axonCtx)
 		if err != nil {
 			// Handle error - convert to appropriate Fiber response
-			if httpErr, ok := err.(*axon.HttpError); ok {
-				return c.Status(httpErr.StatusCode).JSON(httpErr)
+			if httpErr, ok := err.(*axon.HTTPError); ok {
+				return c.Status(httpErr.Code).JSON(httpErr)
 			} else {
 				return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 			}
@@ -212,10 +210,20 @@ func convertAxonMiddlewareToFiber(middleware axon.MiddlewareFunc) fiber.Handler 
 		axonCtx := &FiberRequestContext{ctx: c}
 
 		// Call the Axon middleware
-		return middleware(func(ctx axon.RequestContext) error {
+		err := middleware(func(ctx axon.RequestContext) error {
 			// Continue to next middleware/handler
 			return c.Next()
 		})(axonCtx)
+
+		if err != nil {
+			// Handle error - convert to appropriate Fiber response
+			if httpErr, ok := err.(*axon.HTTPError); ok {
+				return c.Status(httpErr.Code).JSON(httpErr)
+			} else {
+				return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+			}
+		}
+		return nil
 	}
 }
 

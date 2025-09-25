@@ -24,7 +24,7 @@ func TestEchoAdapter_BasicFunctionality(t *testing.T) {
 		return ctx.Response().JSON(200, map[string]string{"message": "hello"})
 	}
 
-	adapter.RegisterRoute("GET", "/test", handler)
+	adapter.RegisterRoute("GET", axon.NewAxonPath("/test"), handler)
 
 	// Create test request
 	req := httptest.NewRequest("GET", "/test", nil)
@@ -62,7 +62,7 @@ func TestEchoAdapter_Middleware(t *testing.T) {
 		return ctx.Response().JSON(200, map[string]string{"test": "success"})
 	}
 
-	adapter.RegisterRoute("GET", "/middleware-test", handler, middleware)
+	adapter.RegisterRoute("GET", axon.NewAxonPath("/middleware-test"), handler, middleware)
 
 	// Test request
 	req := httptest.NewRequest("GET", "/middleware-test", nil)
@@ -87,7 +87,7 @@ func TestEchoAdapter_RouteGroup(t *testing.T) {
 		return ctx.Response().JSON(200, map[string]string{"group": "api"})
 	}
 
-	apiGroup.RegisterRoute("GET", "/users", handler)
+	apiGroup.RegisterRoute("GET", axon.NewAxonPath("/users"), handler)
 
 	// Test request to group route
 	req := httptest.NewRequest("GET", "/api/users", nil)
@@ -109,7 +109,7 @@ func TestEchoAdapter_ParameterBinding(t *testing.T) {
 		return ctx.Response().JSON(200, map[string]string{"id": id})
 	}
 
-	adapter.RegisterRoute("GET", "/users/:id", handler)
+	adapter.RegisterRoute("GET", axon.NewAxonPath("/users/{id}"), handler)
 
 	// Test request with parameter
 	req := httptest.NewRequest("GET", "/users/123", nil)
@@ -137,7 +137,7 @@ func TestEchoAdapter_QueryParameters(t *testing.T) {
 		return ctx.Response().JSON(200, map[string]string{"name": name})
 	}
 
-	adapter.RegisterRoute("GET", "/search", handler)
+	adapter.RegisterRoute("GET", axon.NewAxonPath("/search"), handler)
 
 	// Test request with query parameter
 	req := httptest.NewRequest("GET", "/search?name=john", nil)
@@ -173,7 +173,7 @@ func TestEchoAdapter_ContextStorage(t *testing.T) {
 		return ctx.Response().JSON(200, map[string]string{"user": user})
 	}
 
-	adapter.RegisterRoute("GET", "/context-test", handler, middleware)
+	adapter.RegisterRoute("GET", axon.NewAxonPath("/context-test"), handler, middleware)
 
 	// Test request
 	req := httptest.NewRequest("GET", "/context-test", nil)
@@ -197,19 +197,53 @@ func TestEchoAdapter_ErrorHandling(t *testing.T) {
 
 	// Handler that returns an error
 	handler := func(ctx axon.RequestContext) error {
-		return axon.NewHTTPError(400, "Bad request")
+		return axon.NewHTTPError(500, "internal server error")
 	}
 
-	adapter.RegisterRoute("GET", "/error-test", handler)
+	adapter.RegisterRoute("GET", axon.NewAxonPath("/error-test"), handler)
 
 	// Test request
 	req := httptest.NewRequest("GET", "/error-test", nil)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 
-	// Echo's default error handler will return 500 for unhandled errors
-	// In a real implementation, you'd set up proper error handling
+	// Should preserve the original HTTP error code
 	if rec.Code != 500 {
-		t.Errorf("Expected status 500 (Echo default error handling), got %d", rec.Code)
+		t.Errorf("Expected status 500 from HTTPError, got %d", rec.Code)
+	}
+}
+
+func TestEchoAdapter_MiddlewareErrorHandling(t *testing.T) {
+	e := echo.New()
+	adapter := NewEchoAdapter(e)
+
+	// Middleware that returns an HTTPError
+	authMiddleware := func(next axon.HandlerFunc) axon.HandlerFunc {
+		return func(ctx axon.RequestContext) error {
+			// Simulate auth failure
+			return axon.NewHTTPError(401, "unauthorized")
+		}
+	}
+
+	// Handler should not be reached
+	handler := func(ctx axon.RequestContext) error {
+		return ctx.Response().JSON(200, map[string]string{"message": "success"})
+	}
+
+	adapter.RegisterRoute("POST", axon.NewAxonPath("/protected"), handler, authMiddleware)
+
+	req := httptest.NewRequest("POST", "/protected", nil)
+	rec := httptest.NewRecorder()
+
+	e.ServeHTTP(rec, req)
+
+	// Should return 401 from middleware
+	if rec.Code != 401 {
+		t.Errorf("Expected status 401 from middleware, got %d", rec.Code)
+	}
+
+	body := strings.TrimSpace(rec.Body.String())
+	if !strings.Contains(body, "unauthorized") {
+		t.Errorf("Expected 'unauthorized' message in response body, got '%s'", body)
 	}
 }
