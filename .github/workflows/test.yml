@@ -196,7 +196,7 @@ jobs:
           fi
 
           echo "Testing get all users with valid auth..."
-          curl -f -H "Authorization: Bearer valid-token" http://localhost:8080/api/v1/users/
+          curl -f -H "Authorization: Bearer valid-token" http://localhost:8080/api/v1/users
 
           echo "Testing get user by ID with auth..."
           curl -f -H "Authorization: Bearer valid-token" http://localhost:8080/api/v1/users/1

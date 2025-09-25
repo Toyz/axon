@@ -65,6 +65,12 @@ func (fa *FiberAdapter) convertAxonPathToFiber(path axon.AxonPath) string {
 			fiberPath += part.Value
 		}
 	}
+
+	// Handle root path case - if nothing was added, it's a root path
+	if fiberPath == "" {
+		fiberPath = "/"
+	}
+
 	return fiberPath
 }
 

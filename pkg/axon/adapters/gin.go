@@ -84,6 +84,12 @@ func (ga *GinAdapter) convertAxonPathToGin(path axon.AxonPath) string {
 			ginPath += part.Value
 		}
 	}
+
+	// Handle root path case - if nothing was added, it's a root path
+	if ginPath == "" {
+		ginPath = "/"
+	}
+
 	return ginPath
 }
 

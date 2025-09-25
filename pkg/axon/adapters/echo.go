@@ -4,6 +4,7 @@ import (
 	"context"
 	"mime/multipart"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/toyz/axon/pkg/axon"
@@ -29,10 +30,6 @@ func (ea *EchoAdapter) convertAxonPathToEcho(path axon.AxonPath) string {
 	parts := path.Parts()
 	echoPath := ""
 	for _, part := range parts {
-		if part.Value == "" || part.Value == "/" {
-			continue
-		}
-
 		switch part.Type {
 		case axon.StaticPart:
 			echoPath += part.Value
@@ -44,6 +41,9 @@ func (ea *EchoAdapter) convertAxonPathToEcho(path axon.AxonPath) string {
 			echoPath += part.Value
 		}
 	}
+
+	echoPath = strings.TrimRight(echoPath, "/")
+
 	return echoPath
 }
 
