@@ -8,7 +8,7 @@ import (
 // WebServerInterface defines the contract for web server implementations
 type WebServerInterface interface {
 	// Route registration
-	RegisterRoute(method, path string, handler HandlerFunc, middlewares ...MiddlewareFunc)
+	RegisterRoute(method string, path AxonPath, handler HandlerFunc, middlewares ...MiddlewareFunc)
 	RegisterGroup(prefix string) RouteGroup
 
 	// Global middleware
@@ -24,7 +24,7 @@ type WebServerInterface interface {
 
 // RouteGroup represents a group of routes with a common prefix
 type RouteGroup interface {
-	RegisterRoute(method, path string, handler HandlerFunc, middlewares ...MiddlewareFunc)
+	RegisterRoute(method string, path AxonPath, handler HandlerFunc, middlewares ...MiddlewareFunc)
 	Use(middleware MiddlewareFunc)
 	Group(prefix string) RouteGroup
 }

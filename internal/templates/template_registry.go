@@ -285,8 +285,8 @@ func RegisterRoutes(server axon.WebServerInterface{{range .Controllers}}, {{.Var
 {{end}}{{range .Routes}}{{template "RouteRegistration" .}}{{end}}{{end}}}`
 
 	tr.templates["route-registration"] = `	{{.HandlerVar}} := {{.WrapperFunc}}({{.ControllerVar}})
-{{if .HasMiddleware}}	{{.GroupVar}}.RegisterRoute("{{.Method}}", "{{.EchoPath}}", {{.HandlerVar}}, {{.MiddlewareList}})
-{{else}}	{{.GroupVar}}.RegisterRoute("{{.Method}}", "{{.EchoPath}}", {{.HandlerVar}})
+{{if .HasMiddleware}}	{{.GroupVar}}.RegisterRoute("{{.Method}}", axon.NewAxonPath("{{.RelativePath}}"), {{.HandlerVar}}, {{.MiddlewareList}})
+{{else}}	{{.GroupVar}}.RegisterRoute("{{.Method}}", axon.NewAxonPath("{{.RelativePath}}"), {{.HandlerVar}})
 {{end}}	axon.DefaultRouteRegistry.RegisterRoute(axon.RouteInfo{
 		Method:              "{{.Method}}",
 		Path:                "{{.Path}}",

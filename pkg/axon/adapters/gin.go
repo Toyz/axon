@@ -5,7 +5,6 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -66,7 +65,7 @@ func NewDefaultGinAdapter() *GinAdapter {
 }
 
 // RegisterRoute registers a route with the Gin server
-func (ga *GinAdapter) RegisterRoute(method, path string, handler axon.HandlerFunc, middlewares ...axon.MiddlewareFunc) {
+func (ga *GinAdapter) RegisterRoute(method string, path axon.AxonPath, handler axon.HandlerFunc, middlewares ...axon.MiddlewareFunc) {
 	// Convert axon.HandlerFunc to gin.HandlerFunc
 	ginHandler := ga.convertHandler(handler)
 
@@ -77,7 +76,20 @@ func (ga *GinAdapter) RegisterRoute(method, path string, handler axon.HandlerFun
 	}
 
 	// Convert Axon path to Gin path format
-	ginPath := ga.convertAxonPathToGin(path)
+	parts := path.Parts()
+	ginPath := ""
+	for _, part := range parts {
+		switch part.Type {
+		case axon.StaticPart:
+			ginPath += part.Value
+		case axon.ParameterPart:
+			ginPath += ":" + part.Value
+		case axon.WildcardPart:
+			ginPath += "/*path"
+		default:
+			ginPath += part.Value
+		}
+	}
 
 	// Register the route with middlewares
 	handlers := append(ginMiddlewares, ginHandler)
@@ -125,7 +137,7 @@ type GinRouteGroup struct {
 }
 
 // RegisterRoute registers a route within the group
-func (grg *GinRouteGroup) RegisterRoute(method, path string, handler axon.HandlerFunc, middlewares ...axon.MiddlewareFunc) {
+func (grg *GinRouteGroup) RegisterRoute(method string, path axon.AxonPath, handler axon.HandlerFunc, middlewares ...axon.MiddlewareFunc) {
 	ginHandler := grg.adapter.convertHandler(handler)
 
 	var ginMiddlewares []gin.HandlerFunc
@@ -133,7 +145,20 @@ func (grg *GinRouteGroup) RegisterRoute(method, path string, handler axon.Handle
 		ginMiddlewares = append(ginMiddlewares, grg.adapter.convertMiddleware(middleware))
 	}
 
-	ginPath := grg.adapter.convertAxonPathToGin(path)
+	parts := path.Parts()
+	ginPath := ""
+	for _, part := range parts {
+		switch part.Type {
+		case axon.StaticPart:
+			ginPath += part.Value
+		case axon.ParameterPart:
+			ginPath += ":" + part.Value
+		case axon.WildcardPart:
+			ginPath += "/*path"
+		default:
+			ginPath += part.Value
+		}
+	}
 	handlers := append(ginMiddlewares, ginHandler)
 	grg.group.Handle(method, ginPath, handlers...)
 }
@@ -181,49 +206,6 @@ func (ga *GinAdapter) convertMiddleware(middleware axon.MiddlewareFunc) gin.Hand
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
 	}
-}
-
-// convertAxonPathToGin converts Axon path format to Gin path format
-func (ga *GinAdapter) convertAxonPathToGin(axonPath string) string {
-	// Convert {param} to :param
-	// Convert {param:type} to :param (ignore type for Gin)
-	// Convert {*} to /*path (Gin's catch-all syntax)
-
-	result := axonPath
-
-	// Handle wildcard first: {*} -> /*path
-	if strings.Contains(result, "{*}") {
-		result = strings.ReplaceAll(result, "{*}", "/*path")
-	}
-
-	// Replace Axon parameter syntax {param:type} or {param} with Gin syntax :param
-	for {
-		start := strings.Index(result, "{")
-		if start == -1 {
-			break
-		}
-
-		end := strings.Index(result[start:], "}")
-		if end == -1 {
-			break
-		}
-		end += start
-
-		// Extract parameter definition: {id:int} -> id:int or {id} -> id
-		paramDef := result[start+1 : end]
-
-		// Split by colon to get parameter name (ignore type)
-		parts := strings.Split(paramDef, ":")
-		if len(parts) > 0 {
-			paramName := strings.TrimSpace(parts[0])
-			// Replace {param:type} or {param} with :param
-			result = result[:start] + ":" + paramName + result[end+1:]
-		} else {
-			break
-		}
-	}
-
-	return result
 }
 
 // GinRequestContext implements axon.RequestContext for Gin

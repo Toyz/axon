@@ -46,9 +46,22 @@ func NewDefaultFiberAdapter() *FiberAdapter {
 }
 
 // RegisterRoute registers a route with the Fiber app
-func (fa *FiberAdapter) RegisterRoute(method, path string, handler axon.HandlerFunc, middlewares ...axon.MiddlewareFunc) {
+func (fa *FiberAdapter) RegisterRoute(method string, path axon.AxonPath, handler axon.HandlerFunc, middlewares ...axon.MiddlewareFunc) {
 	// Convert Axon path format to Fiber format
-	fiberPath := convertAxonPathToFiber(path)
+	parts := path.Parts()
+	fiberPath := ""
+	for _, part := range parts {
+		switch part.Type {
+		case axon.StaticPart:
+			fiberPath += part.Value
+		case axon.ParameterPart:
+			fiberPath += ":" + part.Value
+		case axon.WildcardPart:
+			fiberPath += "*"
+		default:
+			fiberPath += part.Value
+		}
+	}
 
 	// Convert middlewares to Fiber handlers
 	var fiberMiddlewares []fiber.Handler
@@ -113,9 +126,22 @@ type FiberRouteGroup struct {
 }
 
 // RegisterRoute registers a route with this group
-func (frg *FiberRouteGroup) RegisterRoute(method, path string, handler axon.HandlerFunc, middlewares ...axon.MiddlewareFunc) {
+func (frg *FiberRouteGroup) RegisterRoute(method string, path axon.AxonPath, handler axon.HandlerFunc, middlewares ...axon.MiddlewareFunc) {
 	// Convert Axon path format to Fiber format
-	fiberPath := convertAxonPathToFiber(path)
+	parts := path.Parts()
+	fiberPath := ""
+	for _, part := range parts {
+		switch part.Type {
+		case axon.StaticPart:
+			fiberPath += part.Value
+		case axon.ParameterPart:
+			fiberPath += ":" + part.Value
+		case axon.WildcardPart:
+			fiberPath += "*"
+		default:
+			fiberPath += part.Value
+		}
+	}
 
 	// Convert middlewares to Fiber handlers
 	var fiberMiddlewares []fiber.Handler
@@ -157,50 +183,6 @@ func (frg *FiberRouteGroup) Use(middleware axon.MiddlewareFunc) {
 func (frg *FiberRouteGroup) Group(prefix string) axon.RouteGroup {
 	subGroup := frg.group.Group(prefix)
 	return &FiberRouteGroup{group: subGroup}
-}
-
-// convertAxonPathToFiber converts Axon path format to Fiber path format
-func convertAxonPathToFiber(axonPath string) string {
-	// Fiber uses :param for parameters, similar to Echo and Gin
-	// Handle wildcard paths
-	if axonPath == "/{*}" {
-		return "/*"
-	}
-
-	// Convert {param:type} to :param
-	return convertParameterFormat(axonPath)
-}
-
-// convertParameterFormat converts {param:type} to :param for Fiber
-func convertParameterFormat(path string) string {
-	result := ""
-	i := 0
-	for i < len(path) {
-		if path[i] == '{' {
-			// Find the closing brace
-			j := i + 1
-			for j < len(path) && path[j] != '}' {
-				j++
-			}
-			if j < len(path) {
-				paramContent := path[i+1 : j]
-				// Extract parameter name (before colon if present)
-				paramName := paramContent
-				if colonIndex := strings.Index(paramContent, ":"); colonIndex != -1 {
-					paramName = paramContent[:colonIndex]
-				}
-				result += ":" + paramName
-				i = j + 1
-			} else {
-				result += string(path[i])
-				i++
-			}
-		} else {
-			result += string(path[i])
-			i++
-		}
-	}
-	return result
 }
 
 // convertAxonHandlerToFiber converts an Axon handler to a Fiber handler

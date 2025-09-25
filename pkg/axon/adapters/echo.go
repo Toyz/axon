@@ -25,7 +25,22 @@ func NewDefaultEchoAdapter() *EchoAdapter {
 }
 
 // RegisterRoute registers a route with the Echo server
-func (ea *EchoAdapter) RegisterRoute(method, path string, handler axon.HandlerFunc, middlewares ...axon.MiddlewareFunc) {
+func (ea *EchoAdapter) RegisterRoute(method string, path axon.AxonPath, handler axon.HandlerFunc, middlewares ...axon.MiddlewareFunc) {
+	// Convert Axon path format to Echo path format
+	parts := path.Parts()
+	echoPath := ""
+	for _, part := range parts {
+		switch part.Type {
+		case axon.StaticPart:
+			echoPath += part.Value
+		case axon.ParameterPart:
+			echoPath += ":" + part.Value
+		case axon.WildcardPart:
+			echoPath += "*"
+		default:
+			echoPath += part.Value
+		}
+	}
 	// Convert axon.HandlerFunc to echo.HandlerFunc
 	echoHandler := ea.convertHandler(handler)
 
@@ -36,7 +51,7 @@ func (ea *EchoAdapter) RegisterRoute(method, path string, handler axon.HandlerFu
 	}
 
 	// Register with Echo
-	ea.engine.Add(method, path, echoHandler, echoMiddlewares...)
+	ea.engine.Add(method, echoPath, echoHandler, echoMiddlewares...)
 }
 
 // RegisterGroup creates a new route group
@@ -78,7 +93,22 @@ type EchoGroupAdapter struct {
 }
 
 // RegisterRoute registers a route with the group
-func (ega *EchoGroupAdapter) RegisterRoute(method, path string, handler axon.HandlerFunc, middlewares ...axon.MiddlewareFunc) {
+func (ega *EchoGroupAdapter) RegisterRoute(method string, path axon.AxonPath, handler axon.HandlerFunc, middlewares ...axon.MiddlewareFunc) {
+	// Convert Axon path format to Echo path format
+	parts := path.Parts()
+	echoPath := ""
+	for _, part := range parts {
+		switch part.Type {
+		case axon.StaticPart:
+			echoPath += part.Value
+		case axon.ParameterPart:
+			echoPath += ":" + part.Value
+		case axon.WildcardPart:
+			echoPath += "*"
+		default:
+			echoPath += part.Value
+		}
+	}
 	echoHandler := ega.adapter.convertHandler(handler)
 
 	echoMiddlewares := make([]echo.MiddlewareFunc, len(middlewares))
@@ -86,7 +116,7 @@ func (ega *EchoGroupAdapter) RegisterRoute(method, path string, handler axon.Han
 		echoMiddlewares[i] = ega.adapter.convertMiddleware(mw)
 	}
 
-	ega.group.Add(method, path, echoHandler, echoMiddlewares...)
+	ega.group.Add(method, echoPath, echoHandler, echoMiddlewares...)
 }
 
 // Use adds middleware to the group

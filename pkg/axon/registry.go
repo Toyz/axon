@@ -205,7 +205,8 @@ func RegisterAllRoutes(server WebServerInterface) {
 		}
 
 		// Register with web server using framework-agnostic path
-		server.RegisterRoute(route.Method, route.Path, route.Handler, middlewares...)
+		axonPath := NewAxonPath(route.Path)
+		server.RegisterRoute(route.Method, axonPath, route.Handler, middlewares...)
 	}
 }
 
