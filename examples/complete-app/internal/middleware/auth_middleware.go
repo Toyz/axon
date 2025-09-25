@@ -1,49 +1,46 @@
 package middleware
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 
-	"github.com/labstack/echo/v4"
 	"github.com/toyz/axon/examples/complete-app/internal/config"
 	"github.com/toyz/axon/examples/complete-app/internal/services"
+	"github.com/toyz/axon/pkg/axon"
 )
 
-//axon::middleware AuthMiddleware
+// axon::middleware AuthMiddleware
 type AuthMiddleware struct {
 	// axon::inject
-	sessionFactory func() *services.SessionService 
+	sessionFactory func() *services.SessionService
 
 	//axon::inject
 	Config *config.Config
 }
 
 // Handle implements the middleware logic for authentication
-func (m *AuthMiddleware) Handle(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		fmt.Println("AuthMiddleware: Handle")
-
+func (m *AuthMiddleware) Handle(next axon.HandlerFunc) axon.HandlerFunc {
+	return func(c axon.RequestContext) error {
 		// Check for Authorization header
-		auth := c.Request().Header.Get("Authorization")
+		auth := c.Request().Header("Authorization")
 		if auth == "" {
-			return echo.NewHTTPError(http.StatusUnauthorized, "missing authorization header")
+			return axon.NewHTTPError(http.StatusUnauthorized, "missing authorization header")
 		}
-		
+
 		// Simple token validation (in real app, validate JWT or similar)
 		if !strings.HasPrefix(auth, "Bearer ") {
-			return echo.NewHTTPError(http.StatusUnauthorized, "invalid authorization format")
+			return axon.NewHTTPError(http.StatusUnauthorized, "invalid authorization format")
 		}
-		
+
 		token := strings.TrimPrefix(auth, "Bearer ")
 		if token != "valid-token" {
-			return echo.NewHTTPError(http.StatusUnauthorized, "invalid token")
+			return axon.NewHTTPError(http.StatusUnauthorized, "invalid token")
 		}
-		
+
 		// Set user context (in real app, decode from JWT)
 		c.Set("user_id", 1)
 		c.Set("user_name", "authenticated_user")
-		
+
 		return next(c)
 	}
 }

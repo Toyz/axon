@@ -1,7 +1,6 @@
 package axon
 
 import (
-	"github.com/labstack/echo/v4"
 	"strings"
 )
 
@@ -11,7 +10,7 @@ type MiddlewareInstance struct {
 	Name string
 
 	// Handler is the middleware function that can be applied to routes
-	Handler func(echo.HandlerFunc) echo.HandlerFunc
+	Handler MiddlewareFunc
 
 	// Instance is the actual middleware struct instance (if available)
 	Instance interface{}
@@ -29,7 +28,7 @@ type ParameterInstance struct {
 // MiddlewareRegistry provides access to all registered middlewares
 type MiddlewareRegistry interface {
 	// RegisterMiddleware adds a middleware to the registry
-	RegisterMiddleware(name string, handler func(echo.HandlerFunc) echo.HandlerFunc, instance interface{})
+	RegisterMiddleware(name string, handler MiddlewareFunc, instance interface{})
 
 	// GetMiddleware retrieves a middleware by name
 	GetMiddleware(name string) (MiddlewareInstance, bool)
@@ -50,7 +49,7 @@ func NewInMemoryMiddlewareRegistry() MiddlewareRegistry {
 	}
 }
 
-func (r *inMemoryMiddlewareRegistry) RegisterMiddleware(name string, handler func(echo.HandlerFunc) echo.HandlerFunc, instance interface{}) {
+func (r *inMemoryMiddlewareRegistry) RegisterMiddleware(name string, handler MiddlewareFunc, instance interface{}) {
 	r.middlewares[name] = MiddlewareInstance{
 		Name:     name,
 		Handler:  handler,
@@ -114,8 +113,8 @@ type RouteInfo struct {
 	// ParameterInstances provides access to the actual parameter instances
 	ParameterInstances []ParameterInstance
 
-	// Handler is the actual Echo handler function
-	Handler echo.HandlerFunc
+	// Handler is the actual handler function
+	Handler HandlerFunc
 }
 
 // RouteRegistry provides access to all registered routes in the application
@@ -194,13 +193,20 @@ func (r *InMemoryRouteRegistry) RegisterRoute(route RouteInfo) {
 	r.routes = append(r.routes, route)
 }
 
-// RegisterAllRoutes is a helper function that registers all routes with an Echo instance
+// RegisterAllRoutes is a helper function that registers all routes with a web server
 // This function should be called in your main.go to set up all discovered routes
-func RegisterAllRoutes(e *echo.Echo) {
+func RegisterAllRoutes(server WebServerInterface) {
 	routes := DefaultRouteRegistry.GetAllRoutes()
 	for _, route := range routes {
-		// Use EchoPath for registration with Echo (converts {id:int} to :id)
-		e.Add(route.Method, route.EchoPath, route.Handler)
+		// Convert middleware handlers to middleware functions
+		middlewares := make([]MiddlewareFunc, len(route.MiddlewareInstances))
+		for i, mw := range route.MiddlewareInstances {
+			middlewares[i] = mw.Handler
+		}
+
+		// Register with web server using framework-agnostic path
+		axonPath := NewAxonPath(route.Path)
+		server.RegisterRoute(route.Method, axonPath, route.Handler, middlewares...)
 	}
 }
 
@@ -222,7 +228,7 @@ func GetRoutesByController(controllerName string) []RouteInfo {
 // Middleware convenience functions
 
 // RegisterMiddleware registers a middleware with the global registry
-func RegisterMiddleware(name string, handler func(echo.HandlerFunc) echo.HandlerFunc, instance interface{}) {
+func RegisterMiddleware(name string, handler MiddlewareFunc, instance interface{}) {
 	DefaultMiddlewareRegistry.RegisterMiddleware(name, handler, instance)
 }
 
@@ -281,7 +287,7 @@ func ConvertAxonPathToEcho(axonPath string) string {
 
 // MiddlewareHandler interface for middleware structs
 type MiddlewareHandler interface {
-	Handle(next echo.HandlerFunc) echo.HandlerFunc
+	Handle(next HandlerFunc) HandlerFunc
 }
 
 // RegisterMiddlewareHandler registers a middleware struct that implements the Handle method
@@ -289,9 +295,9 @@ func RegisterMiddlewareHandler(name string, middleware MiddlewareHandler) {
 	DefaultMiddlewareRegistry.RegisterMiddleware(name, middleware.Handle, middleware)
 }
 
-// RegisterGlobalMiddleware registers global middleware with Echo in priority order
-func RegisterGlobalMiddleware(e *echo.Echo, middlewares ...MiddlewareHandler) {
+// RegisterGlobalMiddleware registers global middleware with a web server in priority order
+func RegisterGlobalMiddleware(server WebServerInterface, middlewares ...MiddlewareHandler) {
 	for _, mw := range middlewares {
-		e.Use(mw.Handle)
+		server.Use(mw.Handle)
 	}
 }

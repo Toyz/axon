@@ -6,24 +6,33 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/toyz/axon/internal/utils/fileops"
 )
 
 // FileProcessor provides utilities for common file processing operations
 type FileProcessor struct {
-	fileReader *FileReader
+	fileOps *fileops.FileOps
 }
 
 // NewFileProcessor creates a new file processor
 func NewFileProcessor() *FileProcessor {
 	return &FileProcessor{
-		fileReader: NewFileReader(),
+		fileOps: fileops.NewFileOps(),
 	}
 }
 
-// NewFileProcessorWithReader creates a file processor with an existing FileReader
+// NewFileProcessorWithFileOps creates a file processor with an existing FileOps
+func NewFileProcessorWithFileOps(fileOps *fileops.FileOps) *FileProcessor {
+	return &FileProcessor{
+		fileOps: fileOps,
+	}
+}
+
+// NewFileProcessorWithReader creates a file processor with an existing FileReader (backward compatibility)
 func NewFileProcessorWithReader(reader *FileReader) *FileProcessor {
 	return &FileProcessor{
-		fileReader: reader,
+		fileOps: reader.fileOps,
 	}
 }
 
@@ -172,9 +181,9 @@ func (fp *FileProcessor) ScanDirectoriesWithGoFiles(rootDirs []string) ([]string
 // scanDirectoryRecursive recursively scans a directory for Go files
 func (fp *FileProcessor) scanDirectoryRecursive(dir string, visited map[string]bool) ([]string, error) {
 	// Resolve absolute path to handle symlinks and avoid cycles
-	absDir, err := filepath.Abs(dir)
+	absDir, err := fp.fileOps.PathValidator().GetAbsolutePath(dir)
 	if err != nil {
-		return nil, WrapProcessError(fmt.Sprintf("path resolution %s", dir), err)
+		return nil, fp.fileOps.ErrorWrapper().WrapPathResolutionError(dir, err)
 	}
 	
 	if visited[absDir] {
@@ -187,7 +196,7 @@ func (fp *FileProcessor) scanDirectoryRecursive(dir string, visited map[string]b
 	// Check if this directory has Go files
 	hasGoFiles, err := fp.HasGoFiles(dir)
 	if err != nil {
-		return nil, WrapProcessError(fmt.Sprintf("Go file check in %s", dir), err)
+		return nil, fp.fileOps.ErrorWrapper().WrapGoFileCheckError(dir, err)
 	}
 	
 	if hasGoFiles {
@@ -195,9 +204,9 @@ func (fp *FileProcessor) scanDirectoryRecursive(dir string, visited map[string]b
 	}
 	
 	// Recursively scan subdirectories
-	entries, err := os.ReadDir(dir)
+	entries, err := fp.fileOps.ReadDir(dir)
 	if err != nil {
-		return nil, WrapProcessError(fmt.Sprintf("directory read %s", dir), err)
+		return nil, err // Error already wrapped by fileOps.ReadDir
 	}
 	
 	directoryFilter := DefaultDirectoryFilter()
@@ -242,9 +251,9 @@ func (fp *FileProcessor) HasGoFiles(dir string) (bool, error) {
 
 // ParseDirectoryFiles parses all Go files in a directory
 func (fp *FileProcessor) ParseDirectoryFiles(dirPath string) (map[string]*ast.File, string, error) {
-	entries, err := os.ReadDir(dirPath)
+	entries, err := fp.fileOps.ReadDir(dirPath)
 	if err != nil {
-		return nil, "", WrapProcessError(fmt.Sprintf("directory read %s", dirPath), err)
+		return nil, "", err // Error already wrapped by fileOps.ReadDir
 	}
 	
 	files := make(map[string]*ast.File)
@@ -257,10 +266,10 @@ func (fp *FileProcessor) ParseDirectoryFiles(dirPath string) (map[string]*ast.Fi
 		}
 		
 		filePath := filepath.Join(dirPath, entry.Name())
-		
-		file, err := fp.fileReader.ParseGoFile(filePath)
+
+		file, err := fp.fileOps.ParseGoFile(filePath)
 		if err != nil {
-			return nil, "", WrapProcessError(fmt.Sprintf("file parse %s", entry.Name()), err)
+			return nil, "", err // Error already wrapped by fileOps.ParseGoFile
 		}
 		
 		// Verify all files belong to the same package
@@ -287,7 +296,7 @@ func (fp *FileProcessor) CleanDirectories(baseDirs []string) ([]string, error) {
 	for _, baseDir := range baseDirs {
 		err := fp.cleanDirectory(baseDir, &removedFiles)
 		if err != nil {
-			return removedFiles, WrapProcessError(fmt.Sprintf("directory clean %s", baseDir), err)
+			return removedFiles, fp.fileOps.ErrorWrapper().WrapDirectoryCleanError(baseDir, err)
 		}
 	}
 	
@@ -322,32 +331,35 @@ func (fp *FileProcessor) cleanDirectory(baseDir string, removedFiles *[]string) 
 // cleanSingleDirectory cleans autogen files from a single directory
 func (fp *FileProcessor) cleanSingleDirectory(dir string, removedFiles *[]string) error {
 	// Skip if directory doesn't exist
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
+	if !fp.fileOps.IsDir(dir) {
 		return nil
 	}
-	
+
 	autogenFile := filepath.Join(dir, "autogen_module.go")
-	
+
 	// Check if autogen file exists
-	if _, err := os.Stat(autogenFile); os.IsNotExist(err) {
+	if !fp.fileOps.Exists(autogenFile) {
 		return nil // File doesn't exist, nothing to clean
-	} else if err != nil {
-		return WrapProcessError(fmt.Sprintf("file check %s", autogenFile), err)
 	}
-	
+
 	// Remove the autogen file
-	err := os.Remove(autogenFile)
+	err := fp.fileOps.RemoveFile(autogenFile)
 	if err != nil {
-		return WrapProcessError(fmt.Sprintf("file removal %s", autogenFile), err)
+		return err // Error already wrapped by fileOps.RemoveFile
 	}
 	
 	*removedFiles = append(*removedFiles, autogenFile)
 	return nil
 }
 
-// GetFileReader returns the underlying FileReader for advanced operations
+// GetFileOps returns the underlying FileOps for advanced operations
+func (fp *FileProcessor) GetFileOps() *fileops.FileOps {
+	return fp.fileOps
+}
+
+// GetFileReader returns a FileReader for backward compatibility
 func (fp *FileProcessor) GetFileReader() *FileReader {
-	return fp.fileReader
+	return &FileReader{fileOps: fp.fileOps}
 }
 
 // GetDirectoryFilter returns the default directory filter

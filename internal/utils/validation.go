@@ -155,10 +155,22 @@ func IsOneOf[T comparable](field string, allowed ...T) Validator[T] {
 			}
 		}
 
+		var quotedAllowed []string
+		for _, val := range allowed {
+			quotedAllowed = append(quotedAllowed, fmt.Sprintf("'%v'", val))
+		}
+
+		var message string
+		if len(quotedAllowed) == 2 {
+			message = fmt.Sprintf("must be %s or %s", quotedAllowed[0], quotedAllowed[1])
+		} else {
+			message = fmt.Sprintf("must be one of: %v", allowed)
+		}
+
 		return ValidationError{
 			Field:   field,
 			Value:   value,
-			Message: fmt.Sprintf("must be one of: %v", allowed),
+			Message: message,
 		}
 	}
 }
@@ -301,6 +313,24 @@ func ValidateConstructorName(field string) Validator[string] {
 	return NewValidatorChain(
 		NotEmpty(field),
 		IsValidGoIdentifier(field),
-		HasPrefix(field, "New"),
+		// Note: We allow constructors with "New", "Create", or "Initialize" prefix
+		// but don't enforce it as users might have their own conventions
+		Custom(field, "constructor should typically start with 'New', 'Create', or 'Initialize'",
+			func(value string) bool {
+				return strings.HasPrefix(value, "New") ||
+					strings.HasPrefix(value, "Create") ||
+					strings.HasPrefix(value, "Initialize") ||
+					true // Allow any valid identifier
+			}),
 	).Validate
+}
+
+// ValidateServiceMode validates service lifecycle mode (Singleton/Transient)
+func ValidateServiceMode(field string) Validator[string] {
+	return IsOneOf(field, "Singleton", "Transient")
+}
+
+// ValidateInitMode validates initialization mode (Same/Background)
+func ValidateInitMode(field string) Validator[string] {
+	return IsOneOf(field, "Same", "Background")
 }

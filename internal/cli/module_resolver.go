@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/toyz/axon/internal/errors"
 	"github.com/toyz/axon/internal/utils"
 )
 
@@ -31,7 +32,7 @@ func (r *ModuleResolver) ResolveModuleName(customModule string) (string, error) 
 	// Try to find and read go.mod file
 	moduleName, err := r.readGoModFile()
 	if err != nil {
-		return "", utils.WrapProcessError("module name determination (consider using --module flag)", err)
+		return "", errors.WrapWithOperation("process", "module name determination (consider using --module flag)", err)
 	}
 
 	return moduleName, nil
@@ -42,7 +43,7 @@ func (r *ModuleResolver) readGoModFile() (string, error) {
 	// Look for go.mod in current directory and parent directories
 	currentDir, err := os.Getwd()
 	if err != nil {
-		return "", utils.WrapProcessError("current directory retrieval", err)
+		return "", errors.WrapWithOperation("process", "current directory retrieval", err)
 	}
 
 	for {
@@ -73,13 +74,13 @@ func (r *ModuleResolver) BuildPackagePath(moduleName, packageDir string) (string
 	// Get the current working directory to calculate relative paths
 	currentDir, err := os.Getwd()
 	if err != nil {
-		return "", utils.WrapProcessError("current directory retrieval", err)
+		return "", errors.WrapWithOperation("process", "current directory retrieval", err)
 	}
 
 	// Convert package directory to absolute path
 	absPackageDir, err := filepath.Abs(packageDir)
 	if err != nil {
-		return "", utils.WrapProcessError("package directory resolution", err)
+		return "", errors.WrapWithOperation("process", "package directory resolution", err)
 	}
 
 	// On macOS, /var is a symlink to /private/var, so we need to ensure both paths
@@ -100,7 +101,7 @@ func (r *ModuleResolver) BuildPackagePath(moduleName, packageDir string) (string
 		// If symlink resolution didn't work, try with original paths
 		relPath, err = filepath.Rel(currentDir, absPackageDir)
 		if err != nil {
-			return "", utils.WrapProcessError("relative path calculation", err)
+			return "", errors.WrapWithOperation("process", "relative path calculation", err)
 		}
 	}
 

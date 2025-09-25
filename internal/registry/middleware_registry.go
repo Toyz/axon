@@ -10,38 +10,50 @@ import (
 
 // middlewareRegistry implements the MiddlewareRegistry interface
 type middlewareRegistry struct {
-	*utils.Registry[string, *models.MiddlewareMetadata]
+	*utils.BaseRegistry[string, *models.MiddlewareMetadata]
 }
 
 // NewMiddlewareRegistry creates a new middleware registry
 func NewMiddlewareRegistry() MiddlewareRegistry {
-	return &middlewareRegistry{
-		Registry: utils.NewRegistry[string, *models.MiddlewareMetadata](),
+	registry := &middlewareRegistry{
+		BaseRegistry: utils.NewBaseRegistry[string, *models.MiddlewareMetadata](
+			"middleware",
+			"middleware name",
+			"middleware metadata",
+		),
 	}
+
+	// Set up the default validator for middleware registration
+	registry.BaseRegistry.SetValidator(createMiddlewareValidator())
+
+	return registry
 }
 
-// Register adds a middleware to the registry
-func (r *middlewareRegistry) Register(name string, middleware *models.MiddlewareMetadata) error {
-	validator := func(key string, value *models.MiddlewareMetadata, existing map[string]*models.MiddlewareMetadata) error {
-		// Validate key
-		if err := utils.NotEmpty("name")(key); err != nil {
-			return fmt.Errorf("middleware %w", err)
+// createMiddlewareValidator creates the validation function for middleware
+func createMiddlewareValidator() utils.RegistryValidator[string, *models.MiddlewareMetadata] {
+	return func(key string, value *models.MiddlewareMetadata, existing map[string]*models.MiddlewareMetadata) error {
+		// Validate key is not empty
+		if key == "" {
+			return fmt.Errorf("middleware name cannot be empty")
 		}
 
-		// Validate value
-		if err := utils.NotNil[models.MiddlewareMetadata]("metadata")(value); err != nil {
-			return fmt.Errorf("middleware %w", err)
+		// Validate value is not nil
+		if value == nil {
+			return fmt.Errorf("middleware metadata cannot be nil")
 		}
 
-		// Check for duplicate names
+		// Check for duplicate names with better error message
 		if existingMiddleware, exists := existing[key]; exists {
 			return fmt.Errorf("middleware '%s' is already registered in package '%s'", key, existingMiddleware.PackagePath)
 		}
 
 		return nil
 	}
+}
 
-	return r.Registry.RegisterWithValidator(name, middleware, validator)
+// Register adds a middleware to the registry
+func (r *middlewareRegistry) Register(name string, middleware *models.MiddlewareMetadata) error {
+	return r.BaseRegistry.Register(name, middleware)
 }
 
 // Validate checks that all middleware names exist in the registry
@@ -54,7 +66,7 @@ func (r *middlewareRegistry) Validate(middlewareNames []string) error {
 			continue // Skip empty names
 		}
 
-		if !r.Registry.Has(name) {
+		if !r.BaseRegistry.Has(name) {
 			missingMiddlewares = append(missingMiddlewares, name)
 		}
 	}
@@ -68,5 +80,5 @@ func (r *middlewareRegistry) Validate(middlewareNames []string) error {
 
 // Get retrieves a middleware by name
 func (r *middlewareRegistry) Get(name string) (*models.MiddlewareMetadata, bool) {
-	return r.Registry.Get(name)
+	return r.BaseRegistry.Get(name)
 }

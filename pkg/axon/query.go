@@ -4,8 +4,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-
-	"github.com/labstack/echo/v4"
 )
 
 // QueryMap represents URL query parameters with convenient access methods
@@ -13,10 +11,10 @@ type QueryMap struct {
 	values url.Values
 }
 
-// NewQueryMap creates a QueryMap from Echo context
-func NewQueryMap(c echo.Context) QueryMap {
+// NewQueryMap creates a QueryMap from RequestContext
+func NewQueryMap(c RequestContext) QueryMap {
 	return QueryMap{
-		values: c.QueryParams(),
+		values: url.Values(c.QueryParams()),
 	}
 }
 

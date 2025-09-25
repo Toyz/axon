@@ -63,7 +63,7 @@ require (
 
 		_, err = resolver.ResolveModuleName("")
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "go.mod file not found")
+		assert.Contains(t, err.Error(), "failed to process module name determination")
 	})
 }
 

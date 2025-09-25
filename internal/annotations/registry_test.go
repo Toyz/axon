@@ -437,8 +437,6 @@ func TestConcurrentRegistryModifications(t *testing.T) {
 // Test concurrent validation operations
 
 func TestValidateDefaultValue(t *testing.T) {
-	registry := NewRegistry().(*registry)
-
 	tests := []struct {
 		name         string
 		paramName    string
@@ -458,7 +456,7 @@ func TestValidateDefaultValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := registry.validateDefaultValue(tt.paramName, tt.paramType, tt.defaultValue)
+			err := validateDefaultValue(tt.paramName, tt.paramType, tt.defaultValue)
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")
 			}

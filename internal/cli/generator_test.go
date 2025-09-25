@@ -157,7 +157,7 @@ type User struct {
 
 		err := generator.Run(config)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "No Go packages found")
+		assert.Contains(t, err.Error(), "no Go packages found")
 	})
 
 	t.Run("no annotations found", func(t *testing.T) {
@@ -203,7 +203,7 @@ func TestGenerator_hasNoAnnotations(t *testing.T) {
 				return &models.PackageMetadata{
 					PackageName: "test",
 					Controllers: []models.ControllerMetadata{
-						{BaseMetadata: models.BaseMetadata{Name: "TestController"}},
+						{BaseMetadataTrait: models.BaseMetadataTrait{Name: "TestController"}},
 					},
 				}
 			},
@@ -215,7 +215,7 @@ func TestGenerator_hasNoAnnotations(t *testing.T) {
 				return &models.PackageMetadata{
 					PackageName: "test",
 					CoreServices: []models.CoreServiceMetadata{
-						{BaseMetadata: models.BaseMetadata{Name: "TestService"}},
+						{BaseMetadataTrait: models.BaseMetadataTrait{Name: "TestService"}},
 					},
 				}
 			},
@@ -227,7 +227,7 @@ func TestGenerator_hasNoAnnotations(t *testing.T) {
 				return &models.PackageMetadata{
 					PackageName: "test",
 					Middlewares: []models.MiddlewareMetadata{
-						{BaseMetadata: models.BaseMetadata{Name: "TestMiddleware"}},
+						{BaseMetadataTrait: models.BaseMetadataTrait{Name: "TestMiddleware"}},
 					},
 				}
 			},
@@ -239,7 +239,7 @@ func TestGenerator_hasNoAnnotations(t *testing.T) {
 				return &models.PackageMetadata{
 					PackageName: "test",
 					Interfaces: []models.InterfaceMetadata{
-						{BaseMetadata: models.BaseMetadata{Name: "TestInterface"}},
+						{BaseMetadataTrait: models.BaseMetadataTrait{Name: "TestInterface"}},
 					},
 				}
 			},

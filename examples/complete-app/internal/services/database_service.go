@@ -17,7 +17,7 @@ type DatabaseService struct {
 }
 
 // Start initializes the database connection
-func (s *DatabaseService) SpreadOp(args ...string) error {
+func (s *DatabaseService) SpreadOp(args ...context.Context) error {
 	return nil
 }
 

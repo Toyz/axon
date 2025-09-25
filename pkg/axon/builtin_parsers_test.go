@@ -1,11 +1,9 @@
 package axon
 
 import (
-	"net/http/httptest"
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -314,7 +312,7 @@ func TestBuiltinParsersMetadata(t *testing.T) {
 			assert.Equal(t, typeName, parser.TypeName)
 			assert.NotEmpty(t, parser.FunctionName)
 			assert.Equal(t, "builtin", parser.PackagePath)
-			assert.Equal(t, []string{"echo.Context", "string"}, parser.ParameterTypes)
+			assert.Equal(t, []string{"RequestContext", "string"}, parser.ParameterTypes)
 			assert.Len(t, parser.ReturnTypes, 2)
 			assert.Equal(t, "error", parser.ReturnTypes[1])
 		})
@@ -509,44 +507,53 @@ func TestGetAllBuiltinTypes(t *testing.T) {
 	assert.Len(t, types, expectedCount)
 }
 
-// Test with actual Echo context (integration-style test)
-func TestBuiltinParsersWithEchoContext(t *testing.T) {
-	e := echo.New()
+// Mock RequestContext for testing parsers
+type mockRequestContext struct{}
+
+func (m *mockRequestContext) Method() string                         { return "GET" }
+func (m *mockRequestContext) Path() string                           { return "/test" }
+func (m *mockRequestContext) RealIP() string                         { return "127.0.0.1" }
+func (m *mockRequestContext) Param(key string) string                { return "" }
+func (m *mockRequestContext) ParamNames() []string                   { return nil }
+func (m *mockRequestContext) ParamValues() []string                  { return nil }
+func (m *mockRequestContext) SetParam(name, value string)            {}
+func (m *mockRequestContext) QueryParam(key string) string           { return "" }
+func (m *mockRequestContext) QueryParams() map[string][]string       { return nil }
+func (m *mockRequestContext) QueryString() string                    { return "" }
+func (m *mockRequestContext) Request() RequestInterface              { return nil }
+func (m *mockRequestContext) Response() ResponseInterface            { return nil }
+func (m *mockRequestContext) Bind(i interface{}) error               { return nil }
+func (m *mockRequestContext) Validate(i interface{}) error           { return nil }
+func (m *mockRequestContext) Get(key string) interface{}             { return nil }
+func (m *mockRequestContext) Set(key string, val interface{})        {}
+func (m *mockRequestContext) FormValue(name string) string           { return "" }
+func (m *mockRequestContext) FormParams() (map[string][]string, error) { return nil, nil }
+func (m *mockRequestContext) FormFile(name string) (FileHeader, error) { return nil, nil }
+func (m *mockRequestContext) MultipartForm() (MultipartForm, error)  { return nil, nil }
+
+// Test with mock context
+func TestBuiltinParsersWithMockContext(t *testing.T) {
+	c := &mockRequestContext{}
 
 	t.Run("ParseInt with context", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/test", nil)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-
 		result, err := ParseInt(c, "42")
 		assert.NoError(t, err)
 		assert.Equal(t, 42, result)
 	})
 
 	t.Run("ParseString with context", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/test", nil)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-
 		result, err := ParseString(c, "test-string")
 		assert.NoError(t, err)
 		assert.Equal(t, "test-string", result)
 	})
 
 	t.Run("ParseFloat64 with context", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/test", nil)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-
 		result, err := ParseFloat64(c, "123.45")
 		assert.NoError(t, err)
 		assert.Equal(t, 123.45, result)
 	})
 
 	t.Run("ParseUUID with context", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/test", nil)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
 
 		validUUID := "123e4567-e89b-12d3-a456-426614174000"
 		result, err := ParseUUID(c, validUUID)

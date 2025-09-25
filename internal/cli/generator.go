@@ -11,6 +11,7 @@ import (
 
 	"golang.org/x/tools/imports"
 
+	"github.com/toyz/axon/internal/errors"
 	"github.com/toyz/axon/internal/generator"
 	"github.com/toyz/axon/internal/models"
 	"github.com/toyz/axon/internal/parser"
@@ -107,19 +108,15 @@ func (g *Generator) Run(config Config) error {
 		if g.diagnostics != nil {
 			g.diagnostics.Error("Failed to resolve module name: %v", err)
 		}
-		return &models.GeneratorError{
-			Type:    models.ErrorTypeValidation,
-			Message: fmt.Sprintf("Failed to resolve module name: %v", err),
-			Suggestions: []string{
+		baseErr := errors.NewValidationError("module_name", "valid module name", fmt.Sprintf("failed to resolve: %v", err)).
+			WithSuggestions(
 				"Check your go.mod file exists and is valid",
 				"Ensure you're running from the correct directory",
 				"Try specifying --module flag explicitly",
-			},
-			Context: map[string]interface{}{
-				"provided_module": config.ModuleName,
-				"directories":     config.Directories,
-			},
-		}
+			).
+			WithContext("provided_module", config.ModuleName).
+			WithContext("directories", config.Directories)
+		return errors.NewGeneratorError(baseErr)
 	}
 
 	// Silent scanning
@@ -128,33 +125,24 @@ func (g *Generator) Run(config Config) error {
 		if g.diagnostics != nil {
 			g.diagnostics.Error("Failed to scan directories: %v", err)
 		}
-		return &models.GeneratorError{
-			Type:    models.ErrorTypeFileSystem,
-			Message: fmt.Sprintf("Failed to scan directories: %v", err),
-			Suggestions: []string{
+		baseErr := errors.WrapFileSystemError("scan", strings.Join(config.Directories, ", "), err).
+			WithSuggestions(
 				"Check that the specified directories exist",
 				"Ensure you have read permissions for the directories",
 				"Verify the directory paths are correct",
-			},
-			Context: map[string]interface{}{
-				"directories": config.Directories,
-			},
-		}
+			)
+		return errors.NewGeneratorError(baseErr)
 	}
 
 	if len(packageDirs) == 0 {
-		return &models.GeneratorError{
-			Type:    models.ErrorTypeValidation,
-			Message: "No Go packages found in specified directories",
-			Suggestions: []string{
+		baseErr := errors.NewValidationError("directories", "directories with Go packages", "no Go packages found").
+			WithSuggestions(
 				"Ensure the directories contain Go files",
 				"Check that Go files have valid package declarations",
 				"Try scanning parent directories or use './...' pattern",
-			},
-			Context: map[string]interface{}{
-				"directories": config.Directories,
-			},
-		}
+			).
+			WithContext("directories", config.Directories)
+		return errors.NewGeneratorError(baseErr)
 	}
 
 	// Start discovery phase
@@ -183,26 +171,23 @@ func (g *Generator) Run(config Config) error {
 		metadata, err := g.parser.ParseDirectory(packageDir)
 		if err != nil {
 			// Enhance error with context
-			if genErr, ok := err.(*models.GeneratorError); ok {
-				genErr.Context = map[string]interface{}{
-					"package_directory": packageDir,
-					"module_name":       moduleName,
+			if genErr, ok := err.(*errors.GeneratorError); ok {
+				// Add context to the underlying error and create a new GeneratorError
+				if baseErr, ok := genErr.AxonError.(*errors.BaseError); ok {
+					baseErr.WithContext("package_directory", packageDir).
+						WithContext("module_name", moduleName)
 				}
 				return genErr
 			}
-			return &models.GeneratorError{
-				Type:    models.ErrorTypeValidation,
-				Message: fmt.Sprintf("Failed to parse package %s: %v", packageDir, err),
-				Suggestions: []string{
+			baseErr := errors.WrapParseError(fmt.Sprintf("package %s", packageDir), err).
+				WithSuggestions(
 					"Check for syntax errors in Go files",
 					"Ensure all files have valid package declarations",
 					"Verify annotation syntax is correct",
-				},
-				Context: map[string]interface{}{
-					"package_directory": packageDir,
-					"module_name":       moduleName,
-				},
-			}
+				).
+				WithContext("package_directory", packageDir).
+				WithContext("module_name", moduleName)
+			return errors.NewGeneratorError(baseErr)
 		}
 
 		// Store metadata for second pass
@@ -244,7 +229,7 @@ func (g *Generator) Run(config Config) error {
 	// Build global parser registry and register with code generator
 	err = g.buildGlobalParserRegistry()
 	if err != nil {
-		return utils.WrapProcessError("global parser registry build", err)
+		return errors.WrapWithOperation("build", "global parser registry", err)
 	}
 
 	g.summary.ParsersDiscovered = len(g.globalParsers)
@@ -319,22 +304,18 @@ func (g *Generator) Run(config Config) error {
 		err = g.parser.ValidateCustomParsersWithRegistry(metadata, g.globalParsers)
 		if err != nil {
 			// Enhance error with context
-			if genErr, ok := err.(*models.GeneratorError); ok {
-				if genErr.Context == nil {
-					genErr.Context = make(map[string]interface{})
+			if genErr, ok := err.(*errors.GeneratorError); ok {
+				// Add context to the underlying error
+				if baseErr, ok := genErr.AxonError.(*errors.BaseError); ok {
+					baseErr.WithContext("package_name", metadata.PackageName).
+						WithContext("package_path", metadata.PackagePath)
 				}
-				genErr.Context["package_name"] = metadata.PackageName
-				genErr.Context["package_path"] = metadata.PackagePath
 				return genErr
 			}
-			return &models.GeneratorError{
-				Type:    models.ErrorTypeParserValidation,
-				Message: fmt.Sprintf("Parser validation failed for package %s: %v", metadata.PackageName, err),
-				Context: map[string]interface{}{
-					"package_name": metadata.PackageName,
-					"package_path": metadata.PackagePath,
-				},
-			}
+			baseErr := errors.WrapValidationError(fmt.Sprintf("parser validation for package %s", metadata.PackageName), err).
+				WithContext("package_name", metadata.PackageName).
+				WithContext("package_path", metadata.PackagePath)
+			return errors.NewGeneratorError(baseErr)
 		}
 	}
 
@@ -393,7 +374,7 @@ func (g *Generator) Run(config Config) error {
 		// Build package import path for module references
 		packageImportPath, err := g.moduleResolver.BuildPackagePath(moduleName, packageDir)
 		if err != nil {
-			return utils.WrapProcessError(fmt.Sprintf("package path build for %s", packageDir), err)
+			return errors.WrapWithOperation("build", fmt.Sprintf("package path for %s", packageDir), err)
 		}
 
 		// Keep the original directory path for file generation
@@ -405,38 +386,30 @@ func (g *Generator) Run(config Config) error {
 		// Generate module for this package with package path mappings and required packages
 		generatedModule, err := g.codeGenerator.GenerateModuleWithRequiredPackages(metadata, moduleName, packagePathMappings, requiredPackages)
 		if err != nil {
-			return &models.GeneratorError{
-				Type:    models.ErrorTypeGeneration,
-				Message: fmt.Sprintf("Failed to generate module for package %s: %v", metadata.PackageName, err),
-				Suggestions: []string{
+			baseErr := errors.WrapGenerateError("module", fmt.Sprintf("module for package %s", metadata.PackageName), err).
+				WithSuggestions(
 					"Check that all annotations are valid",
 					"Ensure all dependencies are properly defined",
 					"Verify that all referenced types exist",
-				},
-				Context: map[string]interface{}{
-					"package_name": metadata.PackageName,
-					"package_path": packageDir,
-					"module_name":  moduleName,
-				},
-			}
+				).
+				WithContext("package_name", metadata.PackageName).
+				WithContext("package_path", packageDir).
+				WithContext("module_name", moduleName)
+			return errors.NewGeneratorError(baseErr)
 		}
 
 		// Write the generated module file (Phase 1: Generate all files first)
 		err = g.writeModuleFile(generatedModule)
 		if err != nil {
-			return &models.GeneratorError{
-				Type:    models.ErrorTypeFileSystem,
-				Message: fmt.Sprintf("Failed to write module file for package %s: %v", metadata.PackageName, err),
-				Suggestions: []string{
+			baseErr := errors.WrapFileSystemError("write", generatedModule.FilePath, err).
+				WithSuggestions(
 					"Check write permissions for the target directory",
 					"Ensure the target directory exists",
 					"Verify there's enough disk space",
-				},
-				Context: map[string]interface{}{
-					"package_name": metadata.PackageName,
-					"file_path":    generatedModule.FilePath,
-				},
-			}
+				).
+				WithContext("package_name", metadata.PackageName).
+				WithContext("file_path", generatedModule.FilePath)
+			return errors.NewGeneratorError(baseErr)
 		}
 
 		// Add to modules list for main.go generation
@@ -516,7 +489,7 @@ func (g *Generator) writeModuleFile(module *models.GeneratedModule) error {
 	// Create directory if it doesn't exist
 	dir := filepath.Dir(module.FilePath)
 	if err := g.ensureDirectory(dir); err != nil {
-		return utils.WrapCreateError(fmt.Sprintf("directory %s", dir), err)
+		return errors.WrapFileSystemError("create", dir, err)
 	}
 
 	// Write the file
@@ -551,7 +524,7 @@ func (g *Generator) collectParsersFromPackage(metadata *models.PackageMetadata, 
 		// Resolve import path for this parser
 		importPath, err := g.resolveParserImportPath(moduleName, packageDir, metadata.PackageName)
 		if err != nil {
-			return utils.WrapProcessError(fmt.Sprintf("import path resolution for parser %s", parser.FunctionName), err)
+			return errors.WrapWithOperation("resolve", fmt.Sprintf("import path for parser %s", parser.FunctionName), err)
 		}
 
 		// Create enhanced parser metadata with package path
@@ -560,7 +533,7 @@ func (g *Generator) collectParsersFromPackage(metadata *models.PackageMetadata, 
 
 		// Check for conflicts
 		if existing, exists := g.globalParsers[parser.TypeName]; exists {
-			conflicts := []models.ParserConflict{
+			conflicts := []errors.ParserConflict{
 				{
 					FileName:     existing.FileName,
 					Line:         existing.Line,
@@ -574,7 +547,7 @@ func (g *Generator) collectParsersFromPackage(metadata *models.PackageMetadata, 
 					PackagePath:  packageDir,
 				},
 			}
-			return models.NewParserConflictError(parser.TypeName, conflicts)
+			return errors.NewParserConflictError(parser.TypeName, conflicts)
 		}
 
 		// Add to global registry
@@ -592,19 +565,15 @@ func (g *Generator) collectMiddlewareFromPackage(metadata *models.PackageMetadat
 	for _, middleware := range metadata.Middlewares {
 		// Check for conflicts
 		if existing, exists := g.globalMiddleware[middleware.Name]; exists {
-			return &models.GeneratorError{
-				Type:    models.ErrorTypeValidation,
-				Message: fmt.Sprintf("Middleware name conflict: '%s' is defined in multiple packages", middleware.Name),
-				Suggestions: []string{
+			baseErr := errors.NewValidationError("middleware_name", "unique middleware name", fmt.Sprintf("duplicate name '%s'", middleware.Name)).
+				WithSuggestions(
 					"Rename one of the conflicting middleware classes",
 					"Ensure middleware names are unique across packages",
-				},
-				Context: map[string]interface{}{
-					"middleware_name":     middleware.Name,
-					"existing_package":    existing.PackagePath,
-					"conflicting_package": packageDir,
-				},
-			}
+				).
+				WithContext("middleware_name", middleware.Name).
+				WithContext("existing_package", existing.PackagePath).
+				WithContext("conflicting_package", packageDir)
+			return errors.NewGeneratorError(baseErr)
 		}
 
 		// Create enhanced middleware metadata with package path
@@ -627,20 +596,16 @@ func (g *Generator) validateMiddlewareReferences(metadata *models.PackageMetadat
 		for _, route := range controller.Routes {
 			for _, middlewareName := range route.Middlewares {
 				if _, exists := g.globalMiddleware[middlewareName]; !exists {
-					return &models.GeneratorError{
-						Type:    models.ErrorTypeValidation,
-						Message: fmt.Sprintf("Route %s.%s references unknown middleware: %s", controller.Name, route.HandlerName, middlewareName),
-						Suggestions: []string{
+					baseErr := errors.NewValidationError("middleware_reference", "registered middleware", fmt.Sprintf("unknown middleware '%s'", middlewareName)).
+						WithSuggestions(
 							fmt.Sprintf("Check that middleware '%s' is defined with //axon::middleware annotation", middlewareName),
 							"Ensure the middleware package is included in the scan directories",
 							"Verify the middleware name matches exactly (case-sensitive)",
-						},
-						Context: map[string]interface{}{
-							"route":                fmt.Sprintf("%s.%s", controller.Name, route.HandlerName),
-							"middleware_name":      middlewareName,
-							"available_middleware": g.getAvailableMiddlewareNames(),
-						},
-					}
+						).
+						WithContext("route", fmt.Sprintf("%s.%s", controller.Name, route.HandlerName)).
+						WithContext("middleware_name", middlewareName).
+						WithContext("available_middleware", g.getAvailableMiddlewareNames())
+					return errors.NewGeneratorError(baseErr)
 				}
 			}
 		}
@@ -677,7 +642,7 @@ func (g *Generator) buildGlobalParserRegistry() error {
 	for _, parser := range g.globalParsers {
 		err := parserRegistry.RegisterParser(parser)
 		if err != nil {
-			return utils.WrapRegisterError("parser "+parser.FunctionName, err)
+			return errors.WrapRegisterError("parser", parser.FunctionName, err)
 		}
 	}
 
@@ -690,7 +655,7 @@ func (g *Generator) resolveParserImportPath(moduleName, packageDir, packageName 
 		// Use the module resolver to build the proper package path
 		importPath, err := g.moduleResolver.BuildPackagePath(moduleName, packageDir)
 		if err != nil {
-			return "", utils.WrapProcessError("package path build", err)
+			return "", errors.WrapWithOperation("build", "package path", err)
 		}
 		return importPath, nil
 	}
@@ -727,20 +692,16 @@ func (g *Generator) postProcessGeneratedFiles() error {
 
 	// If some files failed, return an error with context
 	if len(failedFiles) > 0 {
-		return &models.GeneratorError{
-			Type:    models.ErrorTypeGeneration,
-			Message: fmt.Sprintf("Failed to post-process %d of %d generated files", len(failedFiles), len(g.summary.GeneratedFiles)),
-			Context: map[string]interface{}{
-				"failed_files":     failedFiles,
-				"total_files":      len(g.summary.GeneratedFiles),
-				"successful_files": len(g.summary.GeneratedFiles) - len(failedFiles),
-			},
-			Suggestions: []string{
+		baseErr := errors.NewGenerationError(fmt.Sprintf("Failed to post-process %d of %d generated files", len(failedFiles), len(g.summary.GeneratedFiles))).
+			WithContext("failed_files", failedFiles).
+			WithContext("total_files", len(g.summary.GeneratedFiles)).
+			WithContext("successful_files", len(g.summary.GeneratedFiles)-len(failedFiles)).
+			WithSuggestions(
 				"Run 'goimports -w .' manually to fix import issues",
 				"Check that all required dependencies are available in go.mod",
 				"Verify that generated code syntax is valid",
-			},
-		}
+			)
+		return errors.NewGeneratorError(baseErr)
 	}
 
 	return nil
@@ -751,21 +712,15 @@ func (g *Generator) processFileImports(filePath string) error {
 	// Read the generated file
 	content, err := os.ReadFile(filePath)
 	if err != nil {
-		return &models.GeneratorError{
-			Type:    models.ErrorTypeFileSystem,
-			Message: "Failed to read generated file for post-processing",
-			File:    filePath,
-			Cause:   err,
-			Context: map[string]interface{}{
-				"operation": "read_file",
-				"file_path": filePath,
-			},
-			Suggestions: []string{
+		baseErr := errors.WrapFileSystemError("read", filePath, err).
+			WithSuggestions(
 				"Check file permissions",
 				"Ensure the file was generated successfully",
 				"Verify disk space is available",
-			},
-		}
+			).
+			WithContext("operation", "read_file").
+			WithContext("file_path", filePath)
+		return errors.NewGeneratorError(baseErr)
 	}
 
 	// Phase 2: Process with goimports - the filePath is crucial for context
@@ -780,36 +735,25 @@ func (g *Generator) processFileImports(filePath string) error {
 		// Fallback to gofmt if goimports fails
 		formatted, fmtErr := format.Source(content)
 		if fmtErr != nil {
-			return &models.GeneratorError{
-				Type:    models.ErrorTypeGeneration,
-				Message: "Both goimports and gofmt failed to process generated file",
-				File:    filePath,
-				Cause:   err,
-				Context: map[string]interface{}{
-					"operation":     "format_imports",
-					"file_path":     filePath,
-					"goimports_err": err.Error(),
-					"gofmt_err":     fmtErr.Error(),
-				},
-				Suggestions: []string{
+			baseErr := errors.NewGenerationError("Both goimports and gofmt failed to process generated file").
+				WithCause(err).
+				WithContext("operation", "format_imports").
+				WithContext("file_path", filePath).
+				WithContext("goimports_err", err.Error()).
+				WithContext("gofmt_err", fmtErr.Error()).
+				WithSuggestions(
 					"Check the generated code syntax manually",
 					"Look for missing imports or invalid Go syntax",
 					"Try running 'go fmt' on the file to identify syntax issues",
-				},
-			}
+				)
+			return errors.NewGeneratorError(baseErr)
 		}
 		// Write the gofmt result and continue
 		if writeErr := os.WriteFile(filePath, formatted, 0644); writeErr != nil {
-			return &models.GeneratorError{
-				Type:    models.ErrorTypeFileSystem,
-				Message: "Failed to write formatted file after gofmt fallback",
-				File:    filePath,
-				Cause:   writeErr,
-				Context: map[string]interface{}{
-					"operation": "write_file",
-					"file_path": filePath,
-				},
-			}
+			baseErr := errors.WrapFileSystemError("write", filePath, writeErr).
+				WithContext("operation", "write_file").
+				WithContext("file_path", filePath)
+			return errors.NewGeneratorError(baseErr)
 		}
 		return nil // Successfully wrote gofmt result
 	}
@@ -822,39 +766,28 @@ func (g *Generator) processFileImports(filePath string) error {
 	// Phase 3: Final gofmt pass to ensure consistent formatting
 	finalFormatted, err := format.Source([]byte(formattedString))
 	if err != nil {
-		return &models.GeneratorError{
-			Type:    models.ErrorTypeGeneration,
-			Message: "Final gofmt formatting failed",
-			File:    filePath,
-			Cause:   err,
-			Context: map[string]interface{}{
-				"operation": "final_format",
-				"file_path": filePath,
-			},
-			Suggestions: []string{
+		baseErr := errors.NewGenerationError("Final gofmt formatting failed").
+			WithCause(err).
+			WithContext("operation", "final_format").
+			WithContext("file_path", filePath).
+			WithSuggestions(
 				"Check the generated code syntax after import fixes",
 				"Verify that import fixes didn't introduce syntax errors",
-			},
-		}
+			)
+		return errors.NewGeneratorError(baseErr)
 	}
 
 	// Write the final processed file back
 	if err := os.WriteFile(filePath, finalFormatted, 0644); err != nil {
-		return &models.GeneratorError{
-			Type:    models.ErrorTypeFileSystem,
-			Message: "Failed to write final processed file",
-			File:    filePath,
-			Cause:   err,
-			Context: map[string]interface{}{
-				"operation": "write_file",
-				"file_path": filePath,
-			},
-			Suggestions: []string{
+		baseErr := errors.WrapFileSystemError("write", filePath, err).
+			WithSuggestions(
 				"Check file permissions",
 				"Verify disk space is available",
 				"Ensure the directory is writable",
-			},
-		}
+			).
+			WithContext("operation", "write_file").
+			WithContext("file_path", filePath)
+		return errors.NewGeneratorError(baseErr)
 	}
 
 	return nil

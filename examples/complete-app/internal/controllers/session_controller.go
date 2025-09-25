@@ -3,7 +3,6 @@ package controllers
 import (
 	"net/http"
 
-	"github.com/labstack/echo/v4"
 	"github.com/toyz/axon/examples/complete-app/internal/services"
 	"github.com/toyz/axon/pkg/axon"
 )
@@ -69,7 +68,7 @@ func (c *SessionController) GetSessionInfo(userID int) (map[string]interface{}, 
 
 // CompareSessionInstances demonstrates that different requests get different instances
 //axon::route GET /sessions/compare -PassContext
-func (c *SessionController) CompareSessionInstances(ctx echo.Context) error {
+func (c *SessionController) CompareSessionInstances(ctx axon.RequestContext) error {
 	// Create multiple session instances to show they're different
 	session1 := c.SessionFactory()
 	session2 := c.SessionFactory()
@@ -102,5 +101,5 @@ func (c *SessionController) CompareSessionInstances(ctx echo.Context) error {
 		"note": "Notice how each instance has different session IDs and timestamps",
 	}
 	
-	return ctx.JSON(http.StatusOK, response)
+	return ctx.Response().JSON(http.StatusOK, response)
 }

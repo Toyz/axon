@@ -69,13 +69,17 @@ func TestGenerateModule_CoreServices(t *testing.T) {
 		PackagePath: "./services",
 		CoreServices: []models.CoreServiceMetadata{
 			{
-				BaseMetadata: models.BaseMetadata{
+				BaseMetadataTrait: models.BaseMetadataTrait{
 					Name:         "UserService",
 					StructName:   "UserService",
 					Dependencies: []models.Dependency{{Name: "UserRepository", Type: "UserRepository"}},
 				},
-				HasLifecycle: false,
-				IsManual:     false,
+				LifecycleTrait: models.LifecycleTrait{
+					HasLifecycle: false,
+				},
+				ManualModuleTrait: models.ManualModuleTrait{
+					IsManual: false,
+				},
 			},
 		},
 	}
@@ -117,7 +121,7 @@ func TestGenerateModule_Controllers(t *testing.T) {
 		PackagePath: "./controllers",
 		Controllers: []models.ControllerMetadata{
 			{
-				BaseMetadata: models.BaseMetadata{
+				BaseMetadataTrait: models.BaseMetadataTrait{
 					Name:         "UserController",
 					StructName:   "UserController",
 					Dependencies: []models.Dependency{{Name: "UserService", Type: "UserService"}},
@@ -186,7 +190,7 @@ func TestGenerateControllerProvider(t *testing.T) {
 	generator := NewGenerator()
 
 	controller := models.ControllerMetadata{
-		BaseMetadata: models.BaseMetadata{
+		BaseMetadataTrait: models.BaseMetadataTrait{
 			Name:       "UserController",
 			StructName: "UserController",
 			Dependencies: []models.Dependency{
@@ -239,7 +243,7 @@ func TestCollectMiddlewareDependencies(t *testing.T) {
 		},
 	}
 
-	result := generator.collectMiddlewareDependencies(metadata)
+	result := generator.collectMiddlewareDependencies(metadata, "test")
 
 	// Should have unique middlewares
 	expectedCount := 3 // Auth, Logging, RateLimit
@@ -267,7 +271,7 @@ func TestExtractProviders(t *testing.T) {
 	metadata := &models.PackageMetadata{
 		Controllers: []models.ControllerMetadata{
 			{
-				BaseMetadata: models.BaseMetadata{
+				BaseMetadataTrait: models.BaseMetadataTrait{
 					Name:         "UserController",
 					StructName:   "UserController",
 					Dependencies: []models.Dependency{{Name: "UserService", Type: "UserService"}},
@@ -276,26 +280,32 @@ func TestExtractProviders(t *testing.T) {
 		},
 		CoreServices: []models.CoreServiceMetadata{
 			{
-				BaseMetadata: models.BaseMetadata{
+				BaseMetadataTrait: models.BaseMetadataTrait{
 					Name:         "UserService",
 					StructName:   "UserService",
 					Dependencies: []models.Dependency{{Name: "UserRepository", Type: "UserRepository"}},
 				},
-				HasLifecycle: true,
-				IsManual:     false,
+				LifecycleTrait: models.LifecycleTrait{
+					HasLifecycle: true,
+				},
+				ManualModuleTrait: models.ManualModuleTrait{
+					IsManual: false,
+				},
 			},
 			{
-				BaseMetadata: models.BaseMetadata{
+				BaseMetadataTrait: models.BaseMetadataTrait{
 					Name:       "ConfigService",
 					StructName: "ConfigService",
 				},
-				IsManual:   true,
-				ModuleName: "CustomModule",
+				ManualModuleTrait: models.ManualModuleTrait{
+					IsManual:   true,
+					ModuleName: "CustomModule",
+				},
 			},
 		},
 		Interfaces: []models.InterfaceMetadata{
 			{
-				BaseMetadata: models.BaseMetadata{
+				BaseMetadataTrait: models.BaseMetadataTrait{
 					Name:       "UserServiceInterface",
 					StructName: "UserService",
 				},

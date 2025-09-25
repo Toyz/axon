@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/toyz/axon/internal/errors"
 	"github.com/toyz/axon/internal/utils"
 )
 
@@ -37,7 +38,7 @@ func (s *DirectoryScanner) ScanDirectories(rootDirs []string) ([]string, error) 
 			// Clean and resolve the base path
 			cleanPath, err := filepath.Abs(baseDir)
 			if err != nil {
-				return nil, utils.WrapProcessError(fmt.Sprintf("path resolution %s", baseDir), err)
+				return nil, errors.WrapWithOperation("process", fmt.Sprintf("path resolution %s", baseDir), err)
 			}
 
 			cleanDirs = append(cleanDirs, cleanPath)
@@ -45,7 +46,7 @@ func (s *DirectoryScanner) ScanDirectories(rootDirs []string) ([]string, error) 
 			// Clean and resolve the path
 			cleanPath, err := filepath.Abs(rootDir)
 			if err != nil {
-				return nil, utils.WrapProcessError(fmt.Sprintf("path resolution %s", rootDir), err)
+				return nil, errors.WrapWithOperation("process", fmt.Sprintf("path resolution %s", rootDir), err)
 			}
 
 			cleanDirs = append(cleanDirs, cleanPath)

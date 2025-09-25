@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/toyz/axon/pkg/axon"
 )
 
 // ProductCode represents a custom product code format: "PROD-12345"
@@ -34,7 +34,7 @@ func (pc ProductCode) String() string {
 }
 
 //axon::route_parser ProductCode
-func ParseProductCode(c echo.Context, paramValue string) (ProductCode, error) {
+func ParseProductCode(c axon.RequestContext, paramValue string) (ProductCode, error) {
 	code := ProductCode(strings.ToUpper(paramValue))
 	if err := code.Validate(); err != nil {
 		return "", fmt.Errorf("invalid product code '%s': %w", paramValue, err)

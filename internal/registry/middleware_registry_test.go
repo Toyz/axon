@@ -26,11 +26,13 @@ func TestMiddlewareRegistry_Register(t *testing.T) {
 				{
 					name: "AuthMiddleware",
 					middleware: &models.MiddlewareMetadata{
-						BaseMetadata: models.BaseMetadata{
+						BaseMetadataTrait: models.BaseMetadataTrait{
 							Name:       "AuthMiddleware",
 							StructName: "AuthMiddleware",
 						},
+						PathTrait: models.PathTrait{
 						PackagePath: "/auth",
+						},
 					},
 				},
 			},
@@ -45,21 +47,25 @@ func TestMiddlewareRegistry_Register(t *testing.T) {
 				{
 					name: "AuthMiddleware",
 					middleware: &models.MiddlewareMetadata{
-						BaseMetadata: models.BaseMetadata{
+						BaseMetadataTrait: models.BaseMetadataTrait{
 							Name:       "AuthMiddleware",
 							StructName: "AuthMiddleware",
 						},
+						PathTrait: models.PathTrait{
 						PackagePath: "/auth",
+						},
 					},
 				},
 				{
 					name: "LoggingMiddleware",
 					middleware: &models.MiddlewareMetadata{
-						BaseMetadata: models.BaseMetadata{
+						BaseMetadataTrait: models.BaseMetadataTrait{
 							Name:       "LoggingMiddleware",
 							StructName: "LoggingMiddleware",
 						},
+						PathTrait: models.PathTrait{
 						PackagePath: "/logging",
+						},
 					},
 				},
 			},
@@ -74,21 +80,25 @@ func TestMiddlewareRegistry_Register(t *testing.T) {
 				{
 					name: "AuthMiddleware",
 					middleware: &models.MiddlewareMetadata{
-						BaseMetadata: models.BaseMetadata{
+						BaseMetadataTrait: models.BaseMetadataTrait{
 							Name:       "AuthMiddleware",
 							StructName: "AuthMiddleware",
 						},
+						PathTrait: models.PathTrait{
 						PackagePath: "/auth",
+						},
 					},
 				},
 				{
 					name: "AuthMiddleware",
 					middleware: &models.MiddlewareMetadata{
-						BaseMetadata: models.BaseMetadata{
+						BaseMetadataTrait: models.BaseMetadataTrait{
 							Name:       "AuthMiddleware",
 							StructName: "AuthMiddleware",
 						},
+						PathTrait: models.PathTrait{
 						PackagePath: "/auth2",
+						},
 					},
 				},
 			},
@@ -104,16 +114,18 @@ func TestMiddlewareRegistry_Register(t *testing.T) {
 				{
 					name: "",
 					middleware: &models.MiddlewareMetadata{
-						BaseMetadata: models.BaseMetadata{
+						BaseMetadataTrait: models.BaseMetadataTrait{
 							Name:       "AuthMiddleware",
 							StructName: "AuthMiddleware",
 						},
+						PathTrait: models.PathTrait{
 						PackagePath: "/auth",
+						},
 					},
 				},
 			},
 			expectError: true,
-			errorMsg:    "validation error for field 'name'",
+			errorMsg:    "middleware name cannot be empty",
 		},
 		{
 			name: "register with nil middleware",
@@ -127,7 +139,7 @@ func TestMiddlewareRegistry_Register(t *testing.T) {
 				},
 			},
 			expectError: true,
-			errorMsg:    "validation error for field 'metadata'",
+			errorMsg:    "middleware metadata cannot be nil",
 		},
 	}
 
@@ -222,11 +234,13 @@ func TestMiddlewareRegistry_Validate(t *testing.T) {
 			// Register middlewares
 			for _, name := range tt.registeredNames {
 				middleware := &models.MiddlewareMetadata{
-					BaseMetadata: models.BaseMetadata{
+					BaseMetadataTrait: models.BaseMetadataTrait{
 						Name:       name,
 						StructName: name,
 					},
-					PackagePath: "/test",
+					PathTrait: models.PathTrait{
+						PackagePath: "/test",
+					},
 				}
 				err := registry.Register(name, middleware)
 				if err != nil {
@@ -259,25 +273,29 @@ func TestMiddlewareRegistry_Get(t *testing.T) {
 
 	// Register some middlewares
 	authMiddleware := &models.MiddlewareMetadata{
-		BaseMetadata: models.BaseMetadata{
+		BaseMetadataTrait: models.BaseMetadataTrait{
 			Name:       "AuthMiddleware",
 			StructName: "AuthMiddleware",
 			Dependencies: []models.Dependency{
 				{Name: "TokenService", Type: "*TokenService"},
 			},
 		},
-		PackagePath: "/auth",
+		PathTrait: models.PathTrait{
+			PackagePath: "/auth",
+		},
 	}
 
 	loggingMiddleware := &models.MiddlewareMetadata{
-		BaseMetadata: models.BaseMetadata{
+		BaseMetadataTrait: models.BaseMetadataTrait{
 			Name:       "LoggingMiddleware",
 			StructName: "LoggingMiddleware",
 			Dependencies: []models.Dependency{
 				{Name: "Logger", Type: "*Logger"},
 			},
 		},
-		PackagePath: "/logging",
+		PathTrait: models.PathTrait{
+			PackagePath: "/logging",
+		},
 	}
 
 	err := registry.Register("AuthMiddleware", authMiddleware)

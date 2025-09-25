@@ -21,21 +21,30 @@ type AnnotationRegistry interface {
 	IsRegistered(annotationType AnnotationType) bool
 }
 
-// registry is the concrete implementation of AnnotationRegistry
-type registry struct {
-	*utils.Registry[AnnotationType, AnnotationSchema]
+// annotationRegistry is the concrete implementation of AnnotationRegistry
+type annotationRegistry struct {
+	*utils.BaseRegistry[AnnotationType, AnnotationSchema]
 }
 
 // NewRegistry creates a new annotation registry
 func NewRegistry() AnnotationRegistry {
-	return &registry{
-		Registry: utils.NewRegistry[AnnotationType, AnnotationSchema](),
+	reg := &annotationRegistry{
+		BaseRegistry: utils.NewBaseRegistry[AnnotationType, AnnotationSchema](
+			"annotation",
+			"annotation type",
+			"annotation schema",
+		),
 	}
+
+	// Set up the default validator for annotation registration
+	reg.BaseRegistry.SetValidator(createAnnotationValidator())
+
+	return reg
 }
 
-// Register adds a new annotation type with its schema to the registry
-func (r *registry) Register(annotationType AnnotationType, schema AnnotationSchema) error {
-	validator := func(key AnnotationType, value AnnotationSchema, existing map[AnnotationType]AnnotationSchema) error {
+// createAnnotationValidator creates the validation function for annotations
+func createAnnotationValidator() utils.RegistryValidator[AnnotationType, AnnotationSchema] {
+	return func(key AnnotationType, value AnnotationSchema, existing map[AnnotationType]AnnotationSchema) error {
 		// Validate that the schema type matches the annotation type
 		if value.Type != key {
 			return fmt.Errorf("schema type %s does not match annotation type %s",
@@ -48,19 +57,22 @@ func (r *registry) Register(annotationType AnnotationType, schema AnnotationSche
 		}
 
 		// Validate schema parameters
-		if err := r.validateSchema(value); err != nil {
+		if err := validateSchema(value); err != nil {
 			return fmt.Errorf("invalid schema for %s: %w", key.String(), err)
 		}
 
 		return nil
 	}
+}
 
-	return r.Registry.RegisterWithValidator(annotationType, schema, validator)
+// Register adds a new annotation type with its schema to the registry
+func (r *annotationRegistry) Register(annotationType AnnotationType, schema AnnotationSchema) error {
+	return r.BaseRegistry.Register(annotationType, schema)
 }
 
 // GetSchema retrieves the schema for an annotation type
-func (r *registry) GetSchema(annotationType AnnotationType) (AnnotationSchema, error) {
-	schema, exists := r.Registry.Get(annotationType)
+func (r *annotationRegistry) GetSchema(annotationType AnnotationType) (AnnotationSchema, error) {
+	schema, exists := r.BaseRegistry.Get(annotationType)
 	if !exists {
 		return AnnotationSchema{}, fmt.Errorf("annotation type %s is not registered", annotationType.String())
 	}
@@ -69,17 +81,17 @@ func (r *registry) GetSchema(annotationType AnnotationType) (AnnotationSchema, e
 }
 
 // ListTypes returns all registered annotation types
-func (r *registry) ListTypes() []AnnotationType {
-	return r.Registry.List()
+func (r *annotationRegistry) ListTypes() []AnnotationType {
+	return r.BaseRegistry.List()
 }
 
 // IsRegistered checks if an annotation type is registered
-func (r *registry) IsRegistered(annotationType AnnotationType) bool {
-	return r.Registry.Has(annotationType)
+func (r *annotationRegistry) IsRegistered(annotationType AnnotationType) bool {
+	return r.BaseRegistry.Has(annotationType)
 }
 
 // validateSchema performs basic validation on a schema
-func (r *registry) validateSchema(schema AnnotationSchema) error {
+func validateSchema(schema AnnotationSchema) error {
 	// Validate that parameter names are not empty
 	for paramName, paramSpec := range schema.Parameters {
 		if paramName == "" {
@@ -93,7 +105,7 @@ func (r *registry) validateSchema(schema AnnotationSchema) error {
 
 		// Validate default value type matches parameter type
 		if paramSpec.DefaultValue != nil {
-			if err := r.validateDefaultValue(paramName, paramSpec.Type, paramSpec.DefaultValue); err != nil {
+			if err := validateDefaultValue(paramName, paramSpec.Type, paramSpec.DefaultValue); err != nil {
 				return err
 			}
 		}
@@ -103,7 +115,7 @@ func (r *registry) validateSchema(schema AnnotationSchema) error {
 }
 
 // validateDefaultValue checks if the default value matches the parameter type
-func (r *registry) validateDefaultValue(paramName string, paramType ParameterType, defaultValue interface{}) error {
+func validateDefaultValue(paramName string, paramType ParameterType, defaultValue interface{}) error {
 	switch paramType {
 	case StringType:
 		if _, ok := defaultValue.(string); !ok {

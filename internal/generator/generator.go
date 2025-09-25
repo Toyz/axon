@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/toyz/axon/internal/errors"
 	"github.com/toyz/axon/internal/models"
 	"github.com/toyz/axon/internal/registry"
 	"github.com/toyz/axon/internal/templates"
@@ -158,7 +159,7 @@ func (g *Generator) generateControllerModuleWithModule(metadata *models.PackageM
 	for _, controller := range metadata.Controllers {
 		providerCode, err := g.generateControllerProvider(controller)
 		if err != nil {
-			return "", utils.WrapGenerateError("provider for controller "+controller.Name, err)
+			return "", errors.WrapGenerateError("generate", "provider for controller "+controller.Name, err)
 		}
 		moduleBuilder.WriteString(providerCode)
 		moduleBuilder.WriteString("\n\n")
@@ -169,7 +170,7 @@ func (g *Generator) generateControllerModuleWithModule(metadata *models.PackageM
 		for _, route := range controller.Routes {
 			wrapperCode, err := templates.GenerateRouteWrapper(route, controller.StructName, g.parserRegistry)
 			if err != nil {
-				return "", utils.WrapGenerateError("wrapper for route "+controller.Name+"."+route.HandlerName, err)
+				return "", errors.WrapGenerateError("generate", "wrapper for route "+controller.Name+"."+route.HandlerName, err)
 			}
 			moduleBuilder.WriteString(wrapperCode)
 			moduleBuilder.WriteString("\n\n")
@@ -177,7 +178,7 @@ func (g *Generator) generateControllerModuleWithModule(metadata *models.PackageM
 	}
 
 	// Generate route registration function
-	registrationCode, err := g.generateRouteRegistrationFunction(metadata)
+	registrationCode, err := g.generateRouteRegistrationFunction(metadata, moduleName)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate route registration function: %w", err)
 	}
@@ -213,6 +214,34 @@ func (g *Generator) detectRequiredUserPackages(metadata *models.PackageMetadata,
 	// Check for custom parsers
 	if len(metadata.RouteParsers) > 0 {
 		packageSet["internal/parsers"] = true
+	}
+
+	// Check for middleware dependencies (if controllers use middleware)
+	hasMiddleware := false
+	for _, controller := range metadata.Controllers {
+		for _, route := range controller.Routes {
+			if len(route.Middlewares) > 0 {
+				hasMiddleware = true
+				break
+			}
+		}
+		if hasMiddleware {
+			break
+		}
+	}
+	if hasMiddleware {
+		// Resolve proper import path for middleware package
+		middlewareImportPath := g.resolvePackageImportPath(moduleName, metadata.PackagePath, "middleware")
+		// Extract relative path from the import path
+		if strings.Contains(middlewareImportPath, "/internal/middleware") {
+			parts := strings.Split(middlewareImportPath, "/")
+			for i, part := range parts {
+				if part == "internal" && i+1 < len(parts) && parts[i+1] == "middleware" {
+					packageSet["internal/middleware"] = true
+					break
+				}
+			}
+		}
 	}
 
 	// Convert set to slice
@@ -344,9 +373,9 @@ func extractModuleNameFromGoMod(goModPath string) string {
 }
 
 // generateRouteRegistrationFunction generates a function that registers all routes with Echo
-func (g *Generator) generateRouteRegistrationFunction(metadata *models.PackageMetadata) (string, error) {
+func (g *Generator) generateRouteRegistrationFunction(metadata *models.PackageMetadata, moduleName string) (string, error) {
 	// Collect all middleware dependencies
-	middlewareDeps := g.collectMiddlewareDependencies(metadata)
+	middlewareDeps := g.collectMiddlewareDependencies(metadata, moduleName)
 
 	// Build template data
 	data := templates.RouteRegistrationData{
@@ -378,7 +407,7 @@ func (g *Generator) generateRouteRegistrationFunction(metadata *models.PackageMe
 		if controller.Prefix != "" {
 			groupVar = fmt.Sprintf("%sGroup", controllerData.VarName)
 		} else {
-			groupVar = "e"
+			groupVar = "server"
 		}
 
 		// Convert routes
@@ -405,18 +434,18 @@ type MiddlewareDependency struct {
 }
 
 // collectMiddlewareDependencies collects all unique middleware used across routes with package info
-func (g *Generator) collectMiddlewareDependencies(metadata *models.PackageMetadata) []MiddlewareDependency {
+func (g *Generator) collectMiddlewareDependencies(metadata *models.PackageMetadata, moduleName string) []MiddlewareDependency {
 	middlewareSet := make(map[string]MiddlewareDependency)
 
 	for _, controller := range metadata.Controllers {
 		for _, route := range controller.Routes {
 			for _, middlewareName := range route.Middlewares {
-				// For now, assume all middleware are in the "middleware" package
-				// This should be enhanced to get actual package info from global registry
+				// Resolve proper import path for middleware package
+				importPath := g.resolvePackageImportPath(moduleName, metadata.PackagePath, "middleware")
 				middlewareSet[middlewareName] = MiddlewareDependency{
 					Name:        middlewareName,
 					PackageName: "middleware",
-					ImportPath:  "internal/middleware", // This should come from actual package detection
+					ImportPath:  importPath,
 				}
 			}
 		}
@@ -606,15 +635,15 @@ func (g *Generator) GenerateRootModule(packageName string, subModules []models.M
 // generateResponseHelperFunctions generates shared helper functions for response handling
 func (g *Generator) generateResponseHelperFunctions() string {
 	return `// handleAxonResponse processes an axon.Response and applies headers, cookies, and content type
-func handleAxonResponse(c echo.Context, response *axon.Response) error {
+func handleAxonResponse(c axon.RequestContext, response *axon.Response) error {
 	// Set headers
 	for key, value := range response.Headers {
-		c.Response().Header().Set(key, value)
+		c.Response().SetHeader(key, value)
 	}
-	
+
 	// Set cookies
 	for _, cookie := range response.Cookies {
-		httpCookie := &http.Cookie{
+		axonCookie := axon.AxonCookie{
 			Name:     cookie.Name,
 			Value:    cookie.Value,
 			Path:     cookie.Path,
@@ -626,34 +655,34 @@ func handleAxonResponse(c echo.Context, response *axon.Response) error {
 		if cookie.SameSite != "" {
 			switch cookie.SameSite {
 			case "Strict":
-				httpCookie.SameSite = http.SameSiteStrictMode
+				axonCookie.SameSite = axon.SameSiteStrictMode
 			case "Lax":
-				httpCookie.SameSite = http.SameSiteLaxMode
+				axonCookie.SameSite = axon.SameSiteLaxMode
 			case "None":
-				httpCookie.SameSite = http.SameSiteNoneMode
+				axonCookie.SameSite = axon.SameSiteNoneMode
 			}
 		}
-		c.SetCookie(httpCookie)
+		c.Response().SetCookie(axonCookie)
 	}
-	
+
 	// Set content type and return response
 	if response.ContentType != "" {
-		return c.Blob(response.StatusCode, response.ContentType, []byte(fmt.Sprintf("%v", response.Body)))
+		return c.Response().Blob(response.StatusCode, response.ContentType, []byte(fmt.Sprintf("%v", response.Body)))
 	}
-	return c.JSON(response.StatusCode, response.Body)
+	return c.Response().JSON(response.StatusCode, response.Body)
 }
 
 // handleHttpError processes an axon.HttpError and returns appropriate JSON response
-func handleHttpError(c echo.Context, httpErr *axon.HttpError) error {
-	return c.JSON(httpErr.StatusCode, httpErr)
+func handleHttpError(c axon.RequestContext, httpErr *axon.HttpError) error {
+	return c.Response().JSON(httpErr.StatusCode, httpErr)
 }
 
 // handleError processes any error and returns appropriate response (HttpError or generic error)
-func handleError(c echo.Context, err error) error {
+func handleError(c axon.RequestContext, err error) error {
 	if httpErr, ok := err.(*axon.HttpError); ok {
 		return handleHttpError(c, httpErr)
 	}
-	return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	return c.Response().JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 }`
 }
 
@@ -710,7 +739,8 @@ func (g *Generator) buildRouteTemplateData(route models.RouteMetadata, controlle
 		ControllerVar:            controllerVar,
 		GroupVar:                 groupVar,
 		Method:                   route.Method,
-		Path:                     route.Path,
+		Path:                     route.Path,    // Full path for registry
+		RelativePath:             routePath,     // Relative path for adapter
 		EchoPath:                 echoPath,
 		HandlerName:              route.HandlerName,
 		ControllerName:           controller.StructName,

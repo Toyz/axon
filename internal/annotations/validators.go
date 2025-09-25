@@ -11,41 +11,39 @@ import (
 
 // ValidateMode validates service lifecycle mode (Singleton/Transient)
 func ValidateMode(v interface{}) error {
-	mode := v.(string)
-	if mode != "Singleton" && mode != "Transient" {
-		return fmt.Errorf("must be 'Singleton' or 'Transient', got '%s'", mode)
+	mode, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("mode must be a string")
 	}
-	return nil
+	return utils.ValidateServiceMode("mode")(mode)
 }
 
 // ValidateInit validates initialization mode (Same/Background)
 func ValidateInit(v interface{}) error {
-	mode := v.(string)
-	if mode != "Same" && mode != "Background" {
-		return fmt.Errorf("must be 'Same' or 'Background', got '%s'", mode)
+	mode, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("init mode must be a string")
 	}
-	return nil
+	return utils.ValidateInitMode("init")(mode)
 }
 
 // ValidateHTTPMethod validates HTTP method names
 func ValidateHTTPMethod(v interface{}) error {
-	method := strings.ToUpper(v.(string))
-	validMethods := []string{"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"}
-	for _, valid := range validMethods {
-		if method == valid {
-			return nil
-		}
+	method, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("method must be a string")
 	}
-	return fmt.Errorf("must be one of: %s, got '%s'", strings.Join(validMethods, ", "), method)
+	method = strings.ToUpper(method)
+	return utils.ValidateHTTPMethod("method")(method)
 }
 
 // ValidateURLPath validates URL path format
 func ValidateURLPath(v interface{}) error {
-	path := v.(string)
-	if !strings.HasPrefix(path, "/") {
-		return fmt.Errorf("path must start with '/', got '%s'", path)
+	path, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("path must be a string")
 	}
-	return nil
+	return utils.ValidateURLPath("path")(path)
 }
 
 // Common parameter specifications to eliminate duplication
@@ -174,22 +172,5 @@ func ValidateConstructor(value interface{}) error {
 	if !ok {
 		return fmt.Errorf("constructor must be a string")
 	}
-
-	// Use the validation framework for constructor validation
-	validator := utils.NewValidatorChain(
-		utils.NotEmpty("constructor"),
-		utils.IsValidGoIdentifier("constructor"),
-	)
-
-	if err := validator.Validate(constructor); err != nil {
-		return err
-	}
-
-	// Convention: constructor functions should start with "New" or similar
-	if !strings.HasPrefix(constructor, "New") && !strings.HasPrefix(constructor, "Create") && !strings.HasPrefix(constructor, "Initialize") {
-		// This is just a warning, not an error - allow any valid identifier
-		// Users might have their own naming conventions
-	}
-
-	return nil
+	return utils.ValidateConstructorName("constructor")(constructor)
 }

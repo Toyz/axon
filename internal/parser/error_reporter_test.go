@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/toyz/axon/internal/errors"
 	"github.com/toyz/axon/internal/models"
 	"github.com/toyz/axon/pkg/axon"
 )
@@ -100,21 +101,21 @@ func TestParserErrorReporter_ReportParserValidationError(t *testing.T) {
 				t.Fatal("Expected error, got nil")
 			}
 
-			genErr, ok := err.(*models.GeneratorError)
+			genErr, ok := err.(*errors.GeneratorError)
 			if !ok {
 				t.Fatalf("Expected GeneratorError, got %T", err)
 			}
 
-			if genErr.Type != models.ErrorTypeParserValidation {
-				t.Errorf("Expected ErrorTypeParserValidation, got %v", genErr.Type)
+			if genErr.Type() != errors.ErrorTypeParserValidation {
+				t.Errorf("Expected ErrorTypeParserValidation, got %v", genErr.Type())
 			}
 
-			if genErr.File != tt.fileName {
-				t.Errorf("Expected file %s, got %s", tt.fileName, genErr.File)
+			if genErr.File() != tt.fileName {
+				t.Errorf("Expected file %s, got %s", tt.fileName, genErr.File())
 			}
 
-			if genErr.Line != tt.line {
-				t.Errorf("Expected line %d, got %d", tt.line, genErr.Line)
+			if genErr.Line() != tt.line {
+				t.Errorf("Expected line %d, got %d", tt.line, genErr.Line())
 			}
 
 			// Check basic error message content
@@ -126,25 +127,25 @@ func TestParserErrorReporter_ReportParserValidationError(t *testing.T) {
 			}
 
 			// Check suggestions
-			if len(genErr.Suggestions) == 0 {
+			if len(genErr.Suggestions()) == 0 {
 				t.Error("Expected suggestions, got none")
 			}
 
 			// Check that suggestions contain expected content
-			allSuggestions := strings.Join(genErr.Suggestions, " ")
+			allSuggestions := strings.Join(genErr.Suggestions(), " ")
 			for _, expected := range tt.expectedInSuggestions {
 				if !strings.Contains(allSuggestions, expected) {
-					t.Errorf("Suggestions should contain '%s', got: %v", expected, genErr.Suggestions)
+					t.Errorf("Suggestions should contain '%s', got: %v", expected, genErr.Suggestions())
 				}
 			}
 
 			// Check context
-			if genErr.Context == nil {
+			if genErr.Context() == nil {
 				t.Error("Expected context, got nil")
 			}
 
-			if genErr.Context["function_name"] != tt.functionName {
-				t.Errorf("Expected function_name %s in context, got %v", tt.functionName, genErr.Context["function_name"])
+			if genErr.Context()["function_name"] != tt.functionName {
+				t.Errorf("Expected function_name %s in context, got %v", tt.functionName, genErr.Context()["function_name"])
 			}
 		})
 	}
@@ -236,13 +237,13 @@ func TestParserErrorReporter_ReportParserNotFoundError(t *testing.T) {
 				t.Fatal("Expected error, got nil")
 			}
 
-			genErr, ok := err.(*models.GeneratorError)
+			genErr, ok := err.(*errors.GeneratorError)
 			if !ok {
 				t.Fatalf("Expected GeneratorError, got %T", err)
 			}
 
-			if genErr.Type != models.ErrorTypeParserValidation {
-				t.Errorf("Expected ErrorTypeParserValidation, got %v", genErr.Type)
+			if genErr.Type() != errors.ErrorTypeParserValidation {
+				t.Errorf("Expected ErrorTypeParserValidation, got %v", genErr.Type())
 			}
 
 			// Check basic error message content
@@ -254,25 +255,25 @@ func TestParserErrorReporter_ReportParserNotFoundError(t *testing.T) {
 			}
 
 			// Check suggestions
-			if len(genErr.Suggestions) == 0 {
+			if len(genErr.Suggestions()) == 0 {
 				t.Error("Expected suggestions, got none")
 			}
 
 			// Check that suggestions contain expected content
-			allSuggestions := strings.Join(genErr.Suggestions, " ")
+			allSuggestions := strings.Join(genErr.Suggestions(), " ")
 			for _, expected := range tt.expectedInSuggestions {
 				if !strings.Contains(allSuggestions, expected) {
-					t.Errorf("Suggestions should contain '%s', got: %v", expected, genErr.Suggestions)
+					t.Errorf("Suggestions should contain '%s', got: %v", expected, genErr.Suggestions())
 				}
 			}
 
 			// Check context
-			if genErr.Context == nil {
+			if genErr.Context() == nil {
 				t.Error("Expected context, got nil")
 			}
 
-			if genErr.Context["type_name"] != tt.typeName {
-				t.Errorf("Expected type_name %s in context, got %v", tt.typeName, genErr.Context["type_name"])
+			if genErr.Context()["type_name"] != tt.typeName {
+				t.Errorf("Expected type_name %s in context, got %v", tt.typeName, genErr.Context()["type_name"])
 			}
 		})
 	}
@@ -341,13 +342,13 @@ func TestParserErrorReporter_ReportParserImportError(t *testing.T) {
 				t.Fatal("Expected error, got nil")
 			}
 
-			genErr, ok := err.(*models.GeneratorError)
+			genErr, ok := err.(*errors.GeneratorError)
 			if !ok {
 				t.Fatalf("Expected GeneratorError, got %T", err)
 			}
 
-			if genErr.Type != models.ErrorTypeParserImport {
-				t.Errorf("Expected ErrorTypeParserImport, got %v", genErr.Type)
+			if genErr.Type() != errors.ErrorTypeParserImport {
+				t.Errorf("Expected ErrorTypeParserImport, got %v", genErr.Type())
 			}
 
 			// Check basic error message content
@@ -359,29 +360,29 @@ func TestParserErrorReporter_ReportParserImportError(t *testing.T) {
 			}
 
 			// Check suggestions
-			if len(genErr.Suggestions) == 0 {
+			if len(genErr.Suggestions()) == 0 {
 				t.Error("Expected suggestions, got none")
 			}
 
 			// Check that suggestions contain expected content
-			allSuggestions := strings.Join(genErr.Suggestions, " ")
+			allSuggestions := strings.Join(genErr.Suggestions(), " ")
 			for _, expected := range tt.expectedInSuggestions {
 				if !strings.Contains(allSuggestions, expected) {
-					t.Errorf("Suggestions should contain '%s', got: %v", expected, genErr.Suggestions)
+					t.Errorf("Suggestions should contain '%s', got: %v", expected, genErr.Suggestions())
 				}
 			}
 
 			// Check context
-			if genErr.Context == nil {
+			if genErr.Context() == nil {
 				t.Error("Expected context, got nil")
 			}
 
-			if genErr.Context["type_name"] != tt.typeName {
-				t.Errorf("Expected type_name %s in context, got %v", tt.typeName, genErr.Context["type_name"])
+			if genErr.Context()["type_name"] != tt.typeName {
+				t.Errorf("Expected type_name %s in context, got %v", tt.typeName, genErr.Context()["type_name"])
 			}
 
-			if genErr.Context["required_import"] != tt.requiredImport {
-				t.Errorf("Expected required_import %s in context, got %v", tt.requiredImport, genErr.Context["required_import"])
+			if genErr.Context()["required_import"] != tt.requiredImport {
+				t.Errorf("Expected required_import %s in context, got %v", tt.requiredImport, genErr.Context()["required_import"])
 			}
 		})
 	}
@@ -412,13 +413,13 @@ func TestParserErrorReporter_ReportParserConflictError(t *testing.T) {
 		t.Fatal("Expected error, got nil")
 	}
 
-	genErr, ok := err.(*models.GeneratorError)
+	genErr, ok := err.(*errors.GeneratorError)
 	if !ok {
 		t.Fatalf("Expected GeneratorError, got %T", err)
 	}
 
-	if genErr.Type != models.ErrorTypeParserConflict {
-		t.Errorf("Expected ErrorTypeParserConflict, got %v", genErr.Type)
+	if genErr.Type() != errors.ErrorTypeParserConflict {
+		t.Errorf("Expected ErrorTypeParserConflict, got %v", genErr.Type())
 	}
 
 	// Check basic error message content
@@ -435,11 +436,11 @@ func TestParserErrorReporter_ReportParserConflictError(t *testing.T) {
 	}
 
 	// Check suggestions contain conflict details
-	if len(genErr.Suggestions) == 0 {
+	if len(genErr.Suggestions()) == 0 {
 		t.Error("Expected suggestions, got none")
 	}
 
-	allSuggestions := strings.Join(genErr.Suggestions, " ")
+	allSuggestions := strings.Join(genErr.Suggestions(), " ")
 	expectedInSuggestions := []string{
 		"parser1.go:10",
 		"parser2.go:20",
@@ -447,17 +448,17 @@ func TestParserErrorReporter_ReportParserConflictError(t *testing.T) {
 
 	for _, expected := range expectedInSuggestions {
 		if !strings.Contains(allSuggestions, expected) {
-			t.Errorf("Suggestions should contain '%s', got: %v", expected, genErr.Suggestions)
+			t.Errorf("Suggestions should contain '%s', got: %v", expected, genErr.Suggestions())
 		}
 	}
 
 	// Check context
-	if genErr.Context == nil {
+	if genErr.Context() == nil {
 		t.Error("Expected context, got nil")
 	}
 
-	if genErr.Context["type_name"] != "uuid.UUID" {
-		t.Errorf("Expected type_name uuid.UUID in context, got %v", genErr.Context["type_name"])
+	if genErr.Context()["type_name"] != "uuid.UUID" {
+		t.Errorf("Expected type_name uuid.UUID in context, got %v", genErr.Context()["type_name"])
 	}
 }
 

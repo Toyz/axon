@@ -23,7 +23,6 @@ client
 # This catches Go binaries built with default names
 */complete-app
 */simple-app
-*/axon
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out

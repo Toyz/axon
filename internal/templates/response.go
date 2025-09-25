@@ -5,8 +5,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/toyz/axon/internal/errors"
 	"github.com/toyz/axon/internal/models"
-	"github.com/toyz/axon/internal/utils"
 	"github.com/toyz/axon/pkg/axon"
 )
 
@@ -197,7 +197,7 @@ func generateResponseErrorResponse(handlerCall string, errAlreadyDeclared bool) 
 			return handleError(c, err)
 		}
 		if response == nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
+			return axon.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
 		}%s`, handlerCall, responseHandling)
 		} else {
 			return fmt.Sprintf(`		response, err := %s
@@ -205,7 +205,7 @@ func generateResponseErrorResponse(handlerCall string, errAlreadyDeclared bool) 
 			return handleError(c, err)
 		}
 		if response == nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
+			return axon.NewHTTPError(http.StatusInternalServerError, "handler returned nil response")
 		}%s`, handlerCall, responseHandling)
 		}
 	}
@@ -250,7 +250,7 @@ func GenerateRouteWrapper(route models.RouteMetadata, controllerName string, par
 	// Generate parameter binding code
 	paramBindingCode, err := GenerateParameterBindingCode(route.Parameters, parserRegistry)
 	if err != nil {
-		return "", utils.WrapGenerateError("parameter binding", err)
+		return "", errors.WrapGenerateError("parameter", "binding", err)
 	}
 
 	// Generate body binding code if needed
@@ -259,7 +259,7 @@ func GenerateRouteWrapper(route models.RouteMetadata, controllerName string, par
 	// Generate response handling code
 	responseHandlingCode, err := GenerateResponseHandling(route, controllerName)
 	if err != nil {
-		return "", utils.WrapGenerateError("response handling", err)
+		return "", errors.WrapGenerateError("response", "handling", err)
 	}
 
 	// Use template for route wrapper generation
@@ -310,7 +310,7 @@ func generateBodyBindingCode(parameters []models.Parameter, method string) strin
 				// Fallback to old behavior if template fails
 				return fmt.Sprintf(`		var body %s
 		if err := c.Bind(&body); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+			return axon.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
 `, param.Type)
 			}
